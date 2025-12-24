@@ -29,8 +29,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   bool _isEditingMode = false;
   Rect? _selectionRect;
   int _currentPageIndex = 0;
-  final TransformationController _transformationController =
-      TransformationController();
+  double _currentPageScroll = 0;
   final GlobalKey _pdfViewKey = GlobalKey();
 
   @override
@@ -51,7 +50,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   @override
   void dispose() {
     _pdfController.dispose();
-    _transformationController.dispose();
     super.dispose();
   }
 
@@ -69,18 +67,28 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         title: Text(list.name),
         backgroundColor: _isEditingMode ? Colors.red.withOpacity(0.1) : null,
       ),
-      body: Stack(
-        children: [
-          InteractiveViewer(
-            transformationController: _transformationController,
-            minScale: 0.1,
-            maxScale: 4.0,
-            boundaryMargin: const EdgeInsets.all(double.infinity),
-            child: Stack(
-              key: _pdfViewKey,
-              children: [
-                PdfView(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final viewSize = constraints.biggest;
+
+          return Stack(
+            children: [
+              NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification is ScrollUpdateNotification) {
+                    setState(() {
+                      _currentPageScroll =
+                          notification.metrics.pixels /
+                          notification.metrics.viewportDimension;
+                    });
+                  }
+                  return false;
+                },
+                child: PdfView(
+                  key: _pdfViewKey,
                   controller: _pdfController,
+                  scrollDirection: Axis.vertical,
+                  pageSnapping: false,
                   onPageChanged: (page) {
                     setState(() {
                       _currentPageIndex = page - 1;
@@ -88,67 +96,77 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                   },
                   physics: _isEditingMode
                       ? const NeverScrollableScrollPhysics()
-                      : null,
+                      : const BouncingScrollPhysics(),
                 ),
-                // Hyperlinks
-                ...list.selections
-                    .where((s) => s.pageIndex == _currentPageIndex)
-                    .map(
-                      (s) => Positioned(
-                        left: s.left + s.width - 24,
-                        top: s.top,
-                        child: GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => NoteScreen(
-                                folderId: widget.folderId,
-                                exerciseListId: widget.exerciseListId,
-                                selectionId: s.id,
-                                noteId: s.noteId,
-                              ),
-                            ),
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.8),
-                              shape: BoxShape.circle,
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black26, blurRadius: 4),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.link,
-                              size: 16,
-                              color: Colors.white,
-                            ),
+              ),
+              // Hyperlinks
+              Stack(
+                children: list.selections.map((s) {
+                  // Calculate position relative to current scroll
+                  final top =
+                      s.top +
+                      (s.pageIndex - _currentPageScroll) * viewSize.height;
+
+                  // Only show if it's roughly within the viewport
+                  if (top < -100 || top > viewSize.height + 100) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return Positioned(
+                    left: s.left + s.width - 24,
+                    top: top,
+                    child: GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NoteScreen(
+                            folderId: widget.folderId,
+                            exerciseListId: widget.exerciseListId,
+                            selectionId: s.id,
+                            noteId: s.noteId,
                           ),
                         ),
                       ),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.8),
+                          shape: BoxShape.circle,
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black26, blurRadius: 4),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.link,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
-              ],
-            ),
-          ),
-          if (_isEditingMode)
-            Positioned.fill(
-              child: ExerciseSelectionOverlay(
-                rect: _selectionRect,
-                onRectChanged: (rect) {
-                  setState(() {
-                    _selectionRect = rect;
-                  });
-                },
-                onConfirm: _confirmSelection,
-                onCancel: () {
-                  setState(() {
-                    _isEditingMode = false;
-                    _selectionRect = null;
-                  });
-                },
+                  );
+                }).toList(),
               ),
-            ),
-        ],
+              if (_isEditingMode)
+                Positioned.fill(
+                  child: ExerciseSelectionOverlay(
+                    rect: _selectionRect,
+                    onRectChanged: (rect) {
+                      setState(() {
+                        _selectionRect = rect;
+                      });
+                    },
+                    onConfirm: _confirmSelection,
+                    onCancel: () {
+                      setState(() {
+                        _isEditingMode = false;
+                        _selectionRect = null;
+                      });
+                    },
+                  ),
+                ),
+            ],
+          );
+        },
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       floatingActionButton: FloatingActionButton(
@@ -170,23 +188,12 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     final id = const Uuid().v4();
     final noteId = const Uuid().v4();
 
-    final matrix = _transformationController.value;
-    final scale = matrix.getMaxScaleOnAxis();
-    final translation = matrix.getTranslation();
-
-    // Map screen coordinates to untransformed coordinates
-    final untransformedLeft = (_selectionRect!.left - translation.x) / scale;
-    final untransformedTop = (_selectionRect!.top - translation.y) / scale;
-    final untransformedWidth = _selectionRect!.width / scale;
-    final untransformedHeight = _selectionRect!.height / scale;
-
     // Capture screenshot
     String? screenshotPath;
     try {
       final document = await _pdfController.document;
       final page = await document.getPage(_currentPageIndex + 1);
 
-      // Render the page at high resolution
       final pageImage = await page.render(
         width: page.width * 2,
         height: page.height * 2,
@@ -202,7 +209,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
           if (renderBox == null) return;
           final viewSize = renderBox.size;
 
-          // Calculate the actual page rect in the PdfView widget (BoxFit.contain)
           final pageAspectRatio = page.width / page.height;
           final viewAspectRatio = viewSize.width / viewSize.height;
 
@@ -210,30 +216,27 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
           double offsetX = 0, offsetY = 0;
 
           if (pageAspectRatio > viewAspectRatio) {
-            // Page is wider than view (relative to height)
             actualPageWidth = viewSize.width;
             actualPageHeight = viewSize.width / pageAspectRatio;
             offsetY = (viewSize.height - actualPageHeight) / 2;
           } else {
-            // Page is taller than view
             actualPageHeight = viewSize.height;
             actualPageWidth = viewSize.height * pageAspectRatio;
             offsetX = (viewSize.width - actualPageWidth) / 2;
           }
 
-          // Map untransformed coordinates to relative coordinates on the actual page
-          final relativeLeft = (untransformedLeft - offsetX) / actualPageWidth;
-          final relativeTop = (untransformedTop - offsetY) / actualPageHeight;
-          final relativeWidth = untransformedWidth / actualPageWidth;
-          final relativeHeight = untransformedHeight / actualPageHeight;
+          final relativeLeft =
+              (_selectionRect!.left - offsetX) / actualPageWidth;
+          final relativeTop =
+              (_selectionRect!.top - offsetY) / actualPageHeight;
+          final relativeWidth = _selectionRect!.width / actualPageWidth;
+          final relativeHeight = _selectionRect!.height / actualPageHeight;
 
-          // Map relative coordinates to pixels in the decoded image
           int cropX = (relativeLeft * decodedImage.width).toInt();
           int cropY = (relativeTop * decodedImage.height).toInt();
           int cropWidth = (relativeWidth * decodedImage.width).toInt();
           int cropHeight = (relativeHeight * decodedImage.height).toInt();
 
-          // Clamp to image bounds
           cropX = cropX.clamp(0, decodedImage.width - 1);
           cropY = cropY.clamp(0, decodedImage.height - 1);
           cropWidth = cropWidth.clamp(1, decodedImage.width - cropX);
@@ -262,10 +265,10 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
 
     final newSelection = Selection(
       id: id,
-      left: untransformedLeft,
-      top: untransformedTop,
-      width: untransformedWidth,
-      height: untransformedHeight,
+      left: _selectionRect!.left,
+      top: _selectionRect!.top,
+      width: _selectionRect!.width,
+      height: _selectionRect!.height,
       pageIndex: _currentPageIndex,
       noteId: noteId,
       screenshotPath: screenshotPath,
