@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scribble/scribble.dart';
+import 'package:vector_math/vector_math_64.dart' as vm;
 import '../providers/folder_provider.dart';
 import '../widgets/scribble_toolbar.dart';
 
@@ -33,6 +34,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   // Track active pointers to decide whether to ignore Scribble
   final Set<int> _stylusPointers = {};
   final Set<int> _fingerPointers = {};
+
+  bool _showGrid = false;
 
   @override
   void initState() {
@@ -105,22 +108,60 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             ),
           ),
           IconButton(icon: const Icon(Icons.save), onPressed: _saveNote),
+          Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () => Scaffold.of(context).openEndDrawer(),
+            ),
+          ),
         ],
+      ),
+      endDrawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(color: Colors.blue),
+              child: Text(
+                'Settings',
+                style: TextStyle(color: Colors.white, fontSize: 24),
+              ),
+            ),
+            SwitchListTile(
+              title: const Text('Grid Theme'),
+              value: _showGrid,
+              onChanged: (bool value) {
+                setState(() {
+                  _showGrid = value;
+                });
+              },
+            ),
+          ],
+        ),
       ),
       body: Stack(
         children: [
           InteractiveViewer(
+            constrained: false,
             transformationController: _transformationController,
-            minScale: 0.1,
+            minScale: 0.01,
             maxScale: 4.0,
             panEnabled: true,
             scaleEnabled: true,
-            boundaryMargin: const EdgeInsets.all(double.infinity),
+            boundaryMargin: const EdgeInsets.all(50000.0),
             child: SizedBox(
-              width: 5000,
-              height: 5000,
+              width: 100000.0,
+              height: 100000.0,
               child: Stack(
                 children: [
+                  if (_showGrid)
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: GridPainter(
+                          matrix: _transformationController.value,
+                        ),
+                      ),
+                    ),
                   // Scribble layer
                   Listener(
                     behavior: HitTestBehavior.translucent,
@@ -222,4 +263,57 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       );
     }
   }
+}
+
+class GridPainter extends CustomPainter {
+  final Matrix4 matrix;
+
+  GridPainter({required this.matrix});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Compute the inverse transformation
+    final inverse = Matrix4.tryInvert(matrix);
+    if (inverse == null) return;
+
+    // The visible rect in local coordinates is 0,0 to size.width, size.height
+    // Transform to world coordinates
+    final topLeft = inverse.transform3(vm.Vector3(0, 0, 0));
+    final bottomRight = inverse.transform3(
+      vm.Vector3(size.width, size.height, 0),
+    );
+
+    final minX = topLeft.x - 1000; // margin
+    final maxX = bottomRight.x + 1000;
+    final minY = topLeft.y - 1000;
+    final maxY = bottomRight.y + 1000;
+
+    final paint = Paint()
+      ..color = Colors.grey.withOpacity(0.3)
+      ..strokeWidth = 1.0;
+
+    const double spacing = 20.0;
+
+    // Draw vertical lines
+    for (
+      double x = (minX / spacing).floor() * spacing;
+      x <= maxX;
+      x += spacing
+    ) {
+      canvas.drawLine(Offset(x, minY), Offset(x, maxY), paint);
+    }
+
+    // Draw horizontal lines
+    for (
+      double y = (minY / spacing).floor() * spacing;
+      y <= maxY;
+      y += spacing
+    ) {
+      canvas.drawLine(Offset(minX, y), Offset(maxX, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant GridPainter oldDelegate) =>
+      matrix != oldDelegate.matrix;
 }
