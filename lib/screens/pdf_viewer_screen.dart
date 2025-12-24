@@ -117,9 +117,27 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                       : const BouncingScrollPhysics(),
                 ),
               ),
+              if (_isEditingMode)
+                Positioned.fill(
+                  child: ExerciseSelectionOverlay(
+                    rect: _selectionRect,
+                    onRectChanged: (rect) {
+                      setState(() {
+                        _selectionRect = rect;
+                      });
+                    },
+                    onConfirm: _confirmSelection,
+                    onCancel: () {
+                      setState(() {
+                        _isEditingMode = false;
+                        _selectionRect = null;
+                      });
+                    },
+                  ),
+                ),
               // Hyperlinks
               IgnorePointer(
-                ignoring: false,
+                ignoring: _isEditingMode,
                 child: Stack(
                   children: list.selections.map((s) {
                     if (s.pageIndex >= _pageWidths.length ||
@@ -167,11 +185,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                         _scrollOffset;
                     final screenWidth = (s.width / pageWidth) * actualPageWidth;
 
-                    // Only show if roughly within viewport
-                    if (screenTop < -100 || screenTop > viewSize.height + 100) {
-                      return const SizedBox.shrink();
-                    }
-
                     return Positioned(
                       left: screenLeft + screenWidth - 24,
                       top: screenTop,
@@ -207,24 +220,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                   }).toList(),
                 ),
               ),
-              if (_isEditingMode)
-                Positioned.fill(
-                  child: ExerciseSelectionOverlay(
-                    rect: _selectionRect,
-                    onRectChanged: (rect) {
-                      setState(() {
-                        _selectionRect = rect;
-                      });
-                    },
-                    onConfirm: _confirmSelection,
-                    onCancel: () {
-                      setState(() {
-                        _isEditingMode = false;
-                        _selectionRect = null;
-                      });
-                    },
-                  ),
-                ),
             ],
           );
         },
