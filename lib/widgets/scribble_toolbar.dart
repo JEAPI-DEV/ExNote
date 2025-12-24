@@ -56,9 +56,19 @@ class ScribbleToolbar extends StatelessWidget {
             const SizedBox(width: 8),
 
             // Width selection
-            _buildWidthButton(2),
-            _buildWidthButton(5),
-            _buildWidthButton(10),
+            Expanded(
+              child: ValueListenableBuilder(
+                valueListenable: notifier,
+                builder: (context, state, _) => Slider(
+                  value: state.selectedWidth,
+                  min: 1,
+                  max: 20,
+                  divisions: 19,
+                  label: state.selectedWidth.round().toString(),
+                  onChanged: (value) => notifier.setStrokeWidth(value),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -94,42 +104,6 @@ class ScribbleToolbar extends StatelessWidget {
                       ),
                     ]
                   : null,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildWidthButton(double width) {
-    return ValueListenableBuilder(
-      valueListenable: notifier,
-      builder: (context, state, _) {
-        final isSelected = state.selectedWidth == width;
-
-        return GestureDetector(
-          onTap: () => notifier.setStrokeWidth(width),
-          child: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? Colors.blue.withOpacity(0.1)
-                  : Colors.transparent,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isSelected ? Colors.blue : Colors.grey.shade300,
-                width: 2,
-              ),
-            ),
-            alignment: Alignment.center,
-            child: Container(
-              width: width,
-              height: width,
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                shape: BoxShape.circle,
-              ),
             ),
           ),
         );

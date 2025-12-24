@@ -5,8 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scribble/scribble.dart';
 import 'package:vector_math/vector_math_64.dart' as vm;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/folder_provider.dart';
 import '../widgets/scribble_toolbar.dart';
+
+enum GridType { lines, dots }
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -31,13 +34,23 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   final TransformationController _transformationController =
       TransformationController();
 
-  bool _showGrid = false;
+  double strokeWidth = 5.0;
+  bool gridEnabled = false;
+  GridType gridType = GridType.lines;
 
   @override
   void initState() {
     super.initState();
     notifier = ScribbleNotifier();
     notifier.setAllowedPointersMode(ScribblePointerMode.penOnly);
+    loadSettings();
+
+    // Listen to notifier changes to sync strokeWidth
+    notifier.addListener(() {
+      setState(() {
+        strokeWidth = notifier.value.selectedWidth;
+      });
+    });
 
     // Update scale factor when zoom changes
     _transformationController.addListener(() {
@@ -67,6 +80,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   @override
   void dispose() {
+    saveSettings();
     notifier.dispose();
     _transformationController.dispose();
     super.dispose();
@@ -122,15 +136,56 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 style: TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Stroke Width'),
+                  Slider(
+                    value: strokeWidth,
+                    min: 1.0,
+                    max: 20.0,
+                    divisions: 19,
+                    label: strokeWidth.round().toString(),
+                    onChanged: (double value) {
+                      setState(() {
+                        strokeWidth = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
             SwitchListTile(
-              title: const Text('Grid Theme'),
-              value: _showGrid,
+              title: const Text('Grid Enabled'),
+              value: gridEnabled,
               onChanged: (bool value) {
                 setState(() {
-                  _showGrid = value;
+                  gridEnabled = value;
                 });
               },
             ),
+            if (gridEnabled)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: DropdownButton<GridType>(
+                  value: gridType,
+                  onChanged: (GridType? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        gridType = newValue;
+                      });
+                    }
+                  },
+                  items: GridType.values.map((GridType type) {
+                    return DropdownMenuItem<GridType>(
+                      value: type,
+                      child: Text(type == GridType.lines ? 'Lines' : 'Dots'),
+                    );
+                  }).toList(),
+                ),
+              ),
           ],
         ),
       ),
@@ -149,17 +204,18 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
               height: 100000.0,
               child: Stack(
                 children: [
-                  if (_showGrid)
+                  if (gridEnabled)
                     Positioned.fill(
                       child: CustomPaint(
                         painter: GridPainter(
                           matrix: _transformationController.value,
+                          gridType: gridType,
                         ),
                       ),
                     ),
                   // Scribble layer
                   SizedBox.expand(
-                    child: Scribble(notifier: notifier, drawPen: true),
+                    child: Scribble(notifier: notifier, drawPen: false),
                   ),
                   // Screenshot (relative to canvas)
                   Positioned(
@@ -230,12 +286,30 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       );
     }
   }
+
+  Future<void> loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      strokeWidth = prefs.getDouble('strokeWidth') ?? 5.0;
+      gridEnabled = prefs.getBool('gridEnabled') ?? false;
+      gridType = GridType.values[prefs.getInt('gridType') ?? 0];
+    });
+    notifier.setStrokeWidth(strokeWidth);
+  }
+
+  Future<void> saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('strokeWidth', strokeWidth);
+    await prefs.setBool('gridEnabled', gridEnabled);
+    await prefs.setInt('gridType', gridType.index);
+  }
 }
 
 class GridPainter extends CustomPainter {
   final Matrix4 matrix;
+  final GridType gridType;
 
-  GridPainter({required this.matrix});
+  GridPainter({required this.matrix, required this.gridType});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -261,26 +335,49 @@ class GridPainter extends CustomPainter {
 
     const double spacing = 20.0;
 
-    // Draw vertical lines
-    for (
-      double x = (minX / spacing).floor() * spacing;
-      x <= maxX;
-      x += spacing
-    ) {
-      canvas.drawLine(Offset(x, minY), Offset(x, maxY), paint);
-    }
+    if (gridType == GridType.dots) {
+      // Prevent drawing too many dots when zoomed out
+      final numX = ((maxX - minX) / spacing).ceil();
+      final numY = ((maxY - minY) / spacing).ceil();
+      if (numX * numY > 10000) return; // Skip drawing if too many dots
 
-    // Draw horizontal lines
-    for (
-      double y = (minY / spacing).floor() * spacing;
-      y <= maxY;
-      y += spacing
-    ) {
-      canvas.drawLine(Offset(minX, y), Offset(maxX, y), paint);
+      // Draw dots
+      for (
+        double x = (minX / spacing).floor() * spacing;
+        x <= maxX;
+        x += spacing
+      ) {
+        for (
+          double y = (minY / spacing).floor() * spacing;
+          y <= maxY;
+          y += spacing
+        ) {
+          canvas.drawCircle(Offset(x, y), 1.0, paint);
+        }
+      }
+    } else {
+      // Draw lines
+      // Draw vertical lines
+      for (
+        double x = (minX / spacing).floor() * spacing;
+        x <= maxX;
+        x += spacing
+      ) {
+        canvas.drawLine(Offset(x, minY), Offset(x, maxY), paint);
+      }
+
+      // Draw horizontal lines
+      for (
+        double y = (minY / spacing).floor() * spacing;
+        y <= maxY;
+        y += spacing
+      ) {
+        canvas.drawLine(Offset(minX, y), Offset(maxX, y), paint);
+      }
     }
   }
 
   @override
   bool shouldRepaint(covariant GridPainter oldDelegate) =>
-      matrix != oldDelegate.matrix;
+      matrix != oldDelegate.matrix || gridType != oldDelegate.gridType;
 }
