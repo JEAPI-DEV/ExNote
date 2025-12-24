@@ -115,65 +115,59 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             maxScale: 4.0,
             panEnabled: true,
             scaleEnabled: true,
-            // We want InteractiveViewer to handle all finger gestures.
-            // Scribble should only handle stylus gestures.
-            child: Listener(
-              behavior: HitTestBehavior.translucent,
-              onPointerDown: (event) {
-                setState(() {
-                  if (event.kind == PointerDeviceKind.stylus) {
-                    _stylusPointers.add(event.pointer);
-                  } else {
-                    _fingerPointers.add(event.pointer);
-                  }
-                });
-              },
-              onPointerUp: (event) {
-                setState(() {
-                  _stylusPointers.remove(event.pointer);
-                  _fingerPointers.remove(event.pointer);
-                });
-              },
-              onPointerCancel: (event) {
-                setState(() {
-                  _stylusPointers.remove(event.pointer);
-                  _fingerPointers.remove(event.pointer);
-                });
-              },
-              child: IgnorePointer(
-                // Ignore Scribble if we have fingers down and no stylus,
-                // or if we have multiple fingers (zooming/panning).
-                ignoring: _fingerPointers.isNotEmpty && _stylusPointers.isEmpty,
-                child: SizedBox.expand(
-                  child: Scribble(notifier: notifier, drawPen: true),
-                ),
-              ),
-            ),
-          ),
-          // Screenshot in top left
-          Positioned(
-            top: 16,
-            left: 16,
-            child: selection.screenshotPath != null
-                ? Image.file(
-                    File(selection.screenshotPath!),
-                    width: 600,
-                    fit: BoxFit.contain,
-                  )
-                : Container(
-                    width: 200,
-                    height: 150,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'No Screenshot',
-                        style: TextStyle(color: Colors.grey),
+            boundaryMargin: const EdgeInsets.all(double.infinity),
+            child: SizedBox(
+              width: 5000,
+              height: 5000,
+              child: Stack(
+                children: [
+                  // Scribble layer
+                  Listener(
+                    behavior: HitTestBehavior.translucent,
+                    onPointerDown: (event) {
+                      setState(() {
+                        if (event.kind == PointerDeviceKind.stylus) {
+                          _stylusPointers.add(event.pointer);
+                        } else {
+                          _fingerPointers.add(event.pointer);
+                        }
+                      });
+                    },
+                    onPointerUp: (event) {
+                      setState(() {
+                        _stylusPointers.remove(event.pointer);
+                        _fingerPointers.remove(event.pointer);
+                      });
+                    },
+                    onPointerCancel: (event) {
+                      setState(() {
+                        _stylusPointers.remove(event.pointer);
+                        _fingerPointers.remove(event.pointer);
+                      });
+                    },
+                    child: IgnorePointer(
+                      ignoring:
+                          _fingerPointers.isNotEmpty && _stylusPointers.isEmpty,
+                      child: SizedBox.expand(
+                        child: Scribble(notifier: notifier, drawPen: true),
                       ),
                     ),
                   ),
+                  // Screenshot (relative to canvas)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: selection.screenshotPath != null
+                        ? Image.file(
+                            File(selection.screenshotPath!),
+                            width: 800,
+                            fit: BoxFit.contain,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+            ),
           ),
           // Toolbar at bottom
           Positioned(
