@@ -31,10 +31,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   final TransformationController _transformationController =
       TransformationController();
 
-  // Track active pointers to decide whether to ignore Scribble
-  final Set<int> _stylusPointers = {};
-  final Set<int> _fingerPointers = {};
-
   bool _showGrid = false;
 
   @override
@@ -45,8 +41,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
     // Update scale factor when zoom changes
     _transformationController.addListener(() {
-      final scale = _transformationController.value.getMaxScaleOnAxis();
-      notifier.setScaleFactor(scale);
+      notifier.setScaleFactor(1.0);
     });
 
     // Load existing note if it exists
@@ -163,36 +158,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                       ),
                     ),
                   // Scribble layer
-                  Listener(
-                    behavior: HitTestBehavior.translucent,
-                    onPointerDown: (event) {
-                      setState(() {
-                        if (event.kind == PointerDeviceKind.stylus) {
-                          _stylusPointers.add(event.pointer);
-                        } else {
-                          _fingerPointers.add(event.pointer);
-                        }
-                      });
-                    },
-                    onPointerUp: (event) {
-                      setState(() {
-                        _stylusPointers.remove(event.pointer);
-                        _fingerPointers.remove(event.pointer);
-                      });
-                    },
-                    onPointerCancel: (event) {
-                      setState(() {
-                        _stylusPointers.remove(event.pointer);
-                        _fingerPointers.remove(event.pointer);
-                      });
-                    },
-                    child: IgnorePointer(
-                      ignoring:
-                          _fingerPointers.isNotEmpty && _stylusPointers.isEmpty,
-                      child: SizedBox.expand(
-                        child: Scribble(notifier: notifier, drawPen: true),
-                      ),
-                    ),
+                  SizedBox.expand(
+                    child: Scribble(notifier: notifier, drawPen: true),
                   ),
                   // Screenshot (relative to canvas)
                   Positioned(
