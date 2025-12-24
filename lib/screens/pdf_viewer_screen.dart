@@ -29,8 +29,10 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   bool _isEditingMode = false;
   Rect? _selectionRect;
   int _currentPageIndex = 0;
-  double _currentPageScroll = 0;
+  double _scrollOffset = 0;
   final GlobalKey _pdfViewKey = GlobalKey();
+  List<double> _pageWidths = [];
+  List<double> _pageHeights = [];
 
   @override
   void initState() {
@@ -45,6 +47,24 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     _pdfController = PdfController(
       document: PdfDocument.openFile(list.pdfPath),
     );
+    _loadPageSizes();
+  }
+
+  Future<void> _loadPageSizes() async {
+    final document = await _pdfController.document;
+    final pages = document.pagesCount;
+    final widths = <double>[];
+    final heights = <double>[];
+    for (int i = 1; i <= pages; i++) {
+      final page = await document.getPage(i);
+      widths.add(page.width.toDouble());
+      heights.add(page.height.toDouble());
+      page.close();
+    }
+    setState(() {
+      _pageWidths = widths;
+      _pageHeights = heights;
+    });
   }
 
   @override
@@ -77,9 +97,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                 onNotification: (notification) {
                   if (notification is ScrollUpdateNotification) {
                     setState(() {
-                      _currentPageScroll =
-                          notification.metrics.pixels /
-                          notification.metrics.viewportDimension;
+                      _scrollOffset = notification.metrics.pixels;
                     });
                   }
                   return false;
@@ -100,51 +118,94 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                 ),
               ),
               // Hyperlinks
-              Stack(
-                children: list.selections.map((s) {
-                  // Calculate position relative to current scroll
-                  final top =
-                      s.top +
-                      (s.pageIndex - _currentPageScroll) * viewSize.height;
+              IgnorePointer(
+                ignoring: false,
+                child: Stack(
+                  children: list.selections.map((s) {
+                    if (s.pageIndex >= _pageWidths.length ||
+                        s.pageIndex >= _pageHeights.length) {
+                      return const SizedBox.shrink();
+                    }
+                    final viewAspectRatio = viewSize.width / viewSize.height;
+                    final pageWidth = _pageWidths[s.pageIndex];
+                    final pageHeight = _pageHeights[s.pageIndex];
+                    final pageAspectRatio = pageWidth / pageHeight;
 
-                  // Only show if it's roughly within the viewport
-                  if (top < -100 || top > viewSize.height + 100) {
-                    return const SizedBox.shrink();
-                  }
+                    double actualPageWidth, actualPageHeight;
+                    double offsetX = 0, offsetY = 0;
+                    if (pageAspectRatio > viewAspectRatio) {
+                      actualPageWidth = viewSize.width;
+                      actualPageHeight = viewSize.width / pageAspectRatio;
+                      offsetY = 0; // Pages are not centered vertically
+                    } else {
+                      actualPageHeight = viewSize.height;
+                      actualPageWidth = viewSize.height * pageAspectRatio;
+                      offsetX = (viewSize.width - actualPageWidth) / 2;
+                      offsetY = 0;
+                    }
 
-                  return Positioned(
-                    left: s.left + s.width - 24,
-                    top: top,
-                    child: GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => NoteScreen(
-                            folderId: widget.folderId,
-                            exerciseListId: widget.exerciseListId,
-                            selectionId: s.id,
-                            noteId: s.noteId,
+                    double cumulativeTop = 0;
+                    for (int i = 0; i < s.pageIndex; i++) {
+                      final prevPageAspectRatio =
+                          _pageWidths[i] / _pageHeights[i];
+                      double prevActualPageHeight;
+                      if (prevPageAspectRatio > viewAspectRatio) {
+                        prevActualPageHeight =
+                            viewSize.width / prevPageAspectRatio;
+                      } else {
+                        prevActualPageHeight = viewSize.height;
+                      }
+                      cumulativeTop += prevActualPageHeight;
+                    }
+
+                    final screenLeft =
+                        offsetX + (s.left / pageWidth) * actualPageWidth;
+                    final screenTop =
+                        cumulativeTop +
+                        offsetY +
+                        (s.top / pageHeight) * actualPageHeight -
+                        _scrollOffset;
+                    final screenWidth = (s.width / pageWidth) * actualPageWidth;
+
+                    // Only show if roughly within viewport
+                    if (screenTop < -100 || screenTop > viewSize.height + 100) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return Positioned(
+                      left: screenLeft + screenWidth - 24,
+                      top: screenTop,
+                      child: GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NoteScreen(
+                              folderId: widget.folderId,
+                              exerciseListId: widget.exerciseListId,
+                              selectionId: s.id,
+                              noteId: s.noteId,
+                            ),
+                          ),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.8),
+                            shape: BoxShape.circle,
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black26, blurRadius: 4),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.link,
+                            size: 16,
+                            color: Colors.white,
                           ),
                         ),
                       ),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.8),
-                          shape: BoxShape.circle,
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black26, blurRadius: 4),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.link,
-                          size: 16,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+                    );
+                  }).toList(),
+                ),
               ),
               if (_isEditingMode)
                 Positioned.fill(
@@ -218,17 +279,31 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
           if (pageAspectRatio > viewAspectRatio) {
             actualPageWidth = viewSize.width;
             actualPageHeight = viewSize.width / pageAspectRatio;
-            offsetY = (viewSize.height - actualPageHeight) / 2;
+            offsetY = 0; // Pages are not centered vertically in vertical scroll
           } else {
             actualPageHeight = viewSize.height;
             actualPageWidth = viewSize.height * pageAspectRatio;
             offsetX = (viewSize.width - actualPageWidth) / 2;
+            offsetY = 0;
+          }
+
+          double cumulativeTop = 0;
+          for (int i = 0; i < _currentPageIndex; i++) {
+            final prevPageAspectRatio = _pageWidths[i] / _pageHeights[i];
+            double prevActualPageHeight;
+            if (prevPageAspectRatio > viewAspectRatio) {
+              prevActualPageHeight = viewSize.width / prevPageAspectRatio;
+            } else {
+              prevActualPageHeight = viewSize.height;
+            }
+            cumulativeTop += prevActualPageHeight;
           }
 
           final relativeLeft =
               (_selectionRect!.left - offsetX) / actualPageWidth;
           final relativeTop =
-              (_selectionRect!.top - offsetY) / actualPageHeight;
+              (_selectionRect!.top - cumulativeTop + _scrollOffset - offsetY) /
+              actualPageHeight;
           final relativeWidth = _selectionRect!.width / actualPageWidth;
           final relativeHeight = _selectionRect!.height / actualPageHeight;
 
@@ -263,16 +338,62 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       debugPrint('Error capturing screenshot: $e');
     }
 
+    // We save the coordinates in page coordinate system
+    final document2 = await _pdfController.document;
+    final page2 = await document2.getPage(_currentPageIndex + 1);
+    final renderBox =
+        _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final viewSize = renderBox.size;
+
+    final pageAspectRatio = page2.width / page2.height;
+    final viewAspectRatio = viewSize.width / viewSize.height;
+
+    double actualPageWidth, actualPageHeight;
+    double offsetX = 0, offsetY = 0;
+
+    if (pageAspectRatio > viewAspectRatio) {
+      actualPageWidth = viewSize.width;
+      actualPageHeight = viewSize.width / pageAspectRatio;
+      offsetY = 0; // Pages are not centered vertically
+    } else {
+      actualPageHeight = viewSize.height;
+      actualPageWidth = viewSize.height * pageAspectRatio;
+      offsetX = (viewSize.width - actualPageWidth) / 2;
+      offsetY = 0;
+    }
+
+    double cumulativeTop = 0;
+    for (int i = 0; i < _currentPageIndex; i++) {
+      final prevPageAspectRatio = _pageWidths[i] / _pageHeights[i];
+      double prevActualPageHeight;
+      if (prevPageAspectRatio > viewAspectRatio) {
+        prevActualPageHeight = viewSize.width / prevPageAspectRatio;
+      } else {
+        prevActualPageHeight = viewSize.height;
+      }
+      cumulativeTop += prevActualPageHeight;
+    }
+
+    final relativeLeft = (_selectionRect!.left - offsetX) / actualPageWidth;
+    final relativeTop =
+        (_selectionRect!.top - cumulativeTop + _scrollOffset - offsetY) /
+        actualPageHeight;
+    final relativeWidth = _selectionRect!.width / actualPageWidth;
+    final relativeHeight = _selectionRect!.height / actualPageHeight;
+
     final newSelection = Selection(
       id: id,
-      left: _selectionRect!.left,
-      top: _selectionRect!.top,
-      width: _selectionRect!.width,
-      height: _selectionRect!.height,
+      left: relativeLeft * page2.width,
+      top: relativeTop * page2.height,
+      width: relativeWidth * page2.width,
+      height: relativeHeight * page2.height,
       pageIndex: _currentPageIndex,
       noteId: noteId,
       screenshotPath: screenshotPath,
     );
+
+    await page2.close();
 
     final folder = ref
         .read(folderProvider)
