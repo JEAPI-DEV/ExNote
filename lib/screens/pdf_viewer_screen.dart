@@ -29,6 +29,8 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   bool _isEditingMode = false;
   Rect? _selectionRect;
   int _currentPageIndex = 0;
+  final TransformationController _transformationController =
+      TransformationController();
 
   @override
   void initState() {
@@ -48,6 +50,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   @override
   void dispose() {
     _pdfController.dispose();
+    _transformationController.dispose();
     super.dispose();
   }
 
@@ -63,22 +66,66 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(list.name),
-        backgroundColor: _isEditingMode ? Colors.red : null,
+        backgroundColor: _isEditingMode ? Colors.red.withOpacity(0.1) : null,
       ),
       body: Stack(
         children: [
-          IgnorePointer(
-            ignoring: _isEditingMode,
-            child: PdfView(
-              controller: _pdfController,
-              onPageChanged: (page) {
-                setState(() {
-                  _currentPageIndex = page - 1;
-                });
-              },
-              physics: _isEditingMode
-                  ? const NeverScrollableScrollPhysics()
-                  : null,
+          InteractiveViewer(
+            transformationController: _transformationController,
+            minScale: 0.1,
+            maxScale: 4.0,
+            boundaryMargin: const EdgeInsets.all(double.infinity),
+            child: Stack(
+              children: [
+                PdfView(
+                  controller: _pdfController,
+                  onPageChanged: (page) {
+                    setState(() {
+                      _currentPageIndex = page - 1;
+                    });
+                  },
+                  physics: _isEditingMode
+                      ? const NeverScrollableScrollPhysics()
+                      : null,
+                ),
+                // Hyperlinks
+                ...list.selections
+                    .where((s) => s.pageIndex == _currentPageIndex)
+                    .map(
+                      (s) => Positioned(
+                        left: s.left + s.width - 24,
+                        top: s.top,
+                        child: GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NoteScreen(
+                                folderId: widget.folderId,
+                                exerciseListId: widget.exerciseListId,
+                                selectionId: s.id,
+                                noteId: s.noteId,
+                              ),
+                            ),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.8),
+                              shape: BoxShape.circle,
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black26, blurRadius: 4),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.link,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+              ],
             ),
           ),
           if (_isEditingMode)
@@ -99,54 +146,11 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                 },
               ),
             ),
-          // Hyperlinks
-          ...list.selections
-              .where((s) => s.pageIndex == _currentPageIndex)
-              .map(
-                (s) => IgnorePointer(
-                  ignoring: _isEditingMode,
-                  child: Positioned(
-                    left: s.left + s.width - 24,
-                    top: s.top,
-                    child: GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => NoteScreen(
-                            folderId: widget.folderId,
-                            exerciseListId: widget.exerciseListId,
-                            selectionId: s.id,
-                            noteId: s.noteId,
-                          ),
-                        ),
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.8),
-                          shape: BoxShape.circle,
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black26, blurRadius: 4),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.link,
-                          size: 16,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
         ],
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          debugPrint(
-            'Editing mode toggled: $_isEditingMode -> ${!_isEditingMode}',
-          );
           setState(() {
             _isEditingMode = !_isEditingMode;
             _selectionRect = null;
@@ -164,6 +168,16 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     final id = const Uuid().v4();
     final noteId = const Uuid().v4();
 
+    final matrix = _transformationController.value;
+    final scale = matrix.getMaxScaleOnAxis();
+    final translation = matrix.getTranslation();
+
+    // Map screen coordinates to untransformed coordinates
+    final untransformedLeft = (_selectionRect!.left - translation.x) / scale;
+    final untransformedTop = (_selectionRect!.top - translation.y) / scale;
+    final untransformedWidth = _selectionRect!.width / scale;
+    final untransformedHeight = _selectionRect!.height / scale;
+
     // Capture screenshot
     String? screenshotPath;
     try {
@@ -178,20 +192,21 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       );
 
       if (pageImage != null) {
-        // Decode the image
         final decodedImage = img.decodeImage(pageImage.bytes);
 
         if (decodedImage != null) {
-          // Calculate crop area (scale selection rect to image coordinates)
-          final scaleX = decodedImage.width / page.width;
-          final scaleY = decodedImage.height / page.height;
+          // Map untransformed coordinates to PDF page coordinates
+          final renderBox = context.findRenderObject() as RenderBox;
+          final viewSize = renderBox.size;
 
-          final cropX = (_selectionRect!.left * scaleX).toInt();
-          final cropY = (_selectionRect!.top * scaleY).toInt();
-          final cropWidth = (_selectionRect!.width * scaleX).toInt();
-          final cropHeight = (_selectionRect!.height * scaleY).toInt();
+          final pdfScaleX = decodedImage.width / viewSize.width;
+          final pdfScaleY = decodedImage.height / viewSize.height;
 
-          // Crop the image
+          final cropX = (untransformedLeft * pdfScaleX).toInt();
+          final cropY = (untransformedTop * pdfScaleY).toInt();
+          final cropWidth = (untransformedWidth * pdfScaleX).toInt();
+          final cropHeight = (untransformedHeight * pdfScaleY).toInt();
+
           final croppedImage = img.copyCrop(
             decodedImage,
             x: cropX,
@@ -200,7 +215,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
             height: cropHeight,
           );
 
-          // Save the cropped image
           final directory = await getApplicationDocumentsDirectory();
           final path = '${directory.path}/screenshot_$id.png';
           final file = File(path);
@@ -216,10 +230,10 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
 
     final newSelection = Selection(
       id: id,
-      left: _selectionRect!.left,
-      top: _selectionRect!.top,
-      width: _selectionRect!.width,
-      height: _selectionRect!.height,
+      left: untransformedLeft,
+      top: untransformedTop,
+      width: untransformedWidth,
+      height: untransformedHeight,
       pageIndex: _currentPageIndex,
       noteId: noteId,
       screenshotPath: screenshotPath,

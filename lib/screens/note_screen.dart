@@ -106,7 +106,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         children: [
           InteractiveViewer(
             transformationController: _transformationController,
-            minScale: 0.5,
+            minScale: 0.1, // Allow zooming out to 10%
             maxScale: 4.0,
             panEnabled: true,
             scaleEnabled: true,
@@ -114,13 +114,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
               child: Scribble(notifier: notifier, drawPen: true),
             ),
           ),
-          // Screenshot in top right
+          // Screenshot in top left
           Positioned(
             top: 16,
-            right: 16,
+            left: 16,
             child: Container(
-              width: 200,
-              height: 150,
+              width: 350,
+              height: 250,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey.shade300, width: 2),
                 boxShadow: const [
