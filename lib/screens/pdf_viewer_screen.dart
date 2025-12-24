@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:uuid/uuid.dart';
@@ -31,6 +33,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   int _currentPageIndex = 0;
   double _scrollOffset = 0;
   final GlobalKey _pdfViewKey = GlobalKey();
+  final GlobalKey _repaintBoundaryKey = GlobalKey();
   List<double> _pageWidths = [];
   List<double> _pageHeights = [];
 
@@ -102,19 +105,22 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                   }
                   return false;
                 },
-                child: PdfView(
-                  key: _pdfViewKey,
-                  controller: _pdfController,
-                  scrollDirection: Axis.vertical,
-                  pageSnapping: false,
-                  onPageChanged: (page) {
-                    setState(() {
-                      _currentPageIndex = page - 1;
-                    });
-                  },
-                  physics: _isEditingMode
-                      ? const NeverScrollableScrollPhysics()
-                      : const BouncingScrollPhysics(),
+                child: RepaintBoundary(
+                  key: _repaintBoundaryKey,
+                  child: PdfView(
+                    key: _pdfViewKey,
+                    controller: _pdfController,
+                    scrollDirection: Axis.vertical,
+                    pageSnapping: false,
+                    onPageChanged: (page) {
+                      setState(() {
+                        _currentPageIndex = page - 1;
+                      });
+                    },
+                    physics: _isEditingMode
+                        ? const NeverScrollableScrollPhysics()
+                        : const BouncingScrollPhysics(),
+                  ),
                 ),
               ),
               if (_isEditingMode)
@@ -247,121 +253,44 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     // Capture screenshot
     String? screenshotPath;
     try {
-      final document = await _pdfController.document;
+      final boundary =
+          _repaintBoundaryKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
+      if (boundary == null) return;
 
-      final renderBox =
-          _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
-      if (renderBox == null) return;
-      final viewSize = renderBox.size;
-      final viewAspectRatio = viewSize.width / viewSize.height;
+      final image = await boundary.toImage(pixelRatio: 2.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return;
 
-      // Determine the actual page index based on selection position
-      int actualPageIndex = 0;
-      List<double> pageScreenTops = [];
-      double cumTop = 0;
-      for (int i = 0; i < _pageWidths.length; i++) {
-        pageScreenTops.add(cumTop - _scrollOffset);
-        final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
-        double actualPageHeight;
-        if (pageAspectRatio > viewAspectRatio) {
-          actualPageHeight = viewSize.width / pageAspectRatio;
-        } else {
-          actualPageHeight = viewSize.height;
-        }
-        cumTop += actualPageHeight;
+      final pngBytes = byteData.buffer.asUint8List();
+      final decodedImage = img.decodeImage(pngBytes);
+
+      if (decodedImage != null) {
+        // Crop from the captured image
+        int cropX = (_selectionRect!.left * 2).toInt();
+        int cropY = (_selectionRect!.top * 2).toInt();
+        int cropWidth = (_selectionRect!.width * 2).toInt();
+        int cropHeight = (_selectionRect!.height * 2).toInt();
+
+        cropX = cropX.clamp(0, decodedImage.width - 1);
+        cropY = cropY.clamp(0, decodedImage.height - 1);
+        cropWidth = cropWidth.clamp(1, decodedImage.width - cropX);
+        cropHeight = cropHeight.clamp(1, decodedImage.height - cropY);
+
+        final croppedImage = img.copyCrop(
+          decodedImage,
+          x: cropX,
+          y: cropY,
+          width: cropWidth,
+          height: cropHeight,
+        );
+
+        final directory = await getApplicationDocumentsDirectory();
+        final path = '${directory.path}/screenshot_$id.png';
+        final file = File(path);
+        await file.writeAsBytes(img.encodePng(croppedImage));
+        screenshotPath = path;
       }
-
-      for (int i = 0; i < pageScreenTops.length; i++) {
-        final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
-        double actualPageHeight;
-        if (pageAspectRatio > viewAspectRatio) {
-          actualPageHeight = viewSize.width / pageAspectRatio;
-        } else {
-          actualPageHeight = viewSize.height;
-        }
-        final pageScreenTop = pageScreenTops[i];
-        final pageScreenBottom = pageScreenTop + actualPageHeight;
-        if (_selectionRect!.top >= pageScreenTop &&
-            _selectionRect!.top < pageScreenBottom) {
-          actualPageIndex = i;
-          break;
-        }
-      }
-
-      final page = await document.getPage(actualPageIndex + 1);
-      final pageImage = await page.render(
-        width: page.width * 2,
-        height: page.height * 2,
-        format: PdfPageImageFormat.png,
-      );
-
-      if (pageImage != null) {
-        final decodedImage = img.decodeImage(pageImage.bytes);
-
-        if (decodedImage != null) {
-          final pageAspectRatio = page.width / page.height;
-
-          double actualPageWidth, actualPageHeight;
-          double offsetX = 0, offsetY = 0;
-
-          if (pageAspectRatio > viewAspectRatio) {
-            actualPageWidth = viewSize.width;
-            actualPageHeight = viewSize.width / pageAspectRatio;
-            offsetY = 0; // Pages are not centered vertically in vertical scroll
-          } else {
-            actualPageHeight = viewSize.height;
-            actualPageWidth = viewSize.height * pageAspectRatio;
-            offsetX = (viewSize.width - actualPageWidth) / 2;
-            offsetY = 0;
-          }
-
-          double cumulativeTop = 0;
-          for (int i = 0; i < actualPageIndex; i++) {
-            final prevPageAspectRatio = _pageWidths[i] / _pageHeights[i];
-            double prevActualPageHeight;
-            if (prevPageAspectRatio > viewAspectRatio) {
-              prevActualPageHeight = viewSize.width / prevPageAspectRatio;
-            } else {
-              prevActualPageHeight = viewSize.height;
-            }
-            cumulativeTop += prevActualPageHeight;
-          }
-
-          final relativeLeft =
-              (_selectionRect!.left - offsetX) / actualPageWidth;
-          final relativeTop =
-              (_selectionRect!.top - cumulativeTop + _scrollOffset - offsetY) /
-              actualPageHeight;
-          final relativeWidth = _selectionRect!.width / actualPageWidth;
-          final relativeHeight = _selectionRect!.height / actualPageHeight;
-
-          int cropX = (relativeLeft * decodedImage.width).toInt();
-          int cropY = (relativeTop * decodedImage.height).toInt();
-          int cropWidth = (relativeWidth * decodedImage.width).toInt();
-          int cropHeight = (relativeHeight * decodedImage.height).toInt();
-
-          cropX = cropX.clamp(0, decodedImage.width - 1);
-          cropY = cropY.clamp(0, decodedImage.height - 1);
-          cropWidth = cropWidth.clamp(1, decodedImage.width - cropX);
-          cropHeight = cropHeight.clamp(1, decodedImage.height - cropY);
-
-          final croppedImage = img.copyCrop(
-            decodedImage,
-            x: cropX,
-            y: cropY,
-            width: cropWidth,
-            height: cropHeight,
-          );
-
-          final directory = await getApplicationDocumentsDirectory();
-          final path = '${directory.path}/screenshot_$id.png';
-          final file = File(path);
-          await file.writeAsBytes(img.encodePng(croppedImage));
-          screenshotPath = path;
-        }
-      }
-
-      await page.close();
     } catch (e) {
       debugPrint('Error capturing screenshot: $e');
     }
