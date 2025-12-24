@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/folder_provider.dart';
 import '../widgets/scribble_toolbar.dart';
 
-enum GridType { lines, dots }
+enum GridType { grid, writingLines }
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -34,9 +34,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   final TransformationController _transformationController =
       TransformationController();
 
-  double strokeWidth = 5.0;
+  double strokeWidth = 1.0;
   bool gridEnabled = false;
-  GridType gridType = GridType.lines;
+  GridType gridType = GridType.grid;
 
   @override
   void initState() {
@@ -54,7 +54,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
     // Update scale factor when zoom changes
     _transformationController.addListener(() {
-      notifier.setScaleFactor(1.0);
+      notifier.setScaleFactor(2.0); // Higher scale factor for smoother strokes
     });
 
     // Load existing note if it exists
@@ -181,7 +181,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                   items: GridType.values.map((GridType type) {
                     return DropdownMenuItem<GridType>(
                       value: type,
-                      child: Text(type == GridType.lines ? 'Lines' : 'Dots'),
+                      child: Text(
+                        type == GridType.grid ? 'Grid (Math)' : 'Writing Lines',
+                      ),
                     );
                   }).toList(),
                 ),
@@ -290,7 +292,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      strokeWidth = prefs.getDouble('strokeWidth') ?? 5.0;
+      strokeWidth = prefs.getDouble('strokeWidth') ?? 1.0;
       gridEnabled = prefs.getBool('gridEnabled') ?? false;
       gridType = GridType.values[prefs.getInt('gridType') ?? 0];
     });
@@ -335,28 +337,8 @@ class GridPainter extends CustomPainter {
 
     const double spacing = 20.0;
 
-    if (gridType == GridType.dots) {
-      // Prevent drawing too many dots when zoomed out
-      final numX = ((maxX - minX) / spacing).ceil();
-      final numY = ((maxY - minY) / spacing).ceil();
-      if (numX * numY > 10000) return; // Skip drawing if too many dots
-
-      // Draw dots
-      for (
-        double x = (minX / spacing).floor() * spacing;
-        x <= maxX;
-        x += spacing
-      ) {
-        for (
-          double y = (minY / spacing).floor() * spacing;
-          y <= maxY;
-          y += spacing
-        ) {
-          canvas.drawCircle(Offset(x, y), 1.0, paint);
-        }
-      }
-    } else {
-      // Draw lines
+    if (gridType == GridType.grid) {
+      // Draw grid (vertical and horizontal lines for math)
       // Draw vertical lines
       for (
         double x = (minX / spacing).floor() * spacing;
@@ -367,6 +349,15 @@ class GridPainter extends CustomPainter {
       }
 
       // Draw horizontal lines
+      for (
+        double y = (minY / spacing).floor() * spacing;
+        y <= maxY;
+        y += spacing
+      ) {
+        canvas.drawLine(Offset(minX, y), Offset(maxX, y), paint);
+      }
+    } else {
+      // Draw horizontal lines only (for writing)
       for (
         double y = (minY / spacing).floor() * spacing;
         y <= maxY;
