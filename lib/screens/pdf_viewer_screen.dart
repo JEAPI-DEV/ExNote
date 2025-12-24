@@ -248,8 +248,47 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     String? screenshotPath;
     try {
       final document = await _pdfController.document;
-      final page = await document.getPage(_currentPageIndex + 1);
 
+      final renderBox =
+          _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
+      if (renderBox == null) return;
+      final viewSize = renderBox.size;
+      final viewAspectRatio = viewSize.width / viewSize.height;
+
+      // Determine the actual page index based on selection position
+      int actualPageIndex = 0;
+      List<double> pageScreenTops = [];
+      double cumTop = 0;
+      for (int i = 0; i < _pageWidths.length; i++) {
+        pageScreenTops.add(cumTop - _scrollOffset);
+        final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
+        double actualPageHeight;
+        if (pageAspectRatio > viewAspectRatio) {
+          actualPageHeight = viewSize.width / pageAspectRatio;
+        } else {
+          actualPageHeight = viewSize.height;
+        }
+        cumTop += actualPageHeight;
+      }
+
+      for (int i = 0; i < pageScreenTops.length; i++) {
+        final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
+        double actualPageHeight;
+        if (pageAspectRatio > viewAspectRatio) {
+          actualPageHeight = viewSize.width / pageAspectRatio;
+        } else {
+          actualPageHeight = viewSize.height;
+        }
+        final pageScreenTop = pageScreenTops[i];
+        final pageScreenBottom = pageScreenTop + actualPageHeight;
+        if (_selectionRect!.top >= pageScreenTop &&
+            _selectionRect!.top < pageScreenBottom) {
+          actualPageIndex = i;
+          break;
+        }
+      }
+
+      final page = await document.getPage(actualPageIndex + 1);
       final pageImage = await page.render(
         width: page.width * 2,
         height: page.height * 2,
@@ -260,13 +299,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         final decodedImage = img.decodeImage(pageImage.bytes);
 
         if (decodedImage != null) {
-          final renderBox =
-              _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
-          if (renderBox == null) return;
-          final viewSize = renderBox.size;
-
           final pageAspectRatio = page.width / page.height;
-          final viewAspectRatio = viewSize.width / viewSize.height;
 
           double actualPageWidth, actualPageHeight;
           double offsetX = 0, offsetY = 0;
@@ -283,7 +316,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
           }
 
           double cumulativeTop = 0;
-          for (int i = 0; i < _currentPageIndex; i++) {
+          for (int i = 0; i < actualPageIndex; i++) {
             final prevPageAspectRatio = _pageWidths[i] / _pageHeights[i];
             double prevActualPageHeight;
             if (prevPageAspectRatio > viewAspectRatio) {
@@ -335,14 +368,48 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
 
     // We save the coordinates in page coordinate system
     final document2 = await _pdfController.document;
-    final page2 = await document2.getPage(_currentPageIndex + 1);
+
     final renderBox =
         _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
     final viewSize = renderBox.size;
-
-    final pageAspectRatio = page2.width / page2.height;
     final viewAspectRatio = viewSize.width / viewSize.height;
+
+    // Determine the actual page index based on selection position
+    int actualPageIndex = 0;
+    List<double> pageScreenTops = [];
+    double cumTop = 0;
+    for (int i = 0; i < _pageWidths.length; i++) {
+      pageScreenTops.add(cumTop - _scrollOffset);
+      final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
+      double actualPageHeight;
+      if (pageAspectRatio > viewAspectRatio) {
+        actualPageHeight = viewSize.width / pageAspectRatio;
+      } else {
+        actualPageHeight = viewSize.height;
+      }
+      cumTop += actualPageHeight;
+    }
+
+    for (int i = 0; i < pageScreenTops.length; i++) {
+      final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
+      double actualPageHeight;
+      if (pageAspectRatio > viewAspectRatio) {
+        actualPageHeight = viewSize.width / pageAspectRatio;
+      } else {
+        actualPageHeight = viewSize.height;
+      }
+      final pageScreenTop = pageScreenTops[i];
+      final pageScreenBottom = pageScreenTop + actualPageHeight;
+      if (_selectionRect!.top >= pageScreenTop &&
+          _selectionRect!.top < pageScreenBottom) {
+        actualPageIndex = i;
+        break;
+      }
+    }
+
+    final page2 = await document2.getPage(actualPageIndex + 1);
+    final pageAspectRatio = page2.width / page2.height;
 
     double actualPageWidth, actualPageHeight;
     double offsetX = 0, offsetY = 0;
@@ -359,7 +426,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     }
 
     double cumulativeTop = 0;
-    for (int i = 0; i < _currentPageIndex; i++) {
+    for (int i = 0; i < actualPageIndex; i++) {
       final prevPageAspectRatio = _pageWidths[i] / _pageHeights[i];
       double prevActualPageHeight;
       if (prevPageAspectRatio > viewAspectRatio) {
@@ -383,7 +450,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       top: relativeTop * page2.height,
       width: relativeWidth * page2.width,
       height: relativeHeight * page2.height,
-      pageIndex: _currentPageIndex,
+      pageIndex: actualPageIndex,
       noteId: noteId,
       screenshotPath: screenshotPath,
     );
