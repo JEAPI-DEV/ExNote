@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scribble/scribble.dart';
@@ -28,6 +29,10 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   late ScribbleNotifier notifier;
   final TransformationController _transformationController =
       TransformationController();
+
+  // Track active pointers to decide whether to ignore Scribble
+  final Set<int> _stylusPointers = {};
+  final Set<int> _fingerPointers = {};
 
   @override
   void initState() {
@@ -110,8 +115,39 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             maxScale: 4.0,
             panEnabled: true,
             scaleEnabled: true,
-            child: SizedBox.expand(
-              child: Scribble(notifier: notifier, drawPen: true),
+            // We want InteractiveViewer to handle all finger gestures.
+            // Scribble should only handle stylus gestures.
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (event) {
+                setState(() {
+                  if (event.kind == PointerDeviceKind.stylus) {
+                    _stylusPointers.add(event.pointer);
+                  } else {
+                    _fingerPointers.add(event.pointer);
+                  }
+                });
+              },
+              onPointerUp: (event) {
+                setState(() {
+                  _stylusPointers.remove(event.pointer);
+                  _fingerPointers.remove(event.pointer);
+                });
+              },
+              onPointerCancel: (event) {
+                setState(() {
+                  _stylusPointers.remove(event.pointer);
+                  _fingerPointers.remove(event.pointer);
+                });
+              },
+              child: IgnorePointer(
+                // Ignore Scribble if we have fingers down and no stylus,
+                // or if we have multiple fingers (zooming/panning).
+                ignoring: _fingerPointers.isNotEmpty && _stylusPointers.isEmpty,
+                child: SizedBox.expand(
+                  child: Scribble(notifier: notifier, drawPen: true),
+                ),
+              ),
             ),
           ),
           // Screenshot in top left
@@ -121,7 +157,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             child: selection.screenshotPath != null
                 ? Image.file(
                     File(selection.screenshotPath!),
-                    width: 600, // Even bigger
+                    width: 600,
                     fit: BoxFit.contain,
                   )
                 : Container(
