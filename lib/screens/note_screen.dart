@@ -106,7 +106,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         children: [
           InteractiveViewer(
             transformationController: _transformationController,
-            minScale: 0.1, // Allow zooming out to 10%
+            minScale: 0.1,
             maxScale: 4.0,
             panEnabled: true,
             scaleEnabled: true,
@@ -118,32 +118,26 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
           Positioned(
             top: 16,
             left: 16,
-            child: Container(
-              width: 350,
-              height: 250,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300, width: 2),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 8),
-                ],
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: selection.screenshotPath != null
-                    ? Image.file(
-                        File(selection.screenshotPath!),
-                        fit: BoxFit.contain,
-                      )
-                    : const Center(
-                        child: Text(
-                          'No Screenshot',
-                          style: TextStyle(color: Colors.grey),
-                        ),
+            child: selection.screenshotPath != null
+                ? Image.file(
+                    File(selection.screenshotPath!),
+                    width: 450, // Increased size
+                    fit: BoxFit.contain,
+                  )
+                : Container(
+                    width: 200,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'No Screenshot',
+                        style: TextStyle(color: Colors.grey),
                       ),
-              ),
-            ),
+                    ),
+                  ),
           ),
           // Toolbar at bottom
           Positioned(

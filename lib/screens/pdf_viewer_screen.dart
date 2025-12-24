@@ -184,7 +184,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       final document = await _pdfController.document;
       final page = await document.getPage(_currentPageIndex + 1);
 
-      // Render the page
+      // Render the page at high resolution
       final pageImage = await page.render(
         width: page.width * 2,
         height: page.height * 2,
@@ -195,17 +195,45 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         final decodedImage = img.decodeImage(pageImage.bytes);
 
         if (decodedImage != null) {
-          // Map untransformed coordinates to PDF page coordinates
           final renderBox = context.findRenderObject() as RenderBox;
           final viewSize = renderBox.size;
 
-          final pdfScaleX = decodedImage.width / viewSize.width;
-          final pdfScaleY = decodedImage.height / viewSize.height;
+          // Calculate the actual page rect in the PdfView widget (BoxFit.contain)
+          final pageAspectRatio = page.width / page.height;
+          final viewAspectRatio = viewSize.width / viewSize.height;
 
-          final cropX = (untransformedLeft * pdfScaleX).toInt();
-          final cropY = (untransformedTop * pdfScaleY).toInt();
-          final cropWidth = (untransformedWidth * pdfScaleX).toInt();
-          final cropHeight = (untransformedHeight * pdfScaleY).toInt();
+          double actualPageWidth, actualPageHeight;
+          double offsetX = 0, offsetY = 0;
+
+          if (pageAspectRatio > viewAspectRatio) {
+            // Page is wider than view (relative to height)
+            actualPageWidth = viewSize.width;
+            actualPageHeight = viewSize.width / pageAspectRatio;
+            offsetY = (viewSize.height - actualPageHeight) / 2;
+          } else {
+            // Page is taller than view
+            actualPageHeight = viewSize.height;
+            actualPageWidth = viewSize.height * pageAspectRatio;
+            offsetX = (viewSize.width - actualPageWidth) / 2;
+          }
+
+          // Map untransformed coordinates to relative coordinates on the actual page
+          final relativeLeft = (untransformedLeft - offsetX) / actualPageWidth;
+          final relativeTop = (untransformedTop - offsetY) / actualPageHeight;
+          final relativeWidth = untransformedWidth / actualPageWidth;
+          final relativeHeight = untransformedHeight / actualPageHeight;
+
+          // Map relative coordinates to pixels in the decoded image
+          int cropX = (relativeLeft * decodedImage.width).toInt();
+          int cropY = (relativeTop * decodedImage.height).toInt();
+          int cropWidth = (relativeWidth * decodedImage.width).toInt();
+          int cropHeight = (relativeHeight * decodedImage.height).toInt();
+
+          // Clamp to image bounds
+          cropX = cropX.clamp(0, decodedImage.width - 1);
+          cropY = cropY.clamp(0, decodedImage.height - 1);
+          cropWidth = cropWidth.clamp(1, decodedImage.width - cropX);
+          cropHeight = cropHeight.clamp(1, decodedImage.height - cropY);
 
           final croppedImage = img.copyCrop(
             decodedImage,
