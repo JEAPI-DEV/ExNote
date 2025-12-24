@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scribble/scribble.dart';
@@ -38,6 +38,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   bool gridEnabled = false;
   GridType gridType = GridType.grid;
 
+  Timer? _autoSaveTimer;
+
   @override
   void initState() {
     super.initState();
@@ -45,11 +47,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     notifier.setAllowedPointersMode(ScribblePointerMode.penOnly);
     loadSettings();
 
-    // Listen to notifier changes to sync strokeWidth
+    // Listen to notifier changes to sync strokeWidth and trigger autosave
     notifier.addListener(() {
       setState(() {
         strokeWidth = notifier.value.selectedWidth;
       });
+      _scheduleAutoSave();
     });
 
     // Update scale factor when zoom changes
@@ -80,6 +83,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   @override
   void dispose() {
+    _autoSaveTimer?.cancel();
     saveSettings();
     notifier.dispose();
     _transformationController.dispose();
@@ -98,153 +102,169 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       (s) => s.id == widget.selectionId,
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Exercise Note'),
-        actions: [
-          ValueListenableBuilder(
-            valueListenable: notifier,
-            builder: (context, state, _) => IconButton(
-              icon: const Icon(Icons.undo),
-              onPressed: notifier.canUndo ? notifier.undo : null,
-            ),
-          ),
-          ValueListenableBuilder(
-            valueListenable: notifier,
-            builder: (context, state, _) => IconButton(
-              icon: const Icon(Icons.redo),
-              onPressed: notifier.canRedo ? notifier.redo : null,
-            ),
-          ),
-          IconButton(icon: const Icon(Icons.save), onPressed: _saveNote),
-          Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: () => Scaffold.of(context).openEndDrawer(),
-            ),
-          ),
-        ],
-      ),
-      endDrawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
-              child: Text(
-                'Settings',
-                style: TextStyle(color: Colors.white, fontSize: 24),
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Exercise Note'),
+          actions: [
+            ValueListenableBuilder(
+              valueListenable: notifier,
+              builder: (context, state, _) => IconButton(
+                icon: const Icon(Icons.undo),
+                onPressed: notifier.canUndo ? notifier.undo : null,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Stroke Width'),
-                  Slider(
-                    value: strokeWidth,
-                    min: 1.0,
-                    max: 20.0,
-                    divisions: 19,
-                    label: strokeWidth.round().toString(),
-                    onChanged: (double value) {
-                      setState(() {
-                        strokeWidth = value;
-                      });
-                    },
-                  ),
-                ],
+            ValueListenableBuilder(
+              valueListenable: notifier,
+              builder: (context, state, _) => IconButton(
+                icon: const Icon(Icons.redo),
+                onPressed: notifier.canRedo ? notifier.redo : null,
               ),
             ),
-            SwitchListTile(
-              title: const Text('Grid Enabled'),
-              value: gridEnabled,
-              onChanged: (bool value) {
-                setState(() {
-                  gridEnabled = value;
-                });
+            IconButton(
+              icon: const Icon(Icons.save),
+              onPressed: () {
+                _autoSaveTimer?.cancel();
+                _saveNote();
               },
             ),
-            if (gridEnabled)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: DropdownButton<GridType>(
-                  value: gridType,
-                  onChanged: (GridType? newValue) {
-                    if (newValue != null) {
-                      setState(() {
-                        gridType = newValue;
-                      });
-                    }
-                  },
-                  items: GridType.values.map((GridType type) {
-                    return DropdownMenuItem<GridType>(
-                      value: type,
-                      child: Text(
-                        type == GridType.grid ? 'Grid (Math)' : 'Writing Lines',
-                      ),
-                    );
-                  }).toList(),
+            Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () => Scaffold.of(context).openEndDrawer(),
+              ),
+            ),
+          ],
+        ),
+        endDrawer: Drawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              const DrawerHeader(
+                decoration: BoxDecoration(color: Colors.blue),
+                child: Text(
+                  'Settings',
+                  style: TextStyle(color: Colors.white, fontSize: 24),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Stroke Width'),
+                    Slider(
+                      value: strokeWidth,
+                      min: 1.0,
+                      max: 20.0,
+                      divisions: 19,
+                      label: strokeWidth.round().toString(),
+                      onChanged: (double value) {
+                        setState(() {
+                          strokeWidth = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              SwitchListTile(
+                title: const Text('Grid Enabled'),
+                value: gridEnabled,
+                onChanged: (bool value) {
+                  setState(() {
+                    gridEnabled = value;
+                  });
+                },
+              ),
+              if (gridEnabled)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: DropdownButton<GridType>(
+                    value: gridType,
+                    onChanged: (GridType? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          gridType = newValue;
+                        });
+                      }
+                    },
+                    items: GridType.values.map((GridType type) {
+                      return DropdownMenuItem<GridType>(
+                        value: type,
+                        child: Text(
+                          type == GridType.grid
+                              ? 'Grid (Math)'
+                              : 'Writing Lines',
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        body: Stack(
+          children: [
+            InteractiveViewer(
+              constrained: false,
+              transformationController: _transformationController,
+              minScale: 0.01,
+              maxScale: 4.0,
+              panEnabled: true,
+              scaleEnabled: true,
+              boundaryMargin: const EdgeInsets.all(50000.0),
+              child: SizedBox(
+                width: 100000.0,
+                height: 100000.0,
+                child: Stack(
+                  children: [
+                    if (gridEnabled)
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: GridPainter(
+                            matrix: _transformationController.value,
+                            gridType: gridType,
+                          ),
+                        ),
+                      ),
+                    // Scribble layer
+                    SizedBox.expand(
+                      child: Scribble(notifier: notifier, drawPen: false),
+                    ),
+                    // Screenshot (relative to canvas)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      child: selection.screenshotPath != null
+                          ? Image.file(
+                              File(selection.screenshotPath!),
+                              width: 800,
+                              fit: BoxFit.contain,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Toolbar at bottom
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: ScribbleToolbar(notifier: notifier),
+            ),
           ],
         ),
       ),
-      body: Stack(
-        children: [
-          InteractiveViewer(
-            constrained: false,
-            transformationController: _transformationController,
-            minScale: 0.01,
-            maxScale: 4.0,
-            panEnabled: true,
-            scaleEnabled: true,
-            boundaryMargin: const EdgeInsets.all(50000.0),
-            child: SizedBox(
-              width: 100000.0,
-              height: 100000.0,
-              child: Stack(
-                children: [
-                  if (gridEnabled)
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: GridPainter(
-                          matrix: _transformationController.value,
-                          gridType: gridType,
-                        ),
-                      ),
-                    ),
-                  // Scribble layer
-                  SizedBox.expand(
-                    child: Scribble(notifier: notifier, drawPen: false),
-                  ),
-                  // Screenshot (relative to canvas)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    child: selection.screenshotPath != null
-                        ? Image.file(
-                            File(selection.screenshotPath!),
-                            width: 800,
-                            fit: BoxFit.contain,
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Toolbar at bottom
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: ScribbleToolbar(notifier: notifier),
-          ),
-        ],
-      ),
     );
+  }
+
+  Future<bool> _onWillPop() async {
+    await _saveNote();
+    return true;
   }
 
   Future<void> _saveNote() async {
@@ -304,6 +324,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     await prefs.setDouble('strokeWidth', strokeWidth);
     await prefs.setBool('gridEnabled', gridEnabled);
     await prefs.setInt('gridType', gridType.index);
+  }
+
+  void _scheduleAutoSave() {
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(const Duration(seconds: 2), () {
+      _saveNote();
+    });
   }
 }
 
