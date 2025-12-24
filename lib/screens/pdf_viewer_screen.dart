@@ -31,6 +31,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   int _currentPageIndex = 0;
   final TransformationController _transformationController =
       TransformationController();
+  final GlobalKey _pdfViewKey = GlobalKey();
 
   @override
   void initState() {
@@ -76,6 +77,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
             maxScale: 4.0,
             boundaryMargin: const EdgeInsets.all(double.infinity),
             child: Stack(
+              key: _pdfViewKey,
               children: [
                 PdfView(
                   controller: _pdfController,
@@ -195,7 +197,9 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         final decodedImage = img.decodeImage(pageImage.bytes);
 
         if (decodedImage != null) {
-          final renderBox = context.findRenderObject() as RenderBox;
+          final renderBox =
+              _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
+          if (renderBox == null) return;
           final viewSize = renderBox.size;
 
           // Calculate the actual page rect in the PdfView widget (BoxFit.contain)

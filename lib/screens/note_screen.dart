@@ -121,7 +121,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             child: selection.screenshotPath != null
                 ? Image.file(
                     File(selection.screenshotPath!),
-                    width: 450, // Increased size
+                    width: 600, // Even bigger
                     fit: BoxFit.contain,
                   )
                 : Container(
