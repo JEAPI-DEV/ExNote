@@ -39,12 +39,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   GridType gridType = GridType.grid;
 
   Timer? _autoSaveTimer;
+  Size? _screenshotSize;
 
   @override
   void initState() {
     super.initState();
     notifier = ScribbleNotifier();
     notifier.setAllowedPointersMode(ScribblePointerMode.penOnly);
+    notifier.setScaleFactor(1.0); // Initial scale factor
     loadSettings();
 
     // Listen to notifier changes to sync strokeWidth and trigger autosave
@@ -57,7 +59,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
     // Update scale factor when zoom changes
     _transformationController.addListener(() {
-      notifier.setScaleFactor(2.0); // Higher scale factor for smoother strokes
+      final Matrix4 matrix = _transformationController.value;
+      final double scale = matrix.getMaxScaleOnAxis();
+      notifier.setScaleFactor(scale);
     });
 
     // Load existing note if it exists
@@ -78,6 +82,31 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       } catch (e) {
         debugPrint('Error loading note: $e');
       }
+    }
+
+    // Load screenshot if exists
+    final list = folder.exerciseLists.firstWhere(
+      (l) => l.id == widget.exerciseListId,
+    );
+    final selection = list.selections.firstWhere(
+      (s) => s.id == widget.selectionId,
+    );
+
+    if (selection.screenshotPath != null) {
+      // Get image dimensions
+      final image = Image.file(File(selection.screenshotPath!));
+      image.image
+          .resolve(const ImageConfiguration())
+          .addListener(
+            ImageStreamListener((ImageInfo info, bool _) {
+              setState(() {
+                _screenshotSize = Size(
+                  info.image.width.toDouble() / 2,
+                  info.image.height.toDouble() / 2,
+                );
+              });
+            }),
+          );
     }
   }
 
@@ -164,6 +193,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         setState(() {
                           strokeWidth = value;
                         });
+                        notifier.setStrokeWidth(value);
                       },
                     ),
                   ],
@@ -207,45 +237,62 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         ),
         body: Stack(
           children: [
-            InteractiveViewer(
-              constrained: false,
-              transformationController: _transformationController,
-              minScale: 0.01,
-              maxScale: 4.0,
-              panEnabled: true,
-              scaleEnabled: true,
-              boundaryMargin: const EdgeInsets.all(50000.0),
-              child: SizedBox(
-                width: 100000.0,
-                height: 100000.0,
-                child: Stack(
-                  children: [
-                    if (gridEnabled)
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: GridPainter(
-                            matrix: _transformationController.value,
-                            gridType: gridType,
+            GestureDetector(
+              onScaleStart: (details) {
+                // Only allow scaling/panning if there are multiple pointers
+                if (details.pointerCount < 2) {
+                  // This will prevent the gesture from being recognized
+                }
+              },
+              child: InteractiveViewer(
+                constrained: false,
+                transformationController: _transformationController,
+                minScale: 0.01,
+                maxScale: 4.0,
+                panEnabled: false,
+                scaleEnabled: true,
+                boundaryMargin: const EdgeInsets.all(50000.0),
+                child: SizedBox(
+                  width: 100000.0,
+                  height: 100000.0,
+                  child: Stack(
+                    children: [
+                      if (gridEnabled)
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: GridPainter(
+                              matrix: _transformationController.value,
+                              gridType: gridType,
+                            ),
                           ),
                         ),
+                      // Scribble layer
+                      SizedBox.expand(
+                        child: Scribble(notifier: notifier, drawPen: false),
                       ),
-                    // Scribble layer
-                    SizedBox.expand(
-                      child: Scribble(notifier: notifier, drawPen: false),
-                    ),
-                    // Screenshot (relative to canvas)
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      child: selection.screenshotPath != null
-                          ? Image.file(
-                              File(selection.screenshotPath!),
-                              width: 800,
-                              fit: BoxFit.contain,
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
+                      // Screenshot (relative to canvas)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        child:
+                            selection.screenshotPath != null &&
+                                _screenshotSize != null
+                            ? Image.file(
+                                File(selection.screenshotPath!),
+                                width: _screenshotSize!.width,
+                                height: _screenshotSize!.height,
+                                fit: BoxFit.contain,
+                              )
+                            : selection.screenshotPath != null
+                            ? Image.file(
+                                File(selection.screenshotPath!),
+                                width: 400, // Half of original 800 as fallback
+                                fit: BoxFit.contain,
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
