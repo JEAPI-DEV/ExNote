@@ -359,10 +359,26 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
           height: cropHeight,
         );
 
+        // Add white background with padding
+        const int padding = 20;
+        final bgWidth = croppedImage.width + 2 * padding;
+        final bgHeight = croppedImage.height + 2 * padding;
+        final backgroundImage = img.Image(width: bgWidth, height: bgHeight);
+        img.fill(
+          backgroundImage,
+          color: img.ColorRgb8(255, 255, 255),
+        ); // White background
+        img.compositeImage(
+          backgroundImage,
+          croppedImage,
+          dstX: padding,
+          dstY: padding,
+        );
+
         final directory = await getApplicationDocumentsDirectory();
         final path = '${directory.path}/screenshot_$id.png';
         final file = File(path);
-        await file.writeAsBytes(img.encodePng(croppedImage));
+        await file.writeAsBytes(img.encodePng(backgroundImage));
         screenshotPath = path;
       }
 
