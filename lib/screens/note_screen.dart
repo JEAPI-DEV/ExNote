@@ -49,11 +49,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     notifier.setScaleFactor(1.0); // Initial scale factor
     loadSettings();
 
-    // Listen to notifier changes to sync strokeWidth and trigger autosave
+    // Listen to notifier changes to sync strokeWidth and trigger autosave.
+    // IMPORTANT: don't call setState here on every pointer update — that
+    // causes a rebuild for each pen move and makes drawing feel sluggish.
     notifier.addListener(() {
-      setState(() {
-        strokeWidth = notifier.value.selectedWidth;
-      });
+      // keep a local copy in case other code needs it, but do NOT call
+      // setState here. UI that needs realtime updates should use
+      // ValueListenableBuilder on the notifier instead.
+      strokeWidth = notifier.value.selectedWidth;
       _scheduleAutoSave();
     });
 
@@ -176,18 +179,20 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Stroke Width'),
-                    Slider(
-                      value: strokeWidth,
-                      min: 1.0,
-                      max: 20.0,
-                      divisions: 19,
-                      label: strokeWidth.round().toString(),
-                      onChanged: (double value) {
-                        setState(() {
-                          strokeWidth = value;
-                        });
-                        notifier.setStrokeWidth(value);
-                      },
+                    // Use ValueListenableBuilder so the slider updates from the
+                    // notifier directly without a parent setState on every
+                    // pointer move. This avoids expensive rebuilds.
+                    ValueListenableBuilder(
+                      valueListenable: notifier,
+                      builder: (context, state, _) => Slider(
+                        value: state.selectedWidth,
+                        min: 1.0,
+                        max: 20.0,
+                        divisions: 19,
+                        label: state.selectedWidth.round().toString(),
+                        onChanged: (double value) =>
+                            notifier.setStrokeWidth(value),
+                      ),
                     ),
                   ],
                 ),
