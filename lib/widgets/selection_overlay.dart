@@ -22,6 +22,8 @@ class ExerciseSelectionOverlay extends StatefulWidget {
 
 class _ExerciseSelectionOverlayState extends State<ExerciseSelectionOverlay> {
   _HandleType? _activeHandle;
+  Offset? _initialFingerGlobal;
+  Offset? _initialHandlePosition;
 
   @override
   Widget build(BuildContext context) {
@@ -141,19 +143,24 @@ class _ExerciseSelectionOverlayState extends State<ExerciseSelectionOverlay> {
         onPanStart: (details) {
           if (details.kind == PointerDeviceKind.stylus) {
             _activeHandle = type;
+            _initialFingerGlobal = details.globalPosition;
+            _initialHandlePosition = position;
           }
         },
         onPanUpdate: (details) {
           if (details.kind == PointerDeviceKind.stylus &&
-              _activeHandle == type) {
-            _updateRect(
-              details.localPosition +
-                  Offset(position.dx - 20, position.dy - 20),
-              type,
-            );
+              _activeHandle == type &&
+              _initialFingerGlobal != null &&
+              _initialHandlePosition != null) {
+            final delta = details.globalPosition - _initialFingerGlobal!;
+            _updateRect(_initialHandlePosition! + delta, type);
           }
         },
-        onPanEnd: (_) => _activeHandle = null,
+        onPanEnd: (_) {
+          _activeHandle = null;
+          _initialFingerGlobal = null;
+          _initialHandlePosition = null;
+        },
         child: Container(
           width: 40,
           height: 40,
