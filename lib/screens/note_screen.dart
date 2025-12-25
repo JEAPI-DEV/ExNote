@@ -4,7 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scribble/scribble.dart';
+import 'dart:ui' as ui;
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
 import 'package:vector_math/vector_math_64.dart' as vm;
+import 'package:flutter/rendering.dart';
+import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/folder_provider.dart';
 import '../widgets/scribble_toolbar.dart';
@@ -29,6 +35,64 @@ class NoteScreen extends ConsumerStatefulWidget {
   ConsumerState<NoteScreen> createState() => _NoteScreenState();
 }
 
+class CustomScribbleNotifier extends ScribbleNotifier {
+  /// Base distance threshold in logical pixels. This will be scaled by
+  /// 1/scaleFactor so when zoomed in (scale>1) we record more points.
+  final double baseThreshold;
+  final double samplingExponent;
+
+  // Lower baseThreshold for higher default density. Keep sketch optional.
+  CustomScribbleNotifier({
+    this.baseThreshold = 0.5,
+    this.samplingExponent = 1.5,
+    Sketch? sketch,
+  }) : super(sketch: sketch);
+
+  // Sampling scale is used only for deciding whether to insert new points
+  // into the history queue. We keep it separate from the ScribbleNotifier's
+  // internal scaleFactor so we don't affect rendering (which causes font
+  // boldness to change when scaleFactor is adjusted).
+  double _samplingScale = 1.0;
+
+  double get samplingScale => _samplingScale;
+
+  void setSamplingScale(double s) {
+    _samplingScale = s;
+  }
+
+  @override
+  bool shouldInsertValueIntoQueue(
+    ScribbleState newValue,
+    ScribbleState lastInQueue,
+  ) {
+    try {
+      final newPos = newValue.pointerPosition;
+      final lastPos = lastInQueue.pointerPosition;
+
+      // If we don't have positions, fall back to inserting to keep things
+      // consistent (e.g. pointer up/down events).
+      if (newPos == null || lastPos == null) return true;
+
+      // Use our separate sampling scale (keeps rendering unaffected).
+      final scale = (_samplingScale <= 0) ? 1.0 : _samplingScale;
+      // Use an exponent to make the threshold fall faster as zoom increases.
+      final denom = math.pow(scale, samplingExponent);
+      final threshold = (baseThreshold / (denom > 0 ? denom : 1.0)).clamp(
+        0.05,
+        20.0,
+      );
+
+      final dx = (newPos.x - lastPos.x);
+      final dy = (newPos.y - lastPos.y);
+      final dist = math.sqrt(dx * dx + dy * dy);
+      return dist >= threshold;
+    } catch (e) {
+      // If anything unexpected, default to true to avoid losing input.
+      return true;
+    }
+  }
+}
+
 class _NoteScreenState extends ConsumerState<NoteScreen> {
   late ScribbleNotifier notifier;
   final TransformationController _transformationController =
@@ -40,13 +104,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Timer? _autoSaveTimer;
   Size? _screenshotSize;
+  final GlobalKey _exportKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    notifier = ScribbleNotifier();
+    notifier = CustomScribbleNotifier();
     notifier.setAllowedPointersMode(ScribblePointerMode.penOnly);
-    notifier.setScaleFactor(1.0); // Initial scale factor
     loadSettings();
 
     // Listen to notifier changes to sync strokeWidth and trigger autosave.
@@ -58,6 +122,22 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       // ValueListenableBuilder on the notifier instead.
       strokeWidth = notifier.value.selectedWidth;
       _scheduleAutoSave();
+    });
+
+    // Keep the notifier aware of the current zoom so it can adapt the
+    // sampling threshold (see CustomScribbleNotifier). Use a small delta to
+    // avoid spamming setScaleFactor.
+    _transformationController.addListener(() {
+      final Matrix4 matrix = _transformationController.value;
+      final double scale = matrix.getMaxScaleOnAxis();
+      final double current = (notifier is CustomScribbleNotifier)
+          ? (notifier as CustomScribbleNotifier).samplingScale
+          : 1.0;
+      if ((current - scale).abs() > 0.01) {
+        if (notifier is CustomScribbleNotifier) {
+          (notifier as CustomScribbleNotifier).setSamplingScale(scale);
+        }
+      }
     });
 
     // Load existing note if it exists
@@ -133,6 +213,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         appBar: AppBar(
           title: const Text('Exercise Note'),
           actions: [
+            IconButton(
+              tooltip: 'Export PNG',
+              icon: const Icon(Icons.image),
+              onPressed: _exportPng,
+            ),
+            IconButton(
+              tooltip: 'Export PDF',
+              icon: const Icon(Icons.picture_as_pdf),
+              onPressed: _exportPdf,
+            ),
             ValueListenableBuilder(
               valueListenable: notifier,
               builder: (context, state, _) => IconButton(
@@ -242,54 +332,58 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                   // This will prevent the gesture from being recognized
                 }
               },
-              child: InteractiveViewer(
-                constrained: false,
-                transformationController: _transformationController,
-                minScale: 0.01,
-                maxScale: 4.0,
-                panEnabled: false,
-                scaleEnabled: true,
-                boundaryMargin: const EdgeInsets.all(50000.0),
-                child: SizedBox(
-                  width: 100000.0,
-                  height: 100000.0,
-                  child: Stack(
-                    children: [
-                      if (gridEnabled)
-                        Positioned.fill(
-                          child: CustomPaint(
-                            painter: GridPainter(
-                              matrix: _transformationController.value,
-                              gridType: gridType,
+              child: RepaintBoundary(
+                key: _exportKey,
+                child: InteractiveViewer(
+                  constrained: false,
+                  transformationController: _transformationController,
+                  minScale: 0.01,
+                  maxScale: 4.0,
+                  panEnabled: false,
+                  scaleEnabled: true,
+                  boundaryMargin: const EdgeInsets.all(50000.0),
+                  child: SizedBox(
+                    width: 100000.0,
+                    height: 100000.0,
+                    child: Stack(
+                      children: [
+                        if (gridEnabled)
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: GridPainter(
+                                matrix: _transformationController.value,
+                                gridType: gridType,
+                              ),
                             ),
                           ),
+                        // Scribble layer
+                        SizedBox.expand(
+                          child: Scribble(notifier: notifier, drawPen: false),
                         ),
-                      // Scribble layer
-                      SizedBox.expand(
-                        child: Scribble(notifier: notifier, drawPen: false),
-                      ),
-                      // Screenshot (relative to canvas)
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        child:
-                            selection.screenshotPath != null &&
-                                _screenshotSize != null
-                            ? Image.file(
-                                File(selection.screenshotPath!),
-                                width: _screenshotSize!.width,
-                                height: _screenshotSize!.height,
-                                fit: BoxFit.contain,
-                              )
-                            : selection.screenshotPath != null
-                            ? Image.file(
-                                File(selection.screenshotPath!),
-                                width: 400, // Half of original 800 as fallback
-                                fit: BoxFit.contain,
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
+                        // Screenshot (relative to canvas)
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          child:
+                              selection.screenshotPath != null &&
+                                  _screenshotSize != null
+                              ? Image.file(
+                                  File(selection.screenshotPath!),
+                                  width: _screenshotSize!.width,
+                                  height: _screenshotSize!.height,
+                                  fit: BoxFit.contain,
+                                )
+                              : selection.screenshotPath != null
+                              ? Image.file(
+                                  File(selection.screenshotPath!),
+                                  width:
+                                      400, // Half of original 800 as fallback
+                                  fit: BoxFit.contain,
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -345,6 +439,90 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _exportPng() async {
+    try {
+      final boundary =
+          _exportKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
+      if (boundary == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Nothing to export')));
+        return;
+      }
+
+      final dpi = MediaQuery.of(context).devicePixelRatio;
+      final ui.Image image = await boundary.toImage(pixelRatio: dpi * 2);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) throw Exception('Failed to encode image');
+      final bytes = byteData.buffer.asUint8List();
+
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File(
+        '${dir.path}/exnote_export_${DateTime.now().millisecondsSinceEpoch}.png',
+      );
+      await file.writeAsBytes(bytes);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Exported PNG to ${file.path}')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PNG export failed: $e')));
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    try {
+      final boundary =
+          _exportKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
+      if (boundary == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Nothing to export')));
+        return;
+      }
+
+      final dpi = MediaQuery.of(context).devicePixelRatio;
+      final ui.Image image = await boundary.toImage(pixelRatio: dpi * 2);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) throw Exception('Failed to encode image');
+      final bytes = byteData.buffer.asUint8List();
+
+      final doc = pw.Document();
+      final pwImage = pw.MemoryImage(bytes);
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context ctx) =>
+              pw.Center(child: pw.Image(pwImage, fit: pw.BoxFit.contain)),
+        ),
+      );
+
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File(
+        '${dir.path}/exnote_export_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+      await file.writeAsBytes(await doc.save());
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Exported PDF to ${file.path}')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PDF export failed: $e')));
     }
   }
 
