@@ -35,6 +35,27 @@ class ScribbleToolbar extends StatelessWidget {
             Container(width: 1, height: 32, color: Colors.grey.shade300),
             const SizedBox(width: 8),
 
+            // Pen tool
+            ValueListenableBuilder(
+              valueListenable: notifier,
+              builder: (context, state, _) => IconButton(
+                icon: Icon(
+                  Icons.edit,
+                  color: state.map(
+                    drawing: (_) => Colors.blue,
+                    erasing: (_) => Colors.grey.shade600,
+                  ),
+                ),
+                onPressed: () => notifier.setColor(
+                  state.map(
+                    drawing: (s) => Color(s.selectedColor),
+                    erasing: (_) => Colors.black,
+                  ),
+                ),
+                tooltip: 'Pen',
+              ),
+            ),
+
             // Eraser
             ValueListenableBuilder(
               valueListenable: notifier,
