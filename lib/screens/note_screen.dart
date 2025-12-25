@@ -57,13 +57,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       _scheduleAutoSave();
     });
 
-    // Update scale factor when zoom changes
-    _transformationController.addListener(() {
-      final Matrix4 matrix = _transformationController.value;
-      final double scale = matrix.getMaxScaleOnAxis();
-      notifier.setScaleFactor(scale);
-    });
-
     // Load existing note if it exists
     _loadNote();
   }
