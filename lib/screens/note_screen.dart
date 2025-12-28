@@ -13,7 +13,10 @@ import 'package:flutter/rendering.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/folder_provider.dart';
 import '../widgets/fast_drawing_canvas.dart';
-import '../widgets/fast_drawing_toolbar.dart';
+import '../models/drawing_tool.dart';
+import '../widgets/note_app_bar.dart';
+import '../widgets/note_toolbar.dart';
+import '../theme/app_theme.dart';
 
 enum GridType { grid, writingLines }
 
@@ -44,8 +47,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   final TransformationController _transformationController =
       TransformationController();
 
+  // GlobalKey to fix Scaffold.of context issue
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   bool gridEnabled = false;
   GridType gridType = GridType.grid;
+  ThemeMode _themeMode = ThemeMode.system;
 
   Timer? _autoSaveTimer;
   Size? _screenshotSize;
@@ -239,216 +246,245 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       (s) => s.id == widget.selectionId,
     );
 
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Exercise Note'),
-          actions: [
-            // Copy Button (only if selection exists)
-            ValueListenableBuilder<List<SketchLine>>(
-              valueListenable: selectionNotifier,
-              builder: (context, selected, _) {
-                if (selected.isEmpty) return const SizedBox.shrink();
-                return IconButton(
-                  tooltip: 'Copy',
-                  icon: const Icon(Icons.copy),
-                  onPressed: _copy,
-                );
-              },
-            ),
-            // Paste Button (always visible, disabled if clipboard empty)
-            IconButton(
-              tooltip: 'Paste',
-              icon: const Icon(Icons.paste),
-              onPressed: _clipboard.isNotEmpty ? _paste : null,
-            ),
-            // Undo/Redo in AppBar
-            IconButton(
-              tooltip: 'Undo',
-              icon: const Icon(Icons.undo),
-              onPressed: _undo,
-            ),
-            IconButton(
-              tooltip: 'Redo',
-              icon: const Icon(Icons.redo),
-              onPressed: _redo,
-            ),
-            IconButton(
-              tooltip: 'Export PNG',
-              icon: const Icon(Icons.image),
-              onPressed: _exportPng,
-            ),
-            IconButton(
-              tooltip: 'Export PDF',
-              icon: const Icon(Icons.picture_as_pdf),
-              onPressed: _exportPdf,
-            ),
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: () {
-                _autoSaveTimer?.cancel();
-                _saveNote();
-              },
-            ),
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.settings),
-                onPressed: () => Scaffold.of(context).openEndDrawer(),
-              ),
-            ),
-          ],
-        ),
-        endDrawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              const DrawerHeader(
-                decoration: BoxDecoration(color: Colors.blue),
-                child: Text(
-                  'Settings',
-                  style: TextStyle(color: Colors.white, fontSize: 24),
-                ),
-              ),
-              SwitchListTile(
-                title: const Text('Grid Enabled'),
-                value: gridEnabled,
-                onChanged: (bool value) {
-                  setState(() {
-                    gridEnabled = value;
-                  });
-                  _saveSettings();
+    return Theme(
+      data: _getThemeData(),
+      child: Builder(
+        builder: (context) {
+          return WillPopScope(
+            onWillPop: _onWillPop,
+            child: Scaffold(
+              key: _scaffoldKey, // Assign GlobalKey
+              extendBodyBehindAppBar: true,
+              appBar: NoteAppBar(
+                onUndo: _undo,
+                onRedo: _redo,
+                onCopy: _copy,
+                onPaste: _paste,
+                onExportPng: _exportPng,
+                onExportPdf: _exportPdf,
+                onSave: () {
+                  _autoSaveTimer?.cancel();
+                  _saveNote();
                 },
+                onSettings: () =>
+                    _scaffoldKey.currentState?.openEndDrawer(), // Use GlobalKey
+                canUndo: _historyIndex > 0,
+                canRedo: _historyIndex < _history.length - 1,
+                canCopy: selectionNotifier.value.isNotEmpty,
+                canPaste: _clipboard.isNotEmpty,
               ),
-              if (gridEnabled)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: DropdownButton<GridType>(
-                    value: gridType,
-                    onChanged: (GridType? newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          gridType = newValue;
-                        });
-                        _saveSettings();
-                      }
-                    },
-                    items: GridType.values.map((GridType type) {
-                      return DropdownMenuItem<GridType>(
-                        value: type,
-                        child: Text(
-                          type == GridType.grid
-                              ? 'Grid (Math)'
-                              : 'Writing Lines',
+              endDrawer: Drawer(
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    DrawerHeader(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                      ),
+                      child: Text(
+                        'Settings',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontSize: 24,
                         ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        body: Stack(
-          children: [
-            GestureDetector(
-              onScaleStart: (details) {
-                // Only allow scaling/panning if there are multiple pointers
-                if (details.pointerCount < 2) {
-                  // This will prevent the gesture from being recognized
-                }
-              },
-              child: RepaintBoundary(
-                key: _exportKey,
-                child: InteractiveViewer(
-                  constrained: false,
-                  transformationController: _transformationController,
-                  minScale: 0.01,
-                  maxScale: 4.0,
-                  panEnabled: false,
-                  scaleEnabled: true,
-                  boundaryMargin: const EdgeInsets.all(50000.0),
-                  child: SizedBox(
-                    width: 100000.0,
-                    height: 100000.0,
-                    child: Stack(
-                      children: [
-                        if (gridEnabled)
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: GridPainter(
-                                matrix: _transformationController.value,
-                                gridType: gridType,
-                              ),
-                            ),
+                      ),
+                    ),
+
+                    // Theme Selection
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Theme',
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
-                        // Screenshot (relative to canvas)
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          child:
-                              selection.screenshotPath != null &&
-                                  _screenshotSize != null
-                              ? Image.file(
-                                  File(selection.screenshotPath!),
-                                  width: _screenshotSize!.width,
-                                  height: _screenshotSize!.height,
-                                  fit: BoxFit.contain,
-                                )
-                              : selection.screenshotPath != null
-                              ? Image.file(
-                                  File(selection.screenshotPath!),
-                                  width:
-                                      400, // Half of original 800 as fallback
-                                  fit: BoxFit.contain,
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                        // Custom Fast Drawing Layer
-                        SizedBox.expand(
-                          child: ValueListenableBuilder<Color>(
-                            valueListenable: colorNotifier,
-                            builder: (context, color, _) {
-                              return ValueListenableBuilder<double>(
-                                valueListenable: widthNotifier,
-                                builder: (context, width, _) {
-                                  return ValueListenableBuilder<DrawingTool>(
-                                    valueListenable: toolNotifier,
-                                    builder: (context, tool, _) {
-                                      return FastDrawingCanvas(
-                                        sketchNotifier: sketchNotifier,
-                                        selectionNotifier: selectionNotifier,
-                                        currentColor: color,
-                                        currentWidth: width,
-                                        currentTool: tool,
-                                      );
-                                    },
-                                  );
-                                },
-                              );
+                          const SizedBox(height: 8),
+                          SegmentedButton<ThemeMode>(
+                            segments: const [
+                              ButtonSegment(
+                                value: ThemeMode.system,
+                                label: Text('System'),
+                                icon: Icon(Icons.brightness_auto),
+                              ),
+                              ButtonSegment(
+                                value: ThemeMode.light,
+                                label: Text('Light'),
+                                icon: Icon(Icons.light_mode),
+                              ),
+                              ButtonSegment(
+                                value: ThemeMode.dark,
+                                label: Text('Dark'),
+                                icon: Icon(Icons.dark_mode),
+                              ),
+                            ],
+                            selected: {_themeMode},
+                            onSelectionChanged: (Set<ThemeMode> newSelection) {
+                              setState(() {
+                                _themeMode = newSelection.first;
+                              });
+                              _saveSettings();
                             },
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
+                    const Divider(),
+
+                    SwitchListTile(
+                      title: const Text('Grid Enabled'),
+                      value: gridEnabled,
+                      onChanged: (bool value) {
+                        setState(() {
+                          gridEnabled = value;
+                        });
+                        _saveSettings();
+                      },
+                    ),
+                    if (gridEnabled)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: DropdownButton<GridType>(
+                          value: gridType,
+                          onChanged: (GridType? newValue) {
+                            if (newValue != null) {
+                              setState(() {
+                                gridType = newValue;
+                              });
+                              _saveSettings();
+                            }
+                          },
+                          items: GridType.values.map((GridType type) {
+                            return DropdownMenuItem<GridType>(
+                              value: type,
+                              child: Text(
+                                type == GridType.grid
+                                    ? 'Grid (Math)'
+                                    : 'Writing Lines',
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            ),
-            // Toolbar at bottom
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: FastDrawingToolbar(
-                colorNotifier: colorNotifier,
-                widthNotifier: widthNotifier,
-                toolNotifier: toolNotifier,
+              body: Stack(
+                children: [
+                  GestureDetector(
+                    onScaleStart: (details) {
+                      if (details.pointerCount < 2) {
+                        // Prevent single finger gesture
+                      }
+                    },
+                    child: RepaintBoundary(
+                      key: _exportKey,
+                      child: InteractiveViewer(
+                        constrained: false,
+                        transformationController: _transformationController,
+                        minScale: 0.01,
+                        maxScale: 4.0,
+                        panEnabled: false,
+                        scaleEnabled: true,
+                        boundaryMargin: const EdgeInsets.all(50000.0),
+                        child: SizedBox(
+                          width: 100000.0,
+                          height: 100000.0,
+                          child: Stack(
+                            children: [
+                              if (gridEnabled)
+                                Positioned.fill(
+                                  child: CustomPaint(
+                                    painter: GridPainter(
+                                      matrix: _transformationController.value,
+                                      gridType: gridType,
+                                    ),
+                                  ),
+                                ),
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                child:
+                                    selection.screenshotPath != null &&
+                                        _screenshotSize != null
+                                    ? Image.file(
+                                        File(selection.screenshotPath!),
+                                        width: _screenshotSize!.width,
+                                        height: _screenshotSize!.height,
+                                        fit: BoxFit.contain,
+                                      )
+                                    : selection.screenshotPath != null
+                                    ? Image.file(
+                                        File(selection.screenshotPath!),
+                                        width: 400,
+                                        fit: BoxFit.contain,
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                              SizedBox.expand(
+                                child: ValueListenableBuilder<Color>(
+                                  valueListenable: colorNotifier,
+                                  builder: (context, color, _) {
+                                    return ValueListenableBuilder<double>(
+                                      valueListenable: widthNotifier,
+                                      builder: (context, width, _) {
+                                        return ValueListenableBuilder<
+                                          DrawingTool
+                                        >(
+                                          valueListenable: toolNotifier,
+                                          builder: (context, tool, _) {
+                                            return FastDrawingCanvas(
+                                              sketchNotifier: sketchNotifier,
+                                              selectionNotifier:
+                                                  selectionNotifier,
+                                              currentColor: color,
+                                              currentWidth: width,
+                                              currentTool: tool,
+                                            );
+                                          },
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: NoteToolbar(
+                      colorNotifier: colorNotifier,
+                      widthNotifier: widthNotifier,
+                      toolNotifier: toolNotifier,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
+  }
+
+  ThemeData _getThemeData() {
+    switch (_themeMode) {
+      case ThemeMode.light:
+        return AppTheme.lightTheme;
+      case ThemeMode.dark:
+        return AppTheme.darkTheme;
+      case ThemeMode.system:
+        return MediaQuery.of(context).platformBrightness == Brightness.dark
+            ? AppTheme.darkTheme
+            : AppTheme.lightTheme;
+    }
   }
 
   Future<bool> _onWillPop() async {
@@ -583,6 +619,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         widthNotifier.value = prefs.getDouble('strokeWidth') ?? 2.0;
         gridEnabled = prefs.getBool('gridEnabled') ?? false;
         gridType = GridType.values[prefs.getInt('gridType') ?? 0];
+        _themeMode = ThemeMode.values[prefs.getInt('themeMode') ?? 0];
       });
     }
   }
@@ -592,6 +629,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     await prefs.setDouble('strokeWidth', widthNotifier.value);
     await prefs.setBool('gridEnabled', gridEnabled);
     await prefs.setInt('gridType', gridType.index);
+    await prefs.setInt('themeMode', _themeMode.index);
   }
 
   void _scheduleAutoSave() {

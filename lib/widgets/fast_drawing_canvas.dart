@@ -1,7 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
-import 'fast_drawing_toolbar.dart'; // For DrawingTool enum
+import '../models/drawing_tool.dart';
 
 /// High-performance custom drawing widget that's compatible with Scribble's
 /// Sketch format but uses raw Listener for immediate pointer event processing.
@@ -342,6 +342,8 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Listener(
       onPointerDown: _handlePointerDown,
       onPointerMove: _handlePointerMove,
@@ -364,6 +366,7 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
                   selectedLines: selectedLines,
                   lassoPoints: _lassoPoints,
                   dragOffset: _currentDragOffset,
+                  isDark: isDark, // Pass theme brightness
                 ),
                 child: Container(),
               );
@@ -384,6 +387,7 @@ class FastSketchPainter extends CustomPainter {
   final List<SketchLine> selectedLines;
   final List<Offset>? lassoPoints;
   final Offset dragOffset;
+  final bool isDark;
 
   FastSketchPainter({
     required this.sketch,
@@ -394,6 +398,7 @@ class FastSketchPainter extends CustomPainter {
     this.selectedLines = const [],
     this.lassoPoints,
     this.dragOffset = Offset.zero,
+    this.isDark = false,
   });
 
   @override
@@ -508,8 +513,18 @@ class FastSketchPainter extends CustomPainter {
 
     final isEraser = isEraserLine || color.value == 0;
 
+    // Smart Color Inversion
+    Color drawColor = color;
+    if (!isEraser) {
+      if (isDark && color.value == Colors.black.value) {
+        drawColor = Colors.white;
+      } else if (!isDark && color.value == Colors.white.value) {
+        drawColor = Colors.black;
+      }
+    }
+
     final paint = Paint()
-      ..color = isEraser ? Colors.black : color
+      ..color = isEraser ? Colors.black : drawColor
       ..strokeWidth = width
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -551,6 +566,7 @@ class FastSketchPainter extends CustomPainter {
         oldDelegate.currentTool != currentTool ||
         oldDelegate.selectedLines != selectedLines ||
         oldDelegate.lassoPoints != lassoPoints ||
-        oldDelegate.dragOffset != dragOffset;
+        oldDelegate.dragOffset != dragOffset ||
+        oldDelegate.isDark != isDark;
   }
 }
