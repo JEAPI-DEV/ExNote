@@ -78,6 +78,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     _loadNote();
 
     sketchNotifier.addListener(_onSketchChanged);
+    selectionNotifier.addListener(() {
+      if (mounted) setState(() {});
+    });
 
     // Initialize history with empty sketch
     _history = [const Sketch(lines: [])];
@@ -94,7 +97,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
     _history.add(sketchNotifier.value);
     _historyIndex = _history.length - 1;
-
+    setState(() {}); // Update UI immediately
     _scheduleAutoSave();
   }
 
@@ -104,6 +107,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       _historyIndex--;
       sketchNotifier.value = _history[_historyIndex];
       _isUndoingRedoing = false;
+      setState(() {}); // Update UI immediately
       _scheduleAutoSave();
     }
   }
@@ -114,6 +118,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       _historyIndex++;
       sketchNotifier.value = _history[_historyIndex];
       _isUndoingRedoing = false;
+      setState(() {}); // Update UI immediately
       _scheduleAutoSave();
     }
   }
