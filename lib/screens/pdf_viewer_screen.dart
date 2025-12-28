@@ -37,6 +37,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   final GlobalKey _repaintBoundaryKey = GlobalKey();
   List<double> _pageWidths = [];
   List<double> _pageHeights = [];
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -286,6 +287,29 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                   }).toList(),
                 ),
               ),
+              if (_isProcessing)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black54,
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: Colors.white),
+                          SizedBox(height: 16),
+                          Text(
+                            'Loading...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },
@@ -305,7 +329,11 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   }
 
   Future<void> _confirmSelection() async {
-    if (_selectionRect == null) return;
+    if (_selectionRect == null || _isProcessing) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
 
     final id = const Uuid().v4();
     final noteId = const Uuid().v4();
@@ -446,6 +474,12 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       await page.close();
     } catch (e) {
       debugPrint('Error capturing screenshot: $e');
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+      return;
     }
 
     // We save the coordinates in page coordinate system
@@ -563,6 +597,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     setState(() {
       _isEditingMode = false;
       _selectionRect = null;
+      _isProcessing = false;
     });
 
     Navigator.push(

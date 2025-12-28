@@ -61,6 +61,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   List<Sketch> _history = [];
   int _historyIndex = -1;
   bool _isUndoingRedoing = false;
+  bool _isLoading = true;
 
   // Clipboard
   List<SketchLine> _clipboard = [];
@@ -174,54 +175,64 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   }
 
   Future<void> _loadNote() async {
-    final folder = ref
-        .read(folderProvider)
-        .firstWhere((f) => f.id == widget.folderId);
-    final note = folder.notes[widget.noteId];
+    try {
+      final folder = ref
+          .read(folderProvider)
+          .firstWhere((f) => f.id == widget.folderId);
+      final note = folder.notes[widget.noteId];
 
-    if (note != null && note.scribbleData.isNotEmpty) {
-      try {
-        final sketchJson =
-            jsonDecode(note.scribbleData) as Map<String, dynamic>;
-        final loadedSketch = Sketch.fromJson(sketchJson);
+      if (note != null && note.scribbleData.isNotEmpty) {
+        try {
+          final sketchJson =
+              jsonDecode(note.scribbleData) as Map<String, dynamic>;
+          final loadedSketch = Sketch.fromJson(sketchJson);
 
-        _isUndoingRedoing = true; // Prevent adding to history during load
-        sketchNotifier.value = loadedSketch;
-        _isUndoingRedoing = false;
+          _isUndoingRedoing = true; // Prevent adding to history during load
+          sketchNotifier.value = loadedSketch;
+          _isUndoingRedoing = false;
 
-        // Reset history to start with this loaded sketch
-        _history = [loadedSketch];
-        _historyIndex = 0;
-      } catch (e) {
-        debugPrint('Error loading note: $e');
+          // Reset history to start with this loaded sketch
+          _history = [loadedSketch];
+          _historyIndex = 0;
+        } catch (e) {
+          debugPrint('Error loading note: $e');
+        }
       }
-    }
 
-    // Load screenshot if exists
-    final list = folder.exerciseLists.firstWhere(
-      (l) => l.id == widget.exerciseListId,
-    );
-    final selection = list.selections.firstWhere(
-      (s) => s.id == widget.selectionId,
-    );
+      // Load screenshot if exists
+      final list = folder.exerciseLists.firstWhere(
+        (l) => l.id == widget.exerciseListId,
+      );
+      final selection = list.selections.firstWhere(
+        (s) => s.id == widget.selectionId,
+      );
 
-    if (selection.screenshotPath != null) {
-      // Get image dimensions
-      final image = Image.file(File(selection.screenshotPath!));
-      image.image
-          .resolve(const ImageConfiguration())
-          .addListener(
-            ImageStreamListener((ImageInfo info, bool _) {
-              if (mounted) {
-                setState(() {
-                  _screenshotSize = Size(
-                    info.image.width.toDouble() / 2,
-                    info.image.height.toDouble() / 2,
-                  );
-                });
-              }
-            }),
-          );
+      if (selection.screenshotPath != null) {
+        // Get image dimensions
+        final image = Image.file(File(selection.screenshotPath!));
+        image.image
+            .resolve(const ImageConfiguration())
+            .addListener(
+              ImageStreamListener((ImageInfo info, bool _) {
+                if (mounted) {
+                  setState(() {
+                    _screenshotSize = Size(
+                      info.image.width.toDouble() / 2,
+                      info.image.height.toDouble() / 2,
+                    );
+                  });
+                }
+              }),
+            );
+      }
+    } catch (e) {
+      debugPrint('Error loading note: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -375,89 +386,92 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             ),
             body: Stack(
               children: [
-                GestureDetector(
-                  onScaleStart: (details) {
-                    if (details.pointerCount < 2) {
-                      // Prevent single finger gesture
-                    }
-                  },
-                  child: RepaintBoundary(
-                    key: _exportKey,
-                    child: InteractiveViewer(
-                      constrained: false,
-                      transformationController: _transformationController,
-                      minScale: 0.01,
-                      maxScale: 4.0,
-                      panEnabled: false,
-                      scaleEnabled: true,
-                      boundaryMargin: const EdgeInsets.all(50000.0),
-                      child: SizedBox(
-                        width: 100000.0,
-                        height: 100000.0,
-                        child: Stack(
-                          children: [
-                            if (gridEnabled)
-                              Positioned.fill(
-                                child: CustomPaint(
-                                  painter: GridPainter(
-                                    matrix: _transformationController.value,
-                                    gridType: gridType,
+                if (_isLoading)
+                  const Center(child: CircularProgressIndicator())
+                else
+                  GestureDetector(
+                    onScaleStart: (details) {
+                      if (details.pointerCount < 2) {
+                        // Prevent single finger gesture
+                      }
+                    },
+                    child: RepaintBoundary(
+                      key: _exportKey,
+                      child: InteractiveViewer(
+                        constrained: false,
+                        transformationController: _transformationController,
+                        minScale: 0.01,
+                        maxScale: 4.0,
+                        panEnabled: false,
+                        scaleEnabled: true,
+                        boundaryMargin: const EdgeInsets.all(50000.0),
+                        child: SizedBox(
+                          width: 100000.0,
+                          height: 100000.0,
+                          child: Stack(
+                            children: [
+                              if (gridEnabled)
+                                Positioned.fill(
+                                  child: CustomPaint(
+                                    painter: GridPainter(
+                                      matrix: _transformationController.value,
+                                      gridType: gridType,
+                                    ),
                                   ),
                                 ),
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                child:
+                                    selection.screenshotPath != null &&
+                                        _screenshotSize != null
+                                    ? Image.file(
+                                        File(selection.screenshotPath!),
+                                        width: _screenshotSize!.width,
+                                        height: _screenshotSize!.height,
+                                        fit: BoxFit.contain,
+                                      )
+                                    : selection.screenshotPath != null
+                                    ? Image.file(
+                                        File(selection.screenshotPath!),
+                                        width: 400,
+                                        fit: BoxFit.contain,
+                                      )
+                                    : const SizedBox.shrink(),
                               ),
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              child:
-                                  selection.screenshotPath != null &&
-                                      _screenshotSize != null
-                                  ? Image.file(
-                                      File(selection.screenshotPath!),
-                                      width: _screenshotSize!.width,
-                                      height: _screenshotSize!.height,
-                                      fit: BoxFit.contain,
-                                    )
-                                  : selection.screenshotPath != null
-                                  ? Image.file(
-                                      File(selection.screenshotPath!),
-                                      width: 400,
-                                      fit: BoxFit.contain,
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
-                            SizedBox.expand(
-                              child: ValueListenableBuilder<Color>(
-                                valueListenable: colorNotifier,
-                                builder: (context, color, _) {
-                                  return ValueListenableBuilder<double>(
-                                    valueListenable: widthNotifier,
-                                    builder: (context, width, _) {
-                                      return ValueListenableBuilder<
-                                        DrawingTool
-                                      >(
-                                        valueListenable: toolNotifier,
-                                        builder: (context, tool, _) {
-                                          return FastDrawingCanvas(
-                                            sketchNotifier: sketchNotifier,
-                                            selectionNotifier:
-                                                selectionNotifier,
-                                            currentColor: color,
-                                            currentWidth: width,
-                                            currentTool: tool,
-                                          );
-                                        },
-                                      );
-                                    },
-                                  );
-                                },
+                              SizedBox.expand(
+                                child: ValueListenableBuilder<Color>(
+                                  valueListenable: colorNotifier,
+                                  builder: (context, color, _) {
+                                    return ValueListenableBuilder<double>(
+                                      valueListenable: widthNotifier,
+                                      builder: (context, width, _) {
+                                        return ValueListenableBuilder<
+                                          DrawingTool
+                                        >(
+                                          valueListenable: toolNotifier,
+                                          builder: (context, tool, _) {
+                                            return FastDrawingCanvas(
+                                              sketchNotifier: sketchNotifier,
+                                              selectionNotifier:
+                                                  selectionNotifier,
+                                              currentColor: color,
+                                              currentWidth: width,
+                                              currentTool: tool,
+                                            );
+                                          },
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
                 Positioned(
                   bottom: 0,
                   left: 0,

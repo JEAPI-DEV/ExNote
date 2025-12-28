@@ -11,6 +11,7 @@ class AppTheme {
       elevation: 0,
       iconTheme: IconThemeData(color: Colors.black87),
     ),
+    cardTheme: const CardThemeData(color: Colors.white, elevation: 2),
     iconTheme: const IconThemeData(color: Colors.black87),
     sliderTheme: SliderThemeData(
       activeTrackColor: Colors.black,
@@ -36,6 +37,7 @@ class AppTheme {
       elevation: 0,
       iconTheme: IconThemeData(color: Colors.white70),
     ),
+    cardTheme: const CardThemeData(color: Color(0xFF2D2D2D), elevation: 2),
     iconTheme: const IconThemeData(color: Colors.white70),
     sliderTheme: SliderThemeData(
       activeTrackColor: Colors.white,
