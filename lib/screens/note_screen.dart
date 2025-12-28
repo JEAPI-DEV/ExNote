@@ -461,7 +461,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 Positioned(
                   bottom: 0,
                   left: 0,
-                  right: 0,
                   child: NoteToolbar(
                     colorNotifier: colorNotifier,
                     widthNotifier: widthNotifier,

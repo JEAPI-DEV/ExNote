@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../models/drawing_tool.dart';
 
 class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onUndo;
