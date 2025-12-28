@@ -193,6 +193,17 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         appBar: AppBar(
           title: const Text('Exercise Note'),
           actions: [
+            // Undo/Redo in AppBar
+            IconButton(
+              tooltip: 'Undo',
+              icon: const Icon(Icons.undo),
+              onPressed: _undo,
+            ),
+            IconButton(
+              tooltip: 'Redo',
+              icon: const Icon(Icons.redo),
+              onPressed: _redo,
+            ),
             IconButton(
               tooltip: 'Export PNG',
               icon: const Icon(Icons.image),
@@ -361,9 +372,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 colorNotifier: colorNotifier,
                 widthNotifier: widthNotifier,
                 toolNotifier: toolNotifier,
-                onUndo: _undo,
-                onRedo: _redo,
-                onClear: _clear,
+                // onUndo/onRedo/onClear removed from toolbar as they are now in AppBar or handled differently
               ),
             ),
           ],
