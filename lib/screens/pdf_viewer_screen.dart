@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
+import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image/image.dart' as img;
@@ -151,6 +153,33 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                       physics: _isEditingMode
                           ? const NeverScrollableScrollPhysics()
                           : const BouncingScrollPhysics(),
+                      builders: PdfViewBuilders<DefaultBuilderOptions>(
+                        options: const DefaultBuilderOptions(),
+                        pageBuilder:
+                            (
+                              BuildContext context,
+                              Future<PdfPageImage> pageImage,
+                              int index,
+                              PdfDocument document,
+                            ) {
+                              return PhotoViewGalleryPageOptions(
+                                imageProvider: PdfPageImageProvider(
+                                  pageImage,
+                                  index,
+                                  document.id,
+                                ),
+                                minScale:
+                                    PhotoViewComputedScale.contained * 1.0,
+                                maxScale:
+                                    PhotoViewComputedScale.contained * 1.0,
+                                initialScale:
+                                    PhotoViewComputedScale.contained * 1.0,
+                                heroAttributes: PhotoViewHeroAttributes(
+                                  tag: '${document.id}-$index',
+                                ),
+                              );
+                            },
+                      ),
                     ),
                   ),
                 ),
