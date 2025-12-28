@@ -37,6 +37,7 @@ class NoteScreen extends ConsumerStatefulWidget {
 
 class _NoteScreenState extends ConsumerState<NoteScreen> {
   late ValueNotifier<Sketch> sketchNotifier;
+  late ValueNotifier<List<SketchLine>> selectionNotifier;
   late ValueNotifier<Color> colorNotifier;
   late ValueNotifier<double> widthNotifier;
   late ValueNotifier<DrawingTool> toolNotifier;
@@ -55,10 +56,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   int _historyIndex = -1;
   bool _isUndoingRedoing = false;
 
+  // Clipboard
+  List<SketchLine> _clipboard = [];
+
   @override
   void initState() {
     super.initState();
     sketchNotifier = ValueNotifier(const Sketch(lines: []));
+    selectionNotifier = ValueNotifier([]);
     colorNotifier = ValueNotifier(Colors.black);
     widthNotifier = ValueNotifier(2.0);
     toolNotifier = ValueNotifier(DrawingTool.pen);
@@ -107,8 +112,54 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
-  void _clear() {
-    sketchNotifier.value = const Sketch(lines: []);
+  void _copy() {
+    final selected = selectionNotifier.value;
+    if (selected.isEmpty) return;
+
+    // Deep copy
+    _clipboard = selected
+        .map(
+          (line) => line.copyWith(
+            points: line.points
+                .map((p) => Point(p.x, p.y, pressure: p.pressure))
+                .toList(),
+          ),
+        )
+        .toList();
+
+    setState(() {}); // Update UI to enable Paste button
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Copied to clipboard'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  void _paste() {
+    if (_clipboard.isEmpty) return;
+
+    final currentSketch = sketchNotifier.value;
+
+    // Paste with offset
+    final offset = 20.0;
+    final pastedLines = _clipboard.map((line) {
+      final newPoints = line.points
+          .map((p) => Point(p.x + offset, p.y + offset, pressure: p.pressure))
+          .toList();
+      return line.copyWith(points: newPoints);
+    }).toList();
+
+    // Update clipboard to have the offset for next paste
+    _clipboard = pastedLines;
+
+    sketchNotifier.value = Sketch(
+      lines: [...currentSketch.lines, ...pastedLines],
+    );
+
+    // Select pasted lines
+    selectionNotifier.value = pastedLines;
+    toolNotifier.value = DrawingTool.selection;
   }
 
   Future<void> _loadNote() async {
@@ -168,6 +219,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     _autoSaveTimer?.cancel();
     _saveSettings();
     sketchNotifier.dispose();
+    selectionNotifier.dispose();
     colorNotifier.dispose();
     widthNotifier.dispose();
     toolNotifier.dispose();
@@ -193,6 +245,24 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         appBar: AppBar(
           title: const Text('Exercise Note'),
           actions: [
+            // Copy Button (only if selection exists)
+            ValueListenableBuilder<List<SketchLine>>(
+              valueListenable: selectionNotifier,
+              builder: (context, selected, _) {
+                if (selected.isEmpty) return const SizedBox.shrink();
+                return IconButton(
+                  tooltip: 'Copy',
+                  icon: const Icon(Icons.copy),
+                  onPressed: _copy,
+                );
+              },
+            ),
+            // Paste Button (always visible, disabled if clipboard empty)
+            IconButton(
+              tooltip: 'Paste',
+              icon: const Icon(Icons.paste),
+              onPressed: _clipboard.isNotEmpty ? _paste : null,
+            ),
             // Undo/Redo in AppBar
             IconButton(
               tooltip: 'Undo',
@@ -346,6 +416,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                                     builder: (context, tool, _) {
                                       return FastDrawingCanvas(
                                         sketchNotifier: sketchNotifier,
+                                        selectionNotifier: selectionNotifier,
                                         currentColor: color,
                                         currentWidth: width,
                                         currentTool: tool,
@@ -372,7 +443,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 colorNotifier: colorNotifier,
                 widthNotifier: widthNotifier,
                 toolNotifier: toolNotifier,
-                // onUndo/onRedo/onClear removed from toolbar as they are now in AppBar or handled differently
               ),
             ),
           ],

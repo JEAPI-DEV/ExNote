@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum DrawingTool { pen, pixelEraser, strokeEraser }
+enum DrawingTool { pen, pixelEraser, strokeEraser, selection }
 
 class FastDrawingToolbar extends StatelessWidget {
   final ValueNotifier<Color> colorNotifier;
@@ -81,6 +81,21 @@ class FastDrawingToolbar extends StatelessWidget {
                 ),
                 onPressed: () => toolNotifier.value = DrawingTool.strokeEraser,
                 tooltip: 'Stroke Eraser (Delete Whole)',
+              ),
+            ),
+
+            // Selection Tool
+            ValueListenableBuilder<DrawingTool>(
+              valueListenable: toolNotifier,
+              builder: (context, currentTool, _) => IconButton(
+                icon: Icon(
+                  Icons.select_all,
+                  color: currentTool == DrawingTool.selection
+                      ? Colors.blue
+                      : Colors.grey.shade600,
+                ),
+                onPressed: () => toolNotifier.value = DrawingTool.selection,
+                tooltip: 'Selection Tool',
               ),
             ),
 
