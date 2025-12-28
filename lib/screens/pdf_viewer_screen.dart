@@ -10,6 +10,7 @@ import '../providers/folder_provider.dart';
 import '../models/selection.dart';
 import '../widgets/selection_overlay.dart';
 import 'note_screen.dart';
+import '../theme/app_theme.dart';
 
 class PDFViewerScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -84,7 +85,10 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       (l) => l.id == widget.exerciseListId,
     );
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(list.name),
         backgroundColor: _isEditingMode ? Colors.red.withOpacity(0.1) : null,
@@ -106,19 +110,48 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                 },
                 child: RepaintBoundary(
                   key: _repaintBoundaryKey,
-                  child: PdfView(
-                    key: _pdfViewKey,
-                    controller: _pdfController,
-                    scrollDirection: Axis.vertical,
-                    pageSnapping: false,
-                    onPageChanged: (page) {
-                      setState(() {
-                        _currentPageIndex = page - 1;
-                      });
-                    },
-                    physics: _isEditingMode
-                        ? const NeverScrollableScrollPhysics()
-                        : const BouncingScrollPhysics(),
+                  child: ColorFiltered(
+                    colorFilter: isDark
+                        ? const ColorFilter.matrix([
+                            -1,
+                            0,
+                            0,
+                            0,
+                            255,
+                            0,
+                            -1,
+                            0,
+                            0,
+                            255,
+                            0,
+                            0,
+                            -1,
+                            0,
+                            255,
+                            0,
+                            0,
+                            0,
+                            1,
+                            0,
+                          ])
+                        : const ColorFilter.mode(
+                            Colors.transparent,
+                            BlendMode.dst,
+                          ),
+                    child: PdfView(
+                      key: _pdfViewKey,
+                      controller: _pdfController,
+                      scrollDirection: Axis.vertical,
+                      pageSnapping: false,
+                      onPageChanged: (page) {
+                        setState(() {
+                          _currentPageIndex = page - 1;
+                        });
+                      },
+                      physics: _isEditingMode
+                          ? const NeverScrollableScrollPhysics()
+                          : const BouncingScrollPhysics(),
+                    ),
                   ),
                 ),
               ),

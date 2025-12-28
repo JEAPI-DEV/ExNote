@@ -12,7 +12,10 @@ class FolderScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Subjects', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Subjects',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
       ),
       body: folders.isEmpty
@@ -29,11 +32,13 @@ class FolderScreen extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final folder = folders[index];
                 return Card(
+                  color: Theme.of(context).cardColor,
                   child: InkWell(
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => SubjectScreen(folderId: folder.id),
+                        builder: (context) =>
+                            SubjectScreen(folderId: folder.id),
                       ),
                     ),
                     onLongPress: () => _showDeleteDialog(context, ref, folder),
@@ -41,7 +46,13 @@ class FolderScreen extends ConsumerWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.folder, size: 48, color: Colors.blueGrey),
+                        Icon(
+                          Icons.folder,
+                          size: 48,
+                          color:
+                              Theme.of(context).iconTheme.color ??
+                              Colors.blueGrey,
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           folder.name,
