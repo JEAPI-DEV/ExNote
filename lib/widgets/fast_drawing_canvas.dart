@@ -11,6 +11,7 @@ class FastDrawingCanvas extends StatefulWidget {
   final Color currentColor;
   final double currentWidth;
   final DrawingTool currentTool;
+  final double scale;
 
   const FastDrawingCanvas({
     super.key,
@@ -19,6 +20,7 @@ class FastDrawingCanvas extends StatefulWidget {
     this.currentColor = Colors.black,
     this.currentWidth = 2.0,
     this.currentTool = DrawingTool.pen,
+    this.scale = 1.0,
   });
 
   @override
@@ -385,6 +387,7 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
                       lassoPoints: _lassoPoints,
                       dragOffset: _currentDragOffset,
                       isDark: isDark,
+                      scale: widget.scale,
                       cachedPicture: _cachedSketchPicture,
                       onCacheUpdate: (picture) {
                         _cachedSketchPicture = picture;
@@ -412,6 +415,7 @@ class FastSketchPainter extends CustomPainter {
   final List<Offset>? lassoPoints;
   final Offset dragOffset;
   final bool isDark;
+  final double scale;
 
   // Caching
   final ui.Picture? cachedPicture;
@@ -427,6 +431,7 @@ class FastSketchPainter extends CustomPainter {
     this.lassoPoints,
     this.dragOffset = Offset.zero,
     this.isDark = false,
+    this.scale = 1.0,
     this.cachedPicture,
     required this.onCacheUpdate,
   });
@@ -603,16 +608,28 @@ class FastSketchPainter extends CustomPainter {
         paint..style = PaintingStyle.fill,
       );
     } else {
-      for (int i = 0; i < points.length - 1; i++) {
-        final p1 = points[i];
-        final p2 = points[i + 1];
+      // Optimization: At low zoom levels, pressure variations are not visible.
+      // Using drawPath is significantly faster than segment-by-segment drawing.
+      if (scale < 0.5) {
+        paint.strokeWidth = width * 0.7; // Use a fixed average width
+        final path = Path();
+        path.moveTo(points[0].x, points[0].y);
+        for (int i = 1; i < points.length; i++) {
+          path.lineTo(points[i].x, points[i].y);
+        }
+        canvas.drawPath(path, paint);
+      } else {
+        for (int i = 0; i < points.length - 1; i++) {
+          final p1 = points[i];
+          final p2 = points[i + 1];
 
-        // Average pressure for the segment
-        final pressure = (p1.pressure + p2.pressure) / 2;
-        final currentWidth = width * (0.2 + pressure * 0.6);
+          // Average pressure for the segment
+          final pressure = (p1.pressure + p2.pressure) / 2;
+          final currentWidth = width * (0.2 + pressure * 0.6);
 
-        paint.strokeWidth = currentWidth;
-        canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), paint);
+          paint.strokeWidth = currentWidth;
+          canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), paint);
+        }
       }
     }
   }

@@ -125,6 +125,19 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
+  void _deleteSelection() {
+    final selectedLines = selectionNotifier.value;
+    if (selectedLines.isEmpty) return;
+
+    final currentSketch = sketchNotifier.value;
+    final remainingLines = currentSketch.lines
+        .where((line) => !selectedLines.contains(line))
+        .toList();
+
+    sketchNotifier.value = Sketch(lines: remainingLines);
+    selectionNotifier.value = [];
+  }
+
   void _copy() {
     final selected = selectionNotifier.value;
     if (selected.isEmpty) return;
@@ -295,6 +308,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                   Navigator.of(context).pop();
                 }
               },
+              onDelete: selectionNotifier.value.isNotEmpty
+                  ? _deleteSelection
+                  : null,
               canUndo: _historyIndex > 0,
               canRedo: _historyIndex < _history.length - 1,
               canCopy: selectionNotifier.value.isNotEmpty,
@@ -470,6 +486,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                                               currentColor: color,
                                               currentWidth: width,
                                               currentTool: tool,
+                                              scale: _transformationController
+                                                  .value
+                                                  .getMaxScaleOnAxis(),
                                             );
                                           },
                                         );
@@ -695,15 +714,31 @@ class GridPainter extends CustomPainter {
     final minY = topLeft.y - 1000;
     final maxY = bottomRight.y + 1000;
 
+    // Calculate current scale from matrix
+    final double scale = matrix.getMaxScaleOnAxis();
+
+    // Level of Detail (LOD) for grid
+    // Base spacing is 20.0. We want to keep the visual spacing roughly constant.
+    // If scale is 0.5, we want spacing to be 40.0.
+    // If scale is 0.25, we want spacing to be 80.0.
+    double spacing = 20.0;
+    if (scale < 0.8) {
+      // Find the power of 2 that brings the spacing back to a readable range
+      double factor = 1.0 / scale;
+      // Round to nearest power of 2 for clean grid jumps (2, 4, 8, 16...)
+      double powerOfTwo = 1.0;
+      while (powerOfTwo < factor * 0.5) {
+        powerOfTwo *= 2;
+      }
+      spacing *= powerOfTwo;
+    }
+
     final paint = Paint()
       ..color = Colors.grey.withOpacity(0.3)
-      ..strokeWidth = 1.0;
-
-    const double spacing = 20.0;
+      ..strokeWidth = 1.0 / scale; // Keep line width constant on screen
 
     if (gridType == GridType.grid) {
       // Draw grid (vertical and horizontal lines for math)
-      // Draw vertical lines
       for (
         double x = (minX / spacing).floor() * spacing;
         x <= maxX;
@@ -712,7 +747,6 @@ class GridPainter extends CustomPainter {
         canvas.drawLine(Offset(x, minY), Offset(x, maxY), paint);
       }
 
-      // Draw horizontal lines
       for (
         double y = (minY / spacing).floor() * spacing;
         y <= maxY;

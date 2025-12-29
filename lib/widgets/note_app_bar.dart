@@ -10,6 +10,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onSave;
   final VoidCallback onSettings;
   final VoidCallback onBack;
+  final VoidCallback? onDelete;
   final bool canUndo;
   final bool canRedo;
   final bool canCopy;
@@ -26,6 +27,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onSave,
     required this.onSettings,
     required this.onBack,
+    this.onDelete,
     this.canUndo = true,
     this.canRedo = true,
     this.canCopy = false,
@@ -57,6 +59,13 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       centerTitle: true,
       actions: [
+        if (onDelete != null)
+          _buildIconButton(
+            Icons.delete_outline,
+            onDelete!,
+            'Delete',
+            Colors.red,
+          ),
         if (canCopy) _buildIconButton(Icons.copy, onCopy, 'Copy', iconColor),
         _buildIconButton(
           Icons.paste,
