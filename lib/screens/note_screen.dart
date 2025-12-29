@@ -555,7 +555,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       if (byteData == null) throw Exception('Failed to encode image');
       final bytes = byteData.buffer.asUint8List();
 
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await _getExportDirectory();
       final file = File(
         '${dir.path}/exnote_export_${DateTime.now().millisecondsSinceEpoch}.png',
       );
@@ -602,7 +602,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         ),
       );
 
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await _getExportDirectory();
       final file = File(
         '${dir.path}/exnote_export_${DateTime.now().millisecondsSinceEpoch}.pdf',
       );
@@ -618,6 +618,30 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('PDF export failed: $e')));
     }
+  }
+
+  Future<Directory> _getExportDirectory() async {
+    if (Platform.isAndroid) {
+      // Standard public Download folder
+      final downloadDir = Directory('/storage/emulated/0/Download');
+      if (await downloadDir.exists()) {
+        return downloadDir;
+      }
+
+      // Fallback to Documents if Download doesn't exist
+      final documentsDir = Directory('/storage/emulated/0/Documents');
+      if (await documentsDir.exists()) {
+        return documentsDir;
+      }
+
+      // Fallback to app-specific external storage
+      final externalDir = await getExternalStorageDirectory();
+      if (externalDir != null) return externalDir;
+    }
+
+    // On iOS or as final fallback, use application documents directory
+    // (Visible in Files app due to Info.plist changes)
+    return await getApplicationDocumentsDirectory();
   }
 
   Future<void> _loadSettings() async {
