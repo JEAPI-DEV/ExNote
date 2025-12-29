@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:path_provider/path_provider.dart';
 import '../models/folder.dart';
 
@@ -32,7 +33,16 @@ class StorageService {
 
   Future<void> saveFolders(List<Folder> folders) async {
     final file = await _localFile;
-    final jsonList = folders.map((f) => f.toJson()).toList();
-    await file.writeAsString(jsonEncode(jsonList));
+    final jsonString = await _runSerialization(folders);
+    await file.writeAsString(jsonString);
   }
+}
+
+String _serializeFolders(List<Folder> folders) {
+  final jsonList = folders.map((f) => f.toJson()).toList();
+  return jsonEncode(jsonList);
+}
+
+Future<String> _runSerialization(List<Folder> folders) {
+  return Isolate.run(() => _serializeFolders(folders));
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
@@ -503,7 +504,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Future<void> _saveNote() async {
     try {
       final sketch = sketchNotifier.value;
-      final jsonSketch = jsonEncode(sketch.toJson());
+      final jsonSketch = await _runSerialization(sketch);
 
       final folder = ref
           .read(folderProvider)
@@ -734,4 +735,12 @@ class GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant GridPainter oldDelegate) =>
       matrix != oldDelegate.matrix || gridType != oldDelegate.gridType;
+}
+
+String _serializeSketch(Sketch sketch) {
+  return jsonEncode(sketch.toJson());
+}
+
+Future<String> _runSerialization(Sketch sketch) {
+  return Isolate.run(() => _serializeSketch(sketch));
 }

@@ -588,7 +588,6 @@ class FastSketchPainter extends CustomPainter {
 
     final paint = Paint()
       ..color = isEraser ? Colors.black : drawColor
-      ..strokeWidth = width
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke
@@ -596,22 +595,25 @@ class FastSketchPainter extends CustomPainter {
 
     if (points.length == 1) {
       final point = points[0];
+      final pressure = point.pressure;
+      final currentWidth = width * (0.4 + pressure * 0.6);
       canvas.drawCircle(
         Offset(point.x, point.y),
-        width / 2,
+        currentWidth / 2,
         paint..style = PaintingStyle.fill,
       );
     } else {
-      final path = Path();
-      final firstPoint = points[0];
-      path.moveTo(firstPoint.x, firstPoint.y);
+      for (int i = 0; i < points.length - 1; i++) {
+        final p1 = points[i];
+        final p2 = points[i + 1];
 
-      for (int i = 1; i < points.length; i++) {
-        final point = points[i];
-        path.lineTo(point.x, point.y);
+        // Average pressure for the segment
+        final pressure = (p1.pressure + p2.pressure) / 2;
+        final currentWidth = width * (0.2 + pressure * 0.6);
+
+        paint.strokeWidth = currentWidth;
+        canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), paint);
       }
-
-      canvas.drawPath(path, paint);
     }
   }
 
