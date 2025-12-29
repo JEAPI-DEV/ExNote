@@ -44,6 +44,8 @@ dependencies:
   json_annotation: ^4.8.1
   shared_preferences: ^2.2.2
   pdf: ^3.10.1
+  openrouter_api: ^1.0.0
+  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:

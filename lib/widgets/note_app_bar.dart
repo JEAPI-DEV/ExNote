@@ -11,6 +11,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onSettings;
   final VoidCallback onBack;
   final VoidCallback? onDelete;
+  final VoidCallback onChat;
   final bool canUndo;
   final bool canRedo;
   final bool canCopy;
@@ -27,6 +28,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onSave,
     required this.onSettings,
     required this.onBack,
+    required this.onChat,
     this.onDelete,
     this.canUndo = true,
     this.canRedo = true,
@@ -59,6 +61,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       centerTitle: true,
       actions: [
+        _buildIconButton(Icons.chat_outlined, onChat, 'AI Chat', iconColor),
         if (onDelete != null)
           _buildIconButton(
             Icons.delete_outline,

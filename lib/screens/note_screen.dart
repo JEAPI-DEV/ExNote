@@ -18,8 +18,11 @@ import '../widgets/fast_drawing_canvas.dart';
 import '../models/drawing_tool.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_toolbar.dart';
+import '../widgets/ai_chat_drawer.dart';
 
 enum GridType { grid, writingLines }
+
+enum RightDrawerContent { settings, aiChat }
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -53,10 +56,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   bool gridEnabled = false;
   GridType gridType = GridType.grid;
+  RightDrawerContent _rightDrawerContent = RightDrawerContent.settings;
 
   Timer? _autoSaveTimer;
   Size? _screenshotSize;
   final GlobalKey _exportKey = GlobalKey();
+
+  // AI Settings
+  String openRouterToken = '';
+  bool tutorEnabled = false;
+  final TextEditingController _tokenController = TextEditingController();
 
   // Undo/Redo History
   List<Sketch> _history = [];
@@ -260,6 +269,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     widthNotifier.dispose();
     toolNotifier.dispose();
     _transformationController.dispose();
+    _tokenController.dispose();
     super.dispose();
   }
 
@@ -300,8 +310,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 _autoSaveTimer?.cancel();
                 _saveNote();
               },
-              onSettings: () =>
-                  _scaffoldKey.currentState?.openEndDrawer(), // Use GlobalKey
+              onSettings: () {
+                setState(
+                  () => _rightDrawerContent = RightDrawerContent.settings,
+                );
+                _scaffoldKey.currentState?.openEndDrawer();
+              },
               onBack: () async {
                 await _saveNote();
                 if (mounted) {
@@ -311,107 +325,164 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
               onDelete: selectionNotifier.value.isNotEmpty
                   ? _deleteSelection
                   : null,
+              onChat: () {
+                setState(() => _rightDrawerContent = RightDrawerContent.aiChat);
+                _scaffoldKey.currentState?.openEndDrawer();
+              },
               canUndo: _historyIndex > 0,
               canRedo: _historyIndex < _history.length - 1,
               canCopy: selectionNotifier.value.isNotEmpty,
               canPaste: _clipboard.isNotEmpty,
             ),
-            endDrawer: Drawer(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  DrawerHeader(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                    ),
-                    child: Text(
-                      'Settings',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontSize: 24,
-                      ),
-                    ),
-                  ),
-
-                  // Theme Selection
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            endDrawer: _rightDrawerContent == RightDrawerContent.aiChat
+                ? AiChatDrawer(
+                    apiKey: openRouterToken,
+                    isTutorMode: tutorEnabled,
+                    onCaptureContext: _captureCanvas,
+                  )
+                : Drawer(
+                    child: ListView(
+                      padding: EdgeInsets.zero,
                       children: [
-                        Text(
-                          'Theme',
-                          style: Theme.of(context).textTheme.titleMedium,
+                        DrawerHeader(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                          ),
+                          child: Text(
+                            'Settings',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontSize: 24,
+                            ),
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        SegmentedButton<ThemeMode>(
-                          segments: const [
-                            ButtonSegment(
-                              value: ThemeMode.system,
-                              label: Text('System'),
-                              icon: Icon(Icons.brightness_auto),
-                            ),
-                            ButtonSegment(
-                              value: ThemeMode.light,
-                              label: Text('Light'),
-                              icon: Icon(Icons.light_mode),
-                            ),
-                            ButtonSegment(
-                              value: ThemeMode.dark,
-                              label: Text('Dark'),
-                              icon: Icon(Icons.dark_mode),
-                            ),
-                          ],
-                          selected: {themeMode},
-                          onSelectionChanged: (Set<ThemeMode> newSelection) {
-                            ref
-                                .read(themeProvider.notifier)
-                                .setThemeMode(newSelection.first);
+
+                        // Theme Selection
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Theme',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              SegmentedButton<ThemeMode>(
+                                segments: const [
+                                  ButtonSegment(
+                                    value: ThemeMode.system,
+                                    label: Text('System'),
+                                    icon: Icon(Icons.brightness_auto),
+                                  ),
+                                  ButtonSegment(
+                                    value: ThemeMode.light,
+                                    label: Text('Light'),
+                                    icon: Icon(Icons.light_mode),
+                                  ),
+                                  ButtonSegment(
+                                    value: ThemeMode.dark,
+                                    label: Text('Dark'),
+                                    icon: Icon(Icons.dark_mode),
+                                  ),
+                                ],
+                                selected: {themeMode},
+                                onSelectionChanged:
+                                    (Set<ThemeMode> newSelection) {
+                                      ref
+                                          .read(themeProvider.notifier)
+                                          .setThemeMode(newSelection.first);
+                                    },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(),
+
+                        SwitchListTile(
+                          title: const Text('Grid Enabled'),
+                          value: gridEnabled,
+                          onChanged: (bool value) {
+                            setState(() {
+                              gridEnabled = value;
+                            });
+                            _saveSettings();
                           },
+                        ),
+                        if (gridEnabled)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                            ),
+                            child: DropdownButton<GridType>(
+                              value: gridType,
+                              onChanged: (GridType? newValue) {
+                                if (newValue != null) {
+                                  setState(() {
+                                    gridType = newValue;
+                                  });
+                                  _saveSettings();
+                                }
+                              },
+                              items: GridType.values.map((GridType type) {
+                                return DropdownMenuItem<GridType>(
+                                  value: type,
+                                  child: Text(
+                                    type == GridType.grid
+                                        ? 'Grid (Math)'
+                                        : 'Writing Lines',
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        const Divider(),
+
+                        // AI Settings
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'AI Settings',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _tokenController,
+                                decoration: const InputDecoration(
+                                  labelText: 'OpenRouter API Token',
+                                  border: OutlineInputBorder(),
+                                  hintText: 'sk-or-v1-...',
+                                ),
+                                obscureText: true,
+                                onChanged: (value) {
+                                  openRouterToken = value;
+                                  _saveSettings();
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Tutor Mode'),
+                                subtitle: const Text(
+                                  'AI will act as a helpful tutor',
+                                ),
+                                value: tutorEnabled,
+                                onChanged: (bool value) {
+                                  setState(() {
+                                    tutorEnabled = value;
+                                  });
+                                  _saveSettings();
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const Divider(),
-
-                  SwitchListTile(
-                    title: const Text('Grid Enabled'),
-                    value: gridEnabled,
-                    onChanged: (bool value) {
-                      setState(() {
-                        gridEnabled = value;
-                      });
-                      _saveSettings();
-                    },
-                  ),
-                  if (gridEnabled)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: DropdownButton<GridType>(
-                        value: gridType,
-                        onChanged: (GridType? newValue) {
-                          if (newValue != null) {
-                            setState(() {
-                              gridType = newValue;
-                            });
-                            _saveSettings();
-                          }
-                        },
-                        items: GridType.values.map((GridType type) {
-                          return DropdownMenuItem<GridType>(
-                            value: type,
-                            child: Text(
-                              type == GridType.grid
-                                  ? 'Grid (Math)'
-                                  : 'Writing Lines',
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                ],
-              ),
-            ),
             body: Stack(
               children: [
                 if (_isLoading)
@@ -433,71 +504,74 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         panEnabled: false,
                         scaleEnabled: true,
                         boundaryMargin: const EdgeInsets.all(50000.0),
-                        child: SizedBox(
-                          width: 100000.0,
-                          height: 100000.0,
-                          child: Stack(
-                            children: [
-                              if (gridEnabled)
-                                Positioned.fill(
-                                  child: CustomPaint(
-                                    painter: GridPainter(
-                                      matrix: _transformationController.value,
-                                      gridType: gridType,
+                        child: ColoredBox(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          child: SizedBox(
+                            width: 100000.0,
+                            height: 100000.0,
+                            child: Stack(
+                              children: [
+                                if (gridEnabled)
+                                  Positioned.fill(
+                                    child: CustomPaint(
+                                      painter: GridPainter(
+                                        matrix: _transformationController.value,
+                                        gridType: gridType,
+                                      ),
                                     ),
                                   ),
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  child:
+                                      selection.screenshotPath != null &&
+                                          _screenshotSize != null
+                                      ? Image.file(
+                                          File(selection.screenshotPath!),
+                                          width: _screenshotSize!.width,
+                                          height: _screenshotSize!.height,
+                                          fit: BoxFit.contain,
+                                        )
+                                      : selection.screenshotPath != null
+                                      ? Image.file(
+                                          File(selection.screenshotPath!),
+                                          width: 400,
+                                          fit: BoxFit.contain,
+                                        )
+                                      : const SizedBox.shrink(),
                                 ),
-                              Positioned(
-                                top: 0,
-                                left: 0,
-                                child:
-                                    selection.screenshotPath != null &&
-                                        _screenshotSize != null
-                                    ? Image.file(
-                                        File(selection.screenshotPath!),
-                                        width: _screenshotSize!.width,
-                                        height: _screenshotSize!.height,
-                                        fit: BoxFit.contain,
-                                      )
-                                    : selection.screenshotPath != null
-                                    ? Image.file(
-                                        File(selection.screenshotPath!),
-                                        width: 400,
-                                        fit: BoxFit.contain,
-                                      )
-                                    : const SizedBox.shrink(),
-                              ),
-                              SizedBox.expand(
-                                child: ValueListenableBuilder<Color>(
-                                  valueListenable: colorNotifier,
-                                  builder: (context, color, _) {
-                                    return ValueListenableBuilder<double>(
-                                      valueListenable: widthNotifier,
-                                      builder: (context, width, _) {
-                                        return ValueListenableBuilder<
-                                          DrawingTool
-                                        >(
-                                          valueListenable: toolNotifier,
-                                          builder: (context, tool, _) {
-                                            return FastDrawingCanvas(
-                                              sketchNotifier: sketchNotifier,
-                                              selectionNotifier:
-                                                  selectionNotifier,
-                                              currentColor: color,
-                                              currentWidth: width,
-                                              currentTool: tool,
-                                              scale: _transformationController
-                                                  .value
-                                                  .getMaxScaleOnAxis(),
-                                            );
-                                          },
-                                        );
-                                      },
-                                    );
-                                  },
+                                SizedBox.expand(
+                                  child: ValueListenableBuilder<Color>(
+                                    valueListenable: colorNotifier,
+                                    builder: (context, color, _) {
+                                      return ValueListenableBuilder<double>(
+                                        valueListenable: widthNotifier,
+                                        builder: (context, width, _) {
+                                          return ValueListenableBuilder<
+                                            DrawingTool
+                                          >(
+                                            valueListenable: toolNotifier,
+                                            builder: (context, tool, _) {
+                                              return FastDrawingCanvas(
+                                                sketchNotifier: sketchNotifier,
+                                                selectionNotifier:
+                                                    selectionNotifier,
+                                                currentColor: color,
+                                                currentWidth: width,
+                                                currentTool: tool,
+                                                scale: _transformationController
+                                                    .value
+                                                    .getMaxScaleOnAxis(),
+                                              );
+                                            },
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -664,6 +738,25 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     return await getApplicationDocumentsDirectory();
   }
 
+  Future<String?> _captureCanvas() async {
+    try {
+      final boundary =
+          _exportKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
+      if (boundary == null) return null;
+
+      final image = await boundary.toImage(pixelRatio: 2.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return null;
+
+      final pngBytes = byteData.buffer.asUint8List();
+      return base64Encode(pngBytes);
+    } catch (e) {
+      debugPrint('Error capturing canvas: $e');
+      return null;
+    }
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
@@ -671,6 +764,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         widthNotifier.value = prefs.getDouble('strokeWidth') ?? 2.0;
         gridEnabled = prefs.getBool('gridEnabled') ?? false;
         gridType = GridType.values[prefs.getInt('gridType') ?? 0];
+        openRouterToken = prefs.getString('openRouterToken') ?? '';
+        _tokenController.text = openRouterToken;
+        tutorEnabled = prefs.getBool('tutorEnabled') ?? false;
       });
     }
   }
@@ -680,6 +776,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     await prefs.setDouble('strokeWidth', widthNotifier.value);
     await prefs.setBool('gridEnabled', gridEnabled);
     await prefs.setInt('gridType', gridType.index);
+    await prefs.setString('openRouterToken', openRouterToken);
+    await prefs.setBool('tutorEnabled', tutorEnabled);
   }
 
   void _scheduleAutoSave() {
