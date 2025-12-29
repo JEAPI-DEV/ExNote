@@ -26,13 +26,25 @@ class FastDrawingCanvas extends StatefulWidget {
 }
 
 class FastDrawingCanvasState extends State<FastDrawingCanvas> {
-  List<Point>? _currentLinePoints;
+  final ValueNotifier<List<Point>?> _currentLineNotifier = ValueNotifier(null);
+
+  // Caching
+  ui.Picture? _cachedSketchPicture;
+  Sketch? _lastSketch;
+  bool? _lastIsDark;
 
   // Selection State
   List<Offset>? _lassoPoints;
   Offset? _dragStart;
   Offset _currentDragOffset = Offset.zero;
   bool _isDraggingSelection = false;
+
+  @override
+  void dispose() {
+    _currentLineNotifier.dispose();
+    _cachedSketchPicture?.dispose();
+    super.dispose();
+  }
 
   void _handlePointerDown(PointerDownEvent event) {
     // Only handle stylus/pen events
@@ -56,15 +68,13 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       widget.selectionNotifier.value = [];
     }
 
-    setState(() {
-      _currentLinePoints = [
-        Point(
-          event.localPosition.dx,
-          event.localPosition.dy,
-          pressure: event.pressure,
-        ),
-      ];
-    });
+    _currentLineNotifier.value = [
+      Point(
+        event.localPosition.dx,
+        event.localPosition.dy,
+        pressure: event.pressure,
+      ),
+    ];
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
@@ -84,18 +94,18 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       return;
     }
 
-    if (_currentLinePoints == null) return;
+    if (_currentLineNotifier.value == null) return;
 
-    setState(() {
-      _currentLinePoints = [
-        ..._currentLinePoints!,
-        Point(
-          event.localPosition.dx,
-          event.localPosition.dy,
-          pressure: event.pressure,
-        ),
-      ];
-    });
+    // Optimize: Add to existing list instead of creating new one every move
+    final points = _currentLineNotifier.value!;
+    points.add(
+      Point(
+        event.localPosition.dx,
+        event.localPosition.dy,
+        pressure: event.pressure,
+      ),
+    );
+    _currentLineNotifier.value = List.from(points);
   }
 
   void _handlePointerUp(PointerUpEvent event) {
@@ -108,12 +118,13 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       return;
     }
 
-    if (_currentLinePoints == null || _currentLinePoints!.isEmpty) return;
+    final currentLinePoints = _currentLineNotifier.value;
+    if (currentLinePoints == null || currentLinePoints.isEmpty) return;
 
     // Add the completed line to the sketch
     final currentSketch = widget.sketchNotifier.value;
     final newLine = SketchLine(
-      points: _currentLinePoints!,
+      points: currentLinePoints,
       color: widget.currentTool == DrawingTool.pixelEraser
           ? 0
           : widget.currentColor.value,
@@ -124,14 +135,12 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       lines: [...currentSketch.lines, newLine],
     );
 
-    setState(() {
-      _currentLinePoints = null;
-    });
+    _currentLineNotifier.value = null;
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
+    _currentLineNotifier.value = null;
     setState(() {
-      _currentLinePoints = null;
       _lassoPoints = null;
       _isDraggingSelection = false;
       _currentDragOffset = Offset.zero;
@@ -223,8 +232,6 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
 
     for (final line in currentSketch.lines) {
       // Check if any point of the line is inside the lasso polygon
-      // For better performance, we could just check bounding box or first point
-      // But checking all points ensures accuracy
       bool isSelected = false;
       for (final p in line.points) {
         if (path.contains(Offset(p.x, p.y))) {
@@ -344,6 +351,14 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Invalidate cache if sketch or theme changed
+    final sketch = widget.sketchNotifier.value;
+    if (_lastSketch != sketch || _lastIsDark != isDark) {
+      _cachedSketchPicture = null;
+      _lastSketch = sketch;
+      _lastIsDark = isDark;
+    }
+
     return Listener(
       onPointerDown: _handlePointerDown,
       onPointerMove: _handlePointerMove,
@@ -356,19 +371,28 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
           return ValueListenableBuilder<List<SketchLine>>(
             valueListenable: widget.selectionNotifier,
             builder: (context, selectedLines, _) {
-              return CustomPaint(
-                painter: FastSketchPainter(
-                  sketch: sketch,
-                  currentLinePoints: _currentLinePoints,
-                  currentColor: widget.currentColor,
-                  currentWidth: widget.currentWidth,
-                  currentTool: widget.currentTool,
-                  selectedLines: selectedLines,
-                  lassoPoints: _lassoPoints,
-                  dragOffset: _currentDragOffset,
-                  isDark: isDark, // Pass theme brightness
-                ),
-                child: Container(),
+              return ValueListenableBuilder<List<Point>?>(
+                valueListenable: _currentLineNotifier,
+                builder: (context, currentLinePoints, _) {
+                  return CustomPaint(
+                    painter: FastSketchPainter(
+                      sketch: sketch,
+                      currentLinePoints: currentLinePoints,
+                      currentColor: widget.currentColor,
+                      currentWidth: widget.currentWidth,
+                      currentTool: widget.currentTool,
+                      selectedLines: selectedLines,
+                      lassoPoints: _lassoPoints,
+                      dragOffset: _currentDragOffset,
+                      isDark: isDark,
+                      cachedPicture: _cachedSketchPicture,
+                      onCacheUpdate: (picture) {
+                        _cachedSketchPicture = picture;
+                      },
+                    ),
+                    child: Container(),
+                  );
+                },
               );
             },
           );
@@ -389,6 +413,10 @@ class FastSketchPainter extends CustomPainter {
   final Offset dragOffset;
   final bool isDark;
 
+  // Caching
+  final ui.Picture? cachedPicture;
+  final Function(ui.Picture) onCacheUpdate;
+
   FastSketchPainter({
     required this.sketch,
     this.currentLinePoints,
@@ -399,42 +427,82 @@ class FastSketchPainter extends CustomPainter {
     this.lassoPoints,
     this.dragOffset = Offset.zero,
     this.isDark = false,
+    this.cachedPicture,
+    required this.onCacheUpdate,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
+    // Draw cached sketch
+    if (cachedPicture == null) {
+      final recorder = ui.PictureRecorder();
+      final recordingCanvas = Canvas(recorder);
+      _drawSketch(recordingCanvas, size);
+      final picture = recorder.endRecording();
+      onCacheUpdate(picture);
+      canvas.drawPicture(picture);
+    } else {
+      canvas.drawPicture(cachedPicture!);
+    }
 
+    // Draw active elements (current line, lasso, selection)
+    _drawActiveElements(canvas, size);
+  }
+
+  void _drawSketch(Canvas canvas, Size size) {
     final selectedSet = selectedLines.toSet();
 
-    // Draw all completed lines
+    // We only need saveLayer if there are erasers in the sketch
+    bool hasErasers = sketch.lines.any((l) => l.color == 0);
+    if (hasErasers) {
+      canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
+    }
+
     for (final line in sketch.lines) {
-      // If line is selected and being dragged, draw it at offset position
-      if (selectedSet.contains(line)) {
-        if (dragOffset != Offset.zero) {
-          canvas.save();
-          canvas.translate(dragOffset.dx, dragOffset.dy);
-          _drawLine(canvas, line.points, Color(line.color), line.width);
-          canvas.restore();
-        } else {
-          _drawLine(canvas, line.points, Color(line.color), line.width);
-        }
-      } else {
+      // If line is selected and being dragged, don't draw it in the cache
+      if (selectedSet.contains(line) && dragOffset != Offset.zero) {
+        continue;
+      }
+      _drawLine(canvas, line.points, Color(line.color), line.width);
+    }
+
+    if (hasErasers) {
+      canvas.restore();
+    }
+  }
+
+  void _drawActiveElements(Canvas canvas, Size size) {
+    // Draw dragged lines
+    if (dragOffset != Offset.zero) {
+      for (final line in selectedLines) {
+        canvas.save();
+        canvas.translate(dragOffset.dx, dragOffset.dy);
         _drawLine(canvas, line.points, Color(line.color), line.width);
+        canvas.restore();
       }
     }
 
     // Draw current line being drawn
     if (currentLinePoints != null && currentLinePoints!.isNotEmpty) {
+      final isPixelEraser = currentTool == DrawingTool.pixelEraser;
+      if (isPixelEraser) {
+        canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
+        if (cachedPicture != null) {
+          canvas.drawPicture(cachedPicture!);
+        }
+      }
+
       _drawLine(
         canvas,
         currentLinePoints!,
-        currentTool == DrawingTool.pixelEraser
-            ? const Color(0x00000000)
-            : currentColor,
+        isPixelEraser ? const Color(0x00000000) : currentColor,
         currentWidth,
-        isEraserLine: currentTool == DrawingTool.pixelEraser,
+        isEraserLine: isPixelEraser,
       );
+
+      if (isPixelEraser) {
+        canvas.restore();
+      }
     }
 
     // Draw Lasso
@@ -445,7 +513,6 @@ class FastSketchPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
 
       final path = Path()..addPolygon(lassoPoints!, false);
-      // Draw dashed line manually or just solid for now
       canvas.drawPath(path, paint);
     }
 
@@ -453,8 +520,6 @@ class FastSketchPainter extends CustomPainter {
     if (selectedLines.isNotEmpty) {
       _drawSelectionBounds(canvas, selectedLines);
     }
-
-    canvas.restore();
   }
 
   void _drawSelectionBounds(Canvas canvas, List<SketchLine> lines) {
@@ -480,13 +545,11 @@ class FastSketchPainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
-    // Draw dashed rectangle
     _drawDashedRect(canvas, shiftedRect, paint);
   }
 
   void _drawDashedRect(Canvas canvas, Rect rect, Paint paint) {
     final path = Path()..addRect(rect);
-    // Simple dashed implementation
     const dashWidth = 5.0;
     const dashSpace = 5.0;
     double distance = 0.0;
@@ -554,11 +617,6 @@ class FastSketchPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(FastSketchPainter oldDelegate) {
-    if (currentLinePoints != null ||
-        lassoPoints != null ||
-        dragOffset != Offset.zero)
-      return true;
-
     return oldDelegate.sketch != sketch ||
         oldDelegate.currentLinePoints != currentLinePoints ||
         oldDelegate.currentColor != currentColor ||
@@ -567,6 +625,7 @@ class FastSketchPainter extends CustomPainter {
         oldDelegate.selectedLines != selectedLines ||
         oldDelegate.lassoPoints != lassoPoints ||
         oldDelegate.dragOffset != dragOffset ||
-        oldDelegate.isDark != isDark;
+        oldDelegate.isDark != isDark ||
+        oldDelegate.cachedPicture != cachedPicture;
   }
 }
