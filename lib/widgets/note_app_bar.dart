@@ -9,6 +9,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onExportPdf;
   final VoidCallback onSave;
   final VoidCallback onSettings;
+  final VoidCallback onBack;
   final bool canUndo;
   final bool canRedo;
   final bool canCopy;
@@ -24,6 +25,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onExportPdf,
     required this.onSave,
     required this.onSettings,
+    required this.onBack,
     this.canUndo = true,
     this.canRedo = true,
     this.canCopy = false,
@@ -42,7 +44,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: false,
       leading: IconButton(
         icon: Icon(Icons.arrow_back_ios_new, size: 20, color: iconColor),
-        onPressed: () => Navigator.of(context).pop(),
+        onPressed: onBack,
         tooltip: 'Back',
       ),
       title: Text(

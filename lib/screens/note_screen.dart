@@ -265,8 +265,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
     return Builder(
       builder: (context) {
-        return WillPopScope(
-          onWillPop: _onWillPop,
+        return PopScope(
+          canPop: true,
+          onPopInvoked: (didPop) async {
+            if (didPop) {
+              await _saveNote();
+            }
+          },
           child: Scaffold(
             key: _scaffoldKey, // Assign GlobalKey
             extendBodyBehindAppBar: true,
@@ -283,6 +288,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
               },
               onSettings: () =>
                   _scaffoldKey.currentState?.openEndDrawer(), // Use GlobalKey
+              onBack: () async {
+                await _saveNote();
+                if (mounted) {
+                  Navigator.of(context).pop();
+                }
+              },
               canUndo: _historyIndex > 0,
               canRedo: _historyIndex < _history.length - 1,
               canCopy: selectionNotifier.value.isNotEmpty,
@@ -487,11 +498,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         );
       },
     );
-  }
-
-  Future<bool> _onWillPop() async {
-    await _saveNote();
-    return true;
   }
 
   Future<void> _saveNote() async {
