@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
@@ -11,7 +10,6 @@ import '../providers/folder_provider.dart';
 import '../models/selection.dart';
 import '../widgets/selection_overlay.dart';
 import 'note_screen.dart';
-import '../theme/app_theme.dart';
 
 class PDFViewerScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -341,7 +339,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     // Capture screenshot
     String? screenshotPath;
     try {
-      // First, determine the page and render it at high resolution
       final document = await _pdfController.document;
       final renderBox =
           _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
@@ -349,9 +346,9 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       final viewSize = renderBox.size;
       final viewAspectRatio = viewSize.width / viewSize.height;
 
-      // Determine the actual page index based on selection position
-      int actualPageIndex = 0;
+      // Calculate screen tops for all pages to find which pages are spanned
       List<double> pageScreenTops = [];
+      List<double> pageScreenHeights = [];
       double cumTop = 0;
       for (int i = 0; i < _pageWidths.length; i++) {
         pageScreenTops.add(cumTop - _scrollOffset);
@@ -362,118 +359,137 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         } else {
           actualPageHeight = viewSize.height;
         }
+        pageScreenHeights.add(actualPageHeight);
         cumTop += actualPageHeight;
       }
 
+      // Find start and end page indices
+      int startPageIndex = -1;
+      int endPageIndex = -1;
+
       for (int i = 0; i < pageScreenTops.length; i++) {
-        final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
-        double actualPageHeight;
-        if (pageAspectRatio > viewAspectRatio) {
-          actualPageHeight = viewSize.width / pageAspectRatio;
-        } else {
-          actualPageHeight = viewSize.height;
-        }
-        final pageScreenTop = pageScreenTops[i];
-        final pageScreenBottom = pageScreenTop + actualPageHeight;
-        if (_selectionRect!.top >= pageScreenTop &&
-            _selectionRect!.top < pageScreenBottom) {
-          actualPageIndex = i;
-          break;
+        final top = pageScreenTops[i];
+        final bottom = top + pageScreenHeights[i];
+
+        // Check if selection overlaps with this page
+        if (_selectionRect!.bottom > top && _selectionRect!.top < bottom) {
+          if (startPageIndex == -1) startPageIndex = i;
+          endPageIndex = i;
         }
       }
 
-      final page = await document.getPage(actualPageIndex + 1);
-      final pageAspectRatio = page.width / page.height;
+      if (startPageIndex != -1 && endPageIndex != -1) {
+        const double scaleFactor = 4.0;
+        List<img.Image> renderedPages = [];
+        int totalWidth = 0;
+        int totalHeight = 0;
 
-      double actualPageWidth, actualPageHeight;
-      double offsetX = 0, offsetY = 0;
-
-      if (pageAspectRatio > viewAspectRatio) {
-        actualPageWidth = viewSize.width;
-        actualPageHeight = viewSize.width / pageAspectRatio;
-        offsetY = 0;
-      } else {
-        actualPageHeight = viewSize.height;
-        actualPageWidth = viewSize.height * pageAspectRatio;
-        offsetX = (viewSize.width - actualPageWidth) / 2;
-        offsetY = 0;
-      }
-
-      double cumulativeTop = 0;
-      for (int i = 0; i < actualPageIndex; i++) {
-        final prevPageAspectRatio = _pageWidths[i] / _pageHeights[i];
-        double prevActualPageHeight;
-        if (prevPageAspectRatio > viewAspectRatio) {
-          prevActualPageHeight = viewSize.width / prevPageAspectRatio;
-        } else {
-          prevActualPageHeight = viewSize.height;
+        // Render all spanned pages
+        for (int i = startPageIndex; i <= endPageIndex; i++) {
+          final page = await document.getPage(i + 1);
+          final pageImage = await page.render(
+            width: page.width * scaleFactor,
+            height: page.height * scaleFactor,
+            format: PdfPageImageFormat.png,
+          );
+          final decoded = img.decodeImage(pageImage!.bytes);
+          if (decoded != null) {
+            renderedPages.add(decoded);
+            totalWidth = totalWidth > decoded.width
+                ? totalWidth
+                : decoded.width;
+            totalHeight += decoded.height;
+          }
+          await page.close();
         }
-        cumulativeTop += prevActualPageHeight;
+
+        if (renderedPages.isNotEmpty) {
+          // Stitch pages together
+          final stitchedImage = img.Image(
+            width: totalWidth,
+            height: totalHeight,
+          );
+          // Fill with white in case pages have different widths
+          img.fill(stitchedImage, color: img.ColorRgb8(255, 255, 255));
+
+          int currentY = 0;
+          for (var pageImg in renderedPages) {
+            img.compositeImage(stitchedImage, pageImg, dstY: currentY);
+            currentY += pageImg.height;
+          }
+
+          // Calculate selection relative to the start page's top
+          final firstPage = await document.getPage(startPageIndex + 1);
+          final firstPageAspectRatio = firstPage.width / firstPage.height;
+
+          double actualFirstPageWidth;
+          double offsetX = 0;
+
+          if (firstPageAspectRatio > viewAspectRatio) {
+            actualFirstPageWidth = viewSize.width;
+          } else {
+            actualFirstPageWidth = viewSize.height * firstPageAspectRatio;
+            offsetX = (viewSize.width - actualFirstPageWidth) / 2;
+          }
+
+          // Selection relative to the top of the first spanned page
+          final relativeLeft =
+              (_selectionRect!.left - offsetX) / actualFirstPageWidth;
+          final relativeTop =
+              (_selectionRect!.top - pageScreenTops[startPageIndex]) /
+              pageScreenHeights[startPageIndex];
+          final relativeWidth = _selectionRect!.width / actualFirstPageWidth;
+
+          // Crop coordinates on the stitched image
+          int cropX = (relativeLeft * firstPage.width * scaleFactor).toInt();
+          int cropY = (relativeTop * firstPage.height * scaleFactor).toInt();
+          int cropWidth = (relativeWidth * firstPage.width * scaleFactor)
+              .toInt();
+          // For height, we need to be careful. Selection height in pixels on stitched image:
+          // (Selection Height / Screen Height of Page) * PDF Height of Page * Scale
+          int cropHeight =
+              ((_selectionRect!.height / pageScreenHeights[startPageIndex]) *
+                      firstPage.height *
+                      scaleFactor)
+                  .toInt();
+
+          cropX = cropX.clamp(0, stitchedImage.width - 1);
+          cropY = cropY.clamp(0, stitchedImage.height - 1);
+          cropWidth = cropWidth.clamp(1, stitchedImage.width - cropX);
+          cropHeight = cropHeight.clamp(1, stitchedImage.height - cropY);
+
+          final croppedImage = img.copyCrop(
+            stitchedImage,
+            x: cropX,
+            y: cropY,
+            width: cropWidth,
+            height: cropHeight,
+          );
+
+          // Add white background with padding
+          const int padding = 20;
+          final bgWidth = croppedImage.width + 2 * padding;
+          final bgHeight = croppedImage.height + 2 * padding;
+          final backgroundImage = img.Image(width: bgWidth, height: bgHeight);
+          img.fill(backgroundImage, color: img.ColorRgb8(255, 255, 255));
+          img.compositeImage(
+            backgroundImage,
+            croppedImage,
+            dstX: padding,
+            dstY: padding,
+          );
+
+          final directory = await getApplicationDocumentsDirectory();
+          final path = '${directory.path}/screenshot_$id.png';
+          final file = File(path);
+          await file.writeAsBytes(img.encodePng(backgroundImage));
+          screenshotPath = path;
+
+          await firstPage.close();
+        }
       }
-
-      final relativeLeft = (_selectionRect!.left - offsetX) / actualPageWidth;
-      final relativeTop =
-          (_selectionRect!.top - cumulativeTop + _scrollOffset - offsetY) /
-          actualPageHeight;
-      final relativeWidth = _selectionRect!.width / actualPageWidth;
-      final relativeHeight = _selectionRect!.height / actualPageHeight;
-
-      // Render the page at high resolution (4x)
-      const double scaleFactor = 4.0;
-      final pageImage = await page.render(
-        width: page.width * scaleFactor,
-        height: page.height * scaleFactor,
-        format: PdfPageImageFormat.png,
-      );
-
-      final decodedImage = img.decodeImage(pageImage!.bytes);
-
-      if (decodedImage != null) {
-        // Crop the selected area
-        int cropX = (relativeLeft * page.width * scaleFactor).toInt();
-        int cropY = (relativeTop * page.height * scaleFactor).toInt();
-        int cropWidth = (relativeWidth * page.width * scaleFactor).toInt();
-        int cropHeight = (relativeHeight * page.height * scaleFactor).toInt();
-
-        cropX = cropX.clamp(0, decodedImage.width - 1);
-        cropY = cropY.clamp(0, decodedImage.height - 1);
-        cropWidth = cropWidth.clamp(1, decodedImage.width - cropX);
-        cropHeight = cropHeight.clamp(1, decodedImage.height - cropY);
-
-        final croppedImage = img.copyCrop(
-          decodedImage,
-          x: cropX,
-          y: cropY,
-          width: cropWidth,
-          height: cropHeight,
-        );
-
-        // Add white background with padding
-        const int padding = 20;
-        final bgWidth = croppedImage.width + 2 * padding;
-        final bgHeight = croppedImage.height + 2 * padding;
-        final backgroundImage = img.Image(width: bgWidth, height: bgHeight);
-        img.fill(
-          backgroundImage,
-          color: img.ColorRgb8(255, 255, 255),
-        ); // White background
-        img.compositeImage(
-          backgroundImage,
-          croppedImage,
-          dstX: padding,
-          dstY: padding,
-        );
-
-        final directory = await getApplicationDocumentsDirectory();
-        final path = '${directory.path}/screenshot_$id.png';
-        final file = File(path);
-        await file.writeAsBytes(img.encodePng(backgroundImage));
-        screenshotPath = path;
-      }
-
-      await page.close();
     } catch (e) {
-      debugPrint('Error capturing screenshot: $e');
+      debugPrint('Error capturing multi-page screenshot: $e');
       if (mounted) {
         setState(() {
           _isProcessing = false;
@@ -482,21 +498,18 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       return;
     }
 
-    // We save the coordinates in page coordinate system
+    // Save selection metadata (using start page as reference)
     final document2 = await _pdfController.document;
-
     final renderBox =
         _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
     final viewSize = renderBox.size;
     final viewAspectRatio = viewSize.width / viewSize.height;
 
-    // Determine the actual page index based on selection position
     int actualPageIndex = 0;
-    List<double> pageScreenTops = [];
     double cumTop = 0;
     for (int i = 0; i < _pageWidths.length; i++) {
-      pageScreenTops.add(cumTop - _scrollOffset);
+      final pageScreenTop = cumTop - _scrollOffset;
       final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
       double actualPageHeight;
       if (pageAspectRatio > viewAspectRatio) {
@@ -504,41 +517,27 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       } else {
         actualPageHeight = viewSize.height;
       }
-      cumTop += actualPageHeight;
-    }
-
-    for (int i = 0; i < pageScreenTops.length; i++) {
-      final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
-      double actualPageHeight;
-      if (pageAspectRatio > viewAspectRatio) {
-        actualPageHeight = viewSize.width / pageAspectRatio;
-      } else {
-        actualPageHeight = viewSize.height;
-      }
-      final pageScreenTop = pageScreenTops[i];
-      final pageScreenBottom = pageScreenTop + actualPageHeight;
       if (_selectionRect!.top >= pageScreenTop &&
-          _selectionRect!.top < pageScreenBottom) {
+          _selectionRect!.top < pageScreenTop + actualPageHeight) {
         actualPageIndex = i;
         break;
       }
+      cumTop += actualPageHeight;
     }
 
     final page2 = await document2.getPage(actualPageIndex + 1);
     final pageAspectRatio = page2.width / page2.height;
 
     double actualPageWidth, actualPageHeight;
-    double offsetX = 0, offsetY = 0;
+    double offsetX = 0;
 
     if (pageAspectRatio > viewAspectRatio) {
       actualPageWidth = viewSize.width;
       actualPageHeight = viewSize.width / pageAspectRatio;
-      offsetY = 0; // Pages are not centered vertically
     } else {
       actualPageHeight = viewSize.height;
       actualPageWidth = viewSize.height * pageAspectRatio;
       offsetX = (viewSize.width - actualPageWidth) / 2;
-      offsetY = 0;
     }
 
     double cumulativeTop = 0;
@@ -555,7 +554,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
 
     final relativeLeft = (_selectionRect!.left - offsetX) / actualPageWidth;
     final relativeTop =
-        (_selectionRect!.top - cumulativeTop + _scrollOffset - offsetY) /
+        (_selectionRect!.top - cumulativeTop + _scrollOffset) /
         actualPageHeight;
     final relativeWidth = _selectionRect!.width / actualPageWidth;
     final relativeHeight = _selectionRect!.height / actualPageHeight;
