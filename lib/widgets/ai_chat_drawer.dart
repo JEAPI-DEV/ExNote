@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:markdown/markdown.dart' as md;
 import '../services/ai_service.dart';
 
 class AiChatDrawer extends StatefulWidget {
@@ -407,16 +410,122 @@ class _ChatBubble extends StatelessWidget {
                 ),
               ),
             ),
-          Text(
-            message.text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              height: 1.4,
+          MarkdownBody(
+            data: message.text,
+            selectable: true,
+            extensionSet:
+                md.ExtensionSet(md.ExtensionSet.gitHubFlavored.blockSyntaxes, [
+                  ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
+                  LatexInlineSyntax(),
+                  LatexBlockSyntax(),
+                ]),
+            builders: {'latex': LatexBuilder()},
+            styleSheet: MarkdownStyleSheet(
+              p: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                height: 1.4,
+              ),
+              h1: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              h2: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+              h3: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+              strong: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+              em: const TextStyle(
+                color: Colors.white,
+                fontStyle: FontStyle.italic,
+              ),
+              listBullet: const TextStyle(color: Colors.white70),
+              code: TextStyle(
+                color: Colors.white,
+                backgroundColor: Colors.white.withOpacity(0.1),
+                fontFamily: 'monospace',
+              ),
+              blockquote: const TextStyle(
+                color: Colors.white70,
+                decorationColor: Colors.white24,
+              ),
+              blockquoteDecoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(color: Colors.white24, width: 4),
+                ),
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class LatexInlineSyntax extends md.InlineSyntax {
+  LatexInlineSyntax() : super(r'\\\(([\s\S]*?)\\\)');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    if (match.groupCount >= 1 && match[1] != null) {
+      parser.addNode(
+        md.Element.text('latex', match[1]!)..attributes['display'] = 'false',
+      );
+      return true;
+    }
+    return false;
+  }
+}
+
+class LatexBlockSyntax extends md.InlineSyntax {
+  // Supports \[ ... \], [ ... ], and $$ ... $$
+  LatexBlockSyntax() : super(r'(\\\[|\[|\$\$)([\s\S]*?)(\\\]|\]|\$\$)');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    if (match.groupCount >= 2 && match[2] != null) {
+      parser.addNode(
+        md.Element.text('latex', match[2]!.trim())
+          ..attributes['display'] = 'true',
+      );
+      return true;
+    }
+    return false;
+  }
+}
+
+class LatexBuilder extends MarkdownElementBuilder {
+  @override
+  Widget visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    final String text = element.textContent;
+    final bool isDisplay = element.attributes['display'] == 'true';
+
+    final mathWidget = Math.tex(
+      text,
+      mathStyle: isDisplay ? MathStyle.display : MathStyle.text,
+      textStyle:
+          preferredStyle?.copyWith(color: Colors.white) ??
+          const TextStyle(color: Colors.white),
+      onErrorFallback: (err) =>
+          Text(text, style: const TextStyle(color: Colors.redAccent)),
+    );
+
+    if (isDisplay) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: Center(child: mathWidget),
+      );
+    }
+    return mathWidget;
   }
 }
