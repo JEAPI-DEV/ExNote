@@ -65,7 +65,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   // AI Settings
   String openRouterToken = '';
+  String aiModel = 'google/gemini-2.0-flash-exp:free';
   bool tutorEnabled = false;
+  double aiDrawerWidth = 320.0;
   final TextEditingController _tokenController = TextEditingController();
 
   // Undo/Redo History (Git-like)
@@ -398,25 +400,38 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 ),
               ),
               endDrawer: _rightDrawerContent == RightDrawerContent.aiChat
-                  ? AiChatDrawer(
-                      apiKey: openRouterToken,
-                      isTutorMode: tutorEnabled,
-                      history: _aiChatHistory,
-                      controller: _aiChatController,
-                      onCaptureContext: _captureCanvas,
-                      onClearHistory: () {
-                        setState(() {
-                          _aiChatHistory.clear();
-                          _aiChatHistory.add(
-                            ChatMessage(
-                              text: tutorEnabled
-                                  ? "Hello! I'm your tutor. How can I help you with your notes today?"
-                                  : "Hello! How can I help you today?",
-                              isAi: true,
-                            ),
-                          );
-                        });
-                      },
+                  ? SizedBox(
+                      width: aiDrawerWidth,
+                      child: AiChatDrawer(
+                        apiKey: openRouterToken,
+                        model: aiModel,
+                        isTutorMode: tutorEnabled,
+                        history: _aiChatHistory,
+                        controller: _aiChatController,
+                        onCaptureContext: _captureCanvas,
+                        onClearHistory: () {
+                          setState(() {
+                            _aiChatHistory.clear();
+                            _aiChatHistory.add(
+                              ChatMessage(
+                                text: tutorEnabled
+                                    ? "Hello! I'm your tutor. How can I help you with your notes today?"
+                                    : "Hello! How can I help you today?",
+                                isAi: true,
+                              ),
+                            );
+                          });
+                        },
+                        onWidthChanged: (delta) {
+                          setState(() {
+                            aiDrawerWidth = (aiDrawerWidth + delta).clamp(
+                              320.0,
+                              800.0,
+                            );
+                          });
+                          _saveSettings();
+                        },
+                      ),
                     )
                   : Drawer(
                       child: ListView(
@@ -542,6 +557,48 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                                   onChanged: (value) {
                                     openRouterToken = value;
                                     _saveSettings();
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'AI Model',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  value: aiModel,
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'google/gemini-2.0-flash-exp:free',
+                                      child: Text('FREE:Gemini 2.0 Flash'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'bytedance-seed/seed-1.6-flash',
+                                      child: Text('SEED 1.6 Flash'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'google/gemini-3-flash-preview',
+                                      child: Text('Gemini 3 Flash'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'bytedance-seed/seed-1.6',
+                                      child: Text('SEED 1.6'),
+                                    ),
+                                  ],
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setState(() {
+                                        aiModel = value;
+                                      });
+                                      _saveSettings();
+                                    }
                                   },
                                 ),
                                 const SizedBox(height: 8),
@@ -856,8 +913,11 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         gridEnabled = prefs.getBool('gridEnabled') ?? false;
         gridType = GridType.values[prefs.getInt('gridType') ?? 0];
         openRouterToken = prefs.getString('openRouterToken') ?? '';
+        aiModel =
+            prefs.getString('aiModel') ?? 'google/gemini-2.0-flash-exp:free';
         _tokenController.text = openRouterToken;
         tutorEnabled = prefs.getBool('tutorEnabled') ?? false;
+        aiDrawerWidth = prefs.getDouble('aiDrawerWidth') ?? 320.0;
       });
     }
   }
@@ -868,7 +928,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     await prefs.setBool('gridEnabled', gridEnabled);
     await prefs.setInt('gridType', gridType.index);
     await prefs.setString('openRouterToken', openRouterToken);
+    await prefs.setString('aiModel', aiModel);
     await prefs.setBool('tutorEnabled', tutorEnabled);
+    await prefs.setDouble('aiDrawerWidth', aiDrawerWidth);
   }
 
   void _scheduleAutoSave() {

@@ -3,9 +3,14 @@ import 'package:http/http.dart' as http;
 
 class AiService {
   final String apiKey;
+  final String model;
   final bool isTutorMode;
 
-  AiService({required this.apiKey, this.isTutorMode = false});
+  AiService({
+    required this.apiKey,
+    this.model = 'google/gemini-2.0-flash-exp:free',
+    this.isTutorMode = false,
+  });
 
   Future<String> sendMessage(String message, {String? base64Image}) async {
     if (apiKey.isEmpty) {
@@ -43,10 +48,7 @@ class AiService {
           'Content-Type': 'application/json',
           'X-Title': 'ExNote', // Optional
         },
-        body: jsonEncode({
-          'model': 'google/gemini-2.0-flash-exp:free',
-          'messages': messages,
-        }),
+        body: jsonEncode({'model': model, 'messages': messages}),
       );
 
       if (response.statusCode == 200) {
