@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
+import '../models/undo_action.dart';
 
 /// High-performance custom drawing widget that's compatible with Scribble's
 /// Sketch format but uses raw Listener for immediate pointer event processing.
@@ -12,6 +13,7 @@ class FastDrawingCanvas extends StatefulWidget {
   final double currentWidth;
   final DrawingTool currentTool;
   final double scale;
+  final Function(UndoAction) onAction;
 
   const FastDrawingCanvas({
     super.key,
@@ -21,6 +23,7 @@ class FastDrawingCanvas extends StatefulWidget {
     this.currentWidth = 2.0,
     this.currentTool = DrawingTool.pen,
     this.scale = 1.0,
+    required this.onAction,
   });
 
   @override
@@ -41,6 +44,14 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
   Offset _currentDragOffset = Offset.zero;
   bool _isDraggingSelection = false;
 
+  // Eraser Session State
+  final Set<SketchLine> _erasedLinesInSession = {};
+  final List<int> _erasedIndicesInSession = [];
+  List<SketchLine>? _initialLinesInSession;
+
+  // Bounding Box Cache
+  final Map<SketchLine, Rect> _lineBoundsCache = {};
+
   @override
   void dispose() {
     _currentLineNotifier.dispose();
@@ -56,6 +67,7 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
     }
 
     if (widget.currentTool == DrawingTool.strokeEraser) {
+      _initialLinesInSession = List.from(widget.sketchNotifier.value.lines);
       _handleStrokeEraser(event.localPosition);
       return;
     }
@@ -112,6 +124,17 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
 
   void _handlePointerUp(PointerUpEvent event) {
     if (widget.currentTool == DrawingTool.strokeEraser) {
+      if (_erasedLinesInSession.isNotEmpty) {
+        widget.onAction(
+          RemoveLinesAction(
+            _erasedLinesInSession.toList(),
+            _erasedIndicesInSession.toList(),
+          ),
+        );
+        _erasedLinesInSession.clear();
+        _erasedIndicesInSession.clear();
+        _initialLinesInSession = null;
+      }
       return;
     }
 
@@ -136,8 +159,27 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
     widget.sketchNotifier.value = Sketch(
       lines: [...currentSketch.lines, newLine],
     );
+    widget.onAction(AddLinesAction([newLine]));
 
     _currentLineNotifier.value = null;
+  }
+
+  void _handleSelectionUp() {
+    if (_isDraggingSelection) {
+      // Apply move to selected lines
+      _applyMoveToSelection();
+      setState(() {
+        _isDraggingSelection = false;
+        _currentDragOffset = Offset.zero;
+        _dragStart = null;
+      });
+    } else if (_lassoPoints != null) {
+      // Close lasso and find selected lines
+      _findSelectedLines();
+      setState(() {
+        _lassoPoints = null;
+      });
+    }
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
@@ -146,6 +188,7 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       _lassoPoints = null;
       _isDraggingSelection = false;
       _currentDragOffset = Offset.zero;
+      _initialLinesInSession = null;
     });
   }
 
@@ -180,24 +223,6 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
     } else if (_lassoPoints != null) {
       setState(() {
         _lassoPoints = [..._lassoPoints!, position];
-      });
-    }
-  }
-
-  void _handleSelectionUp() {
-    if (_isDraggingSelection) {
-      // Apply move to selected lines
-      _applyMoveToSelection();
-      setState(() {
-        _isDraggingSelection = false;
-        _currentDragOffset = Offset.zero;
-        _dragStart = null;
-      });
-    } else if (_lassoPoints != null) {
-      // Close lasso and find selected lines
-      _findSelectedLines();
-      setState(() {
-        _lassoPoints = null;
       });
     }
   }
@@ -278,12 +303,20 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
 
     // Update selection to point to new lines
     final newSelectedLines = <SketchLine>[];
+    final oldSelectedLines = <SketchLine>[];
+    final indices = <int>[];
+
     for (int i = 0; i < currentSketch.lines.length; i++) {
       if (selectedSet.contains(currentSketch.lines[i])) {
         newSelectedLines.add(newLines[i]);
+        oldSelectedLines.add(currentSketch.lines[i]);
+        indices.add(i);
       }
     }
     widget.selectionNotifier.value = newSelectedLines;
+    widget.onAction(
+      MoveLinesAction(oldSelectedLines, newSelectedLines, indices),
+    );
   }
 
   // --- Eraser Logic ---
@@ -301,6 +334,16 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
     }
 
     if (linesToRemove.isNotEmpty) {
+      for (final line in linesToRemove) {
+        if (!_erasedLinesInSession.contains(line)) {
+          _erasedLinesInSession.add(line);
+          final index =
+              _initialLinesInSession?.indexOf(line) ??
+              currentSketch.lines.indexOf(line);
+          _erasedIndicesInSession.add(index);
+        }
+      }
+
       final newLines = currentSketch.lines
           .where((l) => !linesToRemove.contains(l))
           .toList();
@@ -311,20 +354,23 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
   bool _isLineHit(SketchLine line, Offset hitPoint, double radius) {
     if (line.points.isEmpty) return false;
 
-    double minX = double.infinity, maxX = double.negativeInfinity;
-    double minY = double.infinity, maxY = double.negativeInfinity;
+    final bounds = _lineBoundsCache.putIfAbsent(line, () {
+      double minX = double.infinity, maxX = double.negativeInfinity;
+      double minY = double.infinity, maxY = double.negativeInfinity;
 
-    for (final p in line.points) {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    }
+      for (final p in line.points) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
+      return Rect.fromLTRB(minX, minY, maxX, maxY);
+    });
 
-    if (hitPoint.dx < minX - radius ||
-        hitPoint.dx > maxX + radius ||
-        hitPoint.dy < minY - radius ||
-        hitPoint.dy > maxY + radius) {
+    if (hitPoint.dx < bounds.left - radius ||
+        hitPoint.dx > bounds.right + radius ||
+        hitPoint.dy < bounds.top - radius ||
+        hitPoint.dy > bounds.bottom + radius) {
       return false;
     }
 
@@ -353,14 +399,6 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Invalidate cache if sketch or theme changed
-    final sketch = widget.sketchNotifier.value;
-    if (_lastSketch != sketch || _lastIsDark != isDark) {
-      _cachedSketchPicture = null;
-      _lastSketch = sketch;
-      _lastIsDark = isDark;
-    }
-
     return Listener(
       onPointerDown: _handlePointerDown,
       onPointerMove: _handlePointerMove,
@@ -370,6 +408,13 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       child: ValueListenableBuilder<Sketch>(
         valueListenable: widget.sketchNotifier,
         builder: (context, sketch, _) {
+          // Invalidate cache if sketch or theme changed
+          if (_lastSketch != sketch || _lastIsDark != isDark) {
+            _cachedSketchPicture?.dispose();
+            _cachedSketchPicture = null;
+            _lastSketch = sketch;
+            _lastIsDark = isDark;
+          }
           return ValueListenableBuilder<List<SketchLine>>(
             valueListenable: widget.selectionNotifier,
             builder: (context, selectedLines, _) {
