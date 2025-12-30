@@ -206,104 +206,119 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
                   ),
 
                 // Input Area
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: const BoxDecoration(
-                    border: Border(top: BorderSide(color: borderColor)),
+                Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).viewInsets.bottom,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_pendingBase64Image != null)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: accentColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: accentColor.withOpacity(0.3),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(
+                      border: Border(top: BorderSide(color: borderColor)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_pendingBase64Image != null)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.image_outlined,
-                                size: 14,
-                                color: accentColor,
+                            decoration: BoxDecoration(
+                              color: accentColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: accentColor.withOpacity(0.3),
                               ),
-                              const SizedBox(width: 6),
-                              const Text(
-                                'CONTEXT ATTACHED',
-                                style: TextStyle(
-                                  color: accentColor,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              GestureDetector(
-                                onTap: () =>
-                                    setState(() => _pendingBase64Image = null),
-                                child: const Icon(
-                                  Icons.close,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.image_outlined,
                                   size: 14,
                                   color: accentColor,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(
-                              Icons.add_a_photo_outlined,
-                              size: 20,
-                              color: Colors.white54,
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'CONTEXT ATTACHED',
+                                  style: TextStyle(
+                                    color: accentColor,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                GestureDetector(
+                                  onTap: () => setState(
+                                    () => _pendingBase64Image = null,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: accentColor,
+                                  ),
+                                ),
+                              ],
                             ),
-                            onPressed: _captureContext,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: widget.controller,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.add_a_photo_outlined,
+                                  size: 20,
+                                  color: Colors.white54,
+                                ),
+                                onPressed: _captureContext,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
                               ),
-                              decoration: const InputDecoration(
-                                hintText: 'Type a message...',
-                                hintStyle: TextStyle(
-                                  color: Colors.white24,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: widget.controller,
+                                maxLines: 5,
+                                minLines: 1,
+                                keyboardType: TextInputType.multiline,
+                                style: const TextStyle(
+                                  color: Colors.white,
                                   fontSize: 13,
                                 ),
-                                border: InputBorder.none,
-                                isDense: true,
+                                decoration: const InputDecoration(
+                                  hintText: 'Type a message...',
+                                  hintStyle: TextStyle(
+                                    color: Colors.white24,
+                                    fontSize: 13,
+                                  ),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                ),
                               ),
-                              onSubmitted: (_) => _handleSend(),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.send_rounded,
-                              size: 20,
-                              color: accentColor,
+                            const SizedBox(width: 8),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.send_rounded,
+                                  size: 20,
+                                  color: accentColor,
+                                ),
+                                onPressed: _handleSend,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
                             ),
-                            onPressed: _handleSend,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
