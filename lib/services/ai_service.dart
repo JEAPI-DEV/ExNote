@@ -19,9 +19,8 @@ class AiService {
 
     try {
       final systemPrompt = isTutorMode
-          ? "You are a helpful and encouraging tutor. Your goal is to guide the student to the answer by asking leading questions and providing hints, rather than just giving the solution. Use clear and simple language."
-          : "You are a helpful assistant. Provide clear and concise answers.";
-
+          ? "You are a helpful and encouraging tutor. Your goal is to guide the student to the answer by asking leading questions and providing hints, rather than just giving the solution. Use clear and simple language. Format math equations using standard LaTeX: \\( ... \\) or \$ ... \$ for inline math, and \\[ ... \\] or \$\$ ... \$\$ for block math."
+          : "You are a helpful assistant. Provide clear and concise answers. Format math equations using standard LaTeX: \\( ... \\) or \$ ... \$ for inline math, and \\[ ... \\] or \$\$ ... \$\$ for block math.";
       final List<Map<String, dynamic>> messages = [
         {'role': 'system', 'content': systemPrompt},
       ];

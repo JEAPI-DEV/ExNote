@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:flutter_markdown_latex/flutter_markdown_latex.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../services/ai_service.dart';
 
@@ -413,13 +413,19 @@ class _ChatBubble extends StatelessWidget {
           MarkdownBody(
             data: message.text,
             selectable: true,
-            extensionSet:
-                md.ExtensionSet(md.ExtensionSet.gitHubFlavored.blockSyntaxes, [
-                  ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
-                  LatexInlineSyntax(),
-                  LatexBlockSyntax(),
-                ]),
-            builders: {'latex': LatexBuilder()},
+            builders: {
+              'latex': LatexElementBuilder(
+                textStyle: const TextStyle(color: Colors.white),
+              ),
+            },
+            extensionSet: md.ExtensionSet(
+              [LatexBlockSyntax()],
+              [
+                LatexInlineSyntax(),
+                md.InlineHtmlSyntax(),
+                DollarLatexInlineSyntax(),
+              ],
+            ),
             styleSheet: MarkdownStyleSheet(
               p: const TextStyle(
                 color: Colors.white,
@@ -441,6 +447,21 @@ class _ChatBubble extends StatelessWidget {
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
               ),
+              h4: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+              h5: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+              h6: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
               strong: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -454,6 +475,10 @@ class _ChatBubble extends StatelessWidget {
                 color: Colors.white,
                 backgroundColor: Colors.white.withOpacity(0.1),
                 fontFamily: 'monospace',
+              ),
+              codeblockDecoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(4),
               ),
               blockquote: const TextStyle(
                 color: Colors.white70,
@@ -472,60 +497,12 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-class LatexInlineSyntax extends md.InlineSyntax {
-  LatexInlineSyntax() : super(r'\\\(([\s\S]*?)\\\)');
+class DollarLatexInlineSyntax extends md.InlineSyntax {
+  DollarLatexInlineSyntax() : super(r'\$([^\$]+)\$');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
-    if (match.groupCount >= 1 && match[1] != null) {
-      parser.addNode(
-        md.Element.text('latex', match[1]!)..attributes['display'] = 'false',
-      );
-      return true;
-    }
-    return false;
-  }
-}
-
-class LatexBlockSyntax extends md.InlineSyntax {
-  // Supports \[ ... \], [ ... ], and $$ ... $$
-  LatexBlockSyntax() : super(r'(\\\[|\[|\$\$)([\s\S]*?)(\\\]|\]|\$\$)');
-
-  @override
-  bool onMatch(md.InlineParser parser, Match match) {
-    if (match.groupCount >= 2 && match[2] != null) {
-      parser.addNode(
-        md.Element.text('latex', match[2]!.trim())
-          ..attributes['display'] = 'true',
-      );
-      return true;
-    }
-    return false;
-  }
-}
-
-class LatexBuilder extends MarkdownElementBuilder {
-  @override
-  Widget visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    final String text = element.textContent;
-    final bool isDisplay = element.attributes['display'] == 'true';
-
-    final mathWidget = Math.tex(
-      text,
-      mathStyle: isDisplay ? MathStyle.display : MathStyle.text,
-      textStyle:
-          preferredStyle?.copyWith(color: Colors.white) ??
-          const TextStyle(color: Colors.white),
-      onErrorFallback: (err) =>
-          Text(text, style: const TextStyle(color: Colors.redAccent)),
-    );
-
-    if (isDisplay) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Center(child: mathWidget),
-      );
-    }
-    return mathWidget;
+    parser.addNode(md.Element.text('latex', match[1]!));
+    return true;
   }
 }
