@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'package:exnote/services/llm_parser/latex_block_syntax.dart';
+import 'package:exnote/services/llm_parser/latex_element_builder.dart';
+import 'package:exnote/services/llm_parser/latex_inline_syntax.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutter_markdown_latex/flutter_markdown_latex.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../services/ai_service.dart';
 
@@ -80,6 +82,7 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
     );
 
     if (mounted) {
+      //debugPrint('AI Response: $response');
       setState(() {
         widget.history.add(ChatMessage(text: response, isAi: true));
         _isLoading = false;
@@ -420,11 +423,7 @@ class _ChatBubble extends StatelessWidget {
             },
             extensionSet: md.ExtensionSet(
               [LatexBlockSyntax()],
-              [
-                LatexInlineSyntax(),
-                md.InlineHtmlSyntax(),
-                DollarLatexInlineSyntax(),
-              ],
+              [LatexInlineSyntax(), md.InlineHtmlSyntax()],
             ),
             styleSheet: MarkdownStyleSheet(
               p: const TextStyle(
@@ -494,15 +493,5 @@ class _ChatBubble extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class DollarLatexInlineSyntax extends md.InlineSyntax {
-  DollarLatexInlineSyntax() : super(r'\$([^\$]+)\$');
-
-  @override
-  bool onMatch(md.InlineParser parser, Match match) {
-    parser.addNode(md.Element.text('latex', match[1]!));
-    return true;
   }
 }
