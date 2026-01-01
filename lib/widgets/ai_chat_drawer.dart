@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../services/ai_service.dart';
+import '../models/chat_message.dart';
 
 class AiChatDrawer extends StatefulWidget {
   final String apiKey;
   final String model;
   final bool isTutorMode;
+  final bool submitLastImageOnly;
   final List<ChatMessage> history;
   final TextEditingController controller;
   final Future<String?> Function() onCaptureContext;
@@ -22,6 +24,7 @@ class AiChatDrawer extends StatefulWidget {
     required this.apiKey,
     required this.model,
     required this.isTutorMode,
+    required this.submitLastImageOnly,
     required this.history,
     required this.controller,
     required this.onCaptureContext,
@@ -71,14 +74,13 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
       _isLoading = true;
     });
 
-    final currentImage = _pendingBase64Image;
     widget.controller.clear();
     _pendingBase64Image = null;
     _scrollToBottom();
 
     final response = await _aiService.sendMessage(
-      text,
-      base64Image: currentImage,
+      widget.history,
+      submitLastImageOnly: widget.submitLastImageOnly,
     );
 
     if (mounted) {
@@ -371,14 +373,6 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
       ),
     );
   }
-}
-
-class ChatMessage {
-  final String text;
-  final bool isAi;
-  final String? base64Image;
-
-  ChatMessage({required this.text, required this.isAi, this.base64Image});
 }
 
 class _ChatBubble extends StatelessWidget {

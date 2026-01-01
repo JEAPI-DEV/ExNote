@@ -20,6 +20,7 @@ import '../widgets/note_app_bar.dart';
 import '../widgets/note_toolbar.dart';
 import '../widgets/ai_chat_drawer.dart';
 import '../models/undo_action.dart';
+import '../models/chat_message.dart';
 
 enum GridType { grid, writingLines }
 
@@ -67,6 +68,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   String openRouterToken = '';
   String aiModel = 'google/gemini-2.0-flash-exp:free';
   bool tutorEnabled = false;
+  bool submitLastImageOnly = true;
   double aiDrawerWidth = 320.0;
   final TextEditingController _tokenController = TextEditingController();
 
@@ -406,6 +408,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         apiKey: openRouterToken,
                         model: aiModel,
                         isTutorMode: tutorEnabled,
+                        submitLastImageOnly: submitLastImageOnly,
                         history: _aiChatHistory,
                         controller: _aiChatController,
                         onCaptureContext: _captureCanvas,
@@ -616,6 +619,20 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                                   onChanged: (bool value) {
                                     setState(() {
                                       tutorEnabled = value;
+                                    });
+                                    _saveSettings();
+                                  },
+                                ),
+                                SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Submit Last Image Only'),
+                                  subtitle: const Text(
+                                    'AI will only receive the last captured image',
+                                  ),
+                                  value: submitLastImageOnly,
+                                  onChanged: (bool value) {
+                                    setState(() {
+                                      submitLastImageOnly = value;
                                     });
                                     _saveSettings();
                                   },
@@ -921,6 +938,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             prefs.getString('aiModel') ?? 'google/gemini-2.0-flash-exp:free';
         _tokenController.text = openRouterToken;
         tutorEnabled = prefs.getBool('tutorEnabled') ?? false;
+        submitLastImageOnly = prefs.getBool('submitLastImageOnly') ?? true;
         aiDrawerWidth = prefs.getDouble('aiDrawerWidth') ?? 320.0;
       });
     }
@@ -934,6 +952,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     await prefs.setString('openRouterToken', openRouterToken);
     await prefs.setString('aiModel', aiModel);
     await prefs.setBool('tutorEnabled', tutorEnabled);
+    await prefs.setBool('submitLastImageOnly', submitLastImageOnly);
     await prefs.setDouble('aiDrawerWidth', aiDrawerWidth);
   }
 
