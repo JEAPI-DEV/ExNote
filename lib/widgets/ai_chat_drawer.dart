@@ -107,7 +107,7 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0.0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -122,7 +122,7 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
     const accentColor = Color(0xFF007AFF);
 
     return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
+      onHorizontalDragUpdate: (details) {},
       behavior: HitTestBehavior.translucent,
       child: Stack(
         children: [
@@ -134,73 +134,85 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
             child: Column(
               children: [
                 // Header
-                Container(
-                  height: 48,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: borderColor)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.psychology_outlined,
-                        size: 18,
-                        color: Colors.white70,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'AI ASSISTANT',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
+                GestureDetector(
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  behavior: HitTestBehavior.translucent,
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: const BoxDecoration(
+                      border: Border(bottom: BorderSide(color: borderColor)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.psychology_outlined,
+                          size: 18,
+                          color: Colors.white70,
                         ),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () {
-                          widget.onClearHistory();
-                          setState(() {});
-                        },
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: const Text(
-                          'CLEAR',
+                        const SizedBox(width: 8),
+                        const Text(
+                          'AI ASSISTANT',
                           style: TextStyle(
-                            color: Colors.white54,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          size: 18,
-                          color: Colors.white54,
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () {
+                            widget.onClearHistory();
+                            setState(() {});
+                          },
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text(
+                            'CLEAR',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                        onPressed: () => Navigator.of(context).pop(),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.close,
+                            size: 18,
+                            color: Colors.white54,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
                 // Messages
                 Expanded(
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    itemCount: widget.history.length,
-                    itemBuilder: (context, index) {
-                      return _ChatBubble(message: widget.history[index]);
-                    },
+                  child: GestureDetector(
+                    onTap: () => FocusScope.of(context).unfocus(),
+                    behavior: HitTestBehavior.translucent,
+                    child: ListView.builder(
+                      reverse: true,
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      itemCount: widget.history.length,
+                      itemBuilder: (context, index) {
+                        final reversedIndex = widget.history.length - 1 - index;
+                        return _ChatBubble(
+                          message: widget.history[reversedIndex],
+                        );
+                      },
+                    ),
                   ),
                 ),
 
@@ -270,20 +282,17 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
                             ),
                           ),
                         Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: IconButton(
-                                icon: const Icon(
-                                  Icons.add_a_photo_outlined,
-                                  size: 20,
-                                  color: Colors.white54,
-                                ),
-                                onPressed: _captureContext,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.add_a_photo_outlined,
+                                size: 20,
+                                color: Colors.white54,
                               ),
+                              onPressed: _captureContext,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -308,18 +317,15 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: IconButton(
-                                icon: const Icon(
-                                  Icons.send_rounded,
-                                  size: 20,
-                                  color: accentColor,
-                                ),
-                                onPressed: _handleSend,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.send_rounded,
+                                size: 20,
+                                color: accentColor,
                               ),
+                              onPressed: _handleSend,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                             ),
                           ],
                         ),

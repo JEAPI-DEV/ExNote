@@ -579,18 +579,22 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                                       value: 'google/gemini-2.0-flash-exp:free',
                                       child: Text('FREE:Gemini 2.0 Flash'),
                                     ),
+                                    /*
                                     DropdownMenuItem(
                                       value: 'bytedance-seed/seed-1.6-flash',
                                       child: Text('SEED 1.6 Flash'),
                                     ),
+                                    */
                                     DropdownMenuItem(
                                       value: 'google/gemini-3-flash-preview',
                                       child: Text('Gemini 3 Flash'),
                                     ),
+                                    /*
                                     DropdownMenuItem(
                                       value: 'bytedance-seed/seed-1.6',
                                       child: Text('SEED 1.6'),
                                     ),
+                                    */
                                   ],
                                   onChanged: (value) {
                                     if (value != null) {
