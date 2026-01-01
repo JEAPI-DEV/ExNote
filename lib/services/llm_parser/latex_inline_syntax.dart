@@ -31,8 +31,9 @@ String generateRegexRules(List<Map<String, dynamic>> delimiters) {
     // Inline pattern
     if (left == r'$') {
       // Special case for $ to avoid greedy matching and handle $n$-th
-      // It must start and end with a non-space character, and not contain newlines.
-      inlinePatterns.add(r'\$([^\s\$](?:[^$\n]*?[^\s\$])?)\$');
+      // We allow spaces to support models that output $ A \cup B $
+      // But we still disallow newlines to avoid matching across lines
+      inlinePatterns.add(r'\$([^$\n]+?)\$');
     } else {
       inlinePatterns.add(
         '$escapedLeft((?:\\\\.|[^\\\\\\n])*?(?:\\\\.|[^\\\\\\n]|(?!$escapedRight)))$escapedRight',
