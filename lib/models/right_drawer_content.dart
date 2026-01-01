@@ -1,0 +1,1 @@
+enum RightDrawerContent { settings, aiChat }

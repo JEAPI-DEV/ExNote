@@ -1,30 +1,26 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/theme_provider.dart';
 import 'package:scribble/scribble.dart';
-import 'dart:ui' as ui;
-import 'package:path_provider/path_provider.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:pdf/pdf.dart';
-import 'package:vector_math/vector_math_64.dart' as vm;
 import 'package:flutter/rendering.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/folder_provider.dart';
 import '../widgets/fast_drawing_canvas.dart';
 import '../models/drawing_tool.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_toolbar.dart';
 import '../widgets/ai_chat_drawer.dart';
+import '../widgets/settings_drawer.dart';
 import '../models/undo_action.dart';
 import '../models/chat_message.dart';
-
-enum GridType { grid, writingLines }
-
-enum RightDrawerContent { settings, aiChat }
+import '../models/grid_type.dart';
+import '../models/right_drawer_content.dart';
+import '../widgets/grid_painter.dart';
+import '../utils/sketch_serializer.dart';
+import '../utils/app_config.dart';
+import '../services/export_service.dart';
+import '../services/settings_service.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -66,10 +62,10 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   // AI Settings
   String openRouterToken = '';
-  String aiModel = 'google/gemini-2.0-flash-exp:free';
-  bool tutorEnabled = false;
-  bool submitLastImageOnly = true;
-  double aiDrawerWidth = 320.0;
+  String aiModel = AppConfig.defaultAiModel;
+  bool tutorEnabled = AppConfig.defaultTutorEnabled;
+  bool submitLastImageOnly = AppConfig.defaultSubmitLastImageOnly;
+  double aiDrawerWidth = AppConfig.defaultAiDrawerWidth;
   final TextEditingController _tokenController = TextEditingController();
 
   // Undo/Redo History (Git-like)
@@ -328,8 +324,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       (s) => s.id == widget.selectionId,
     );
 
-    final themeMode = ref.watch(themeProvider);
-
     return Builder(
       builder: (context) {
         return PopScope(
@@ -436,212 +430,65 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         },
                       ),
                     )
-                  : Drawer(
-                      child: ListView(
-                        padding: EdgeInsets.zero,
-                        children: [
-                          DrawerHeader(
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-                            ),
-                            child: Text(
-                              'Settings',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                fontSize: 24,
+                  : SettingsDrawer(
+                      gridEnabled: gridEnabled,
+                      gridType: gridType,
+                      aiModel: aiModel,
+                      tutorEnabled: tutorEnabled,
+                      submitLastImageOnly: submitLastImageOnly,
+                      tokenController: _tokenController,
+                      onGridEnabledChanged: (value) {
+                        setState(() {
+                          gridEnabled = value;
+                        });
+                        _saveSettings();
+                      },
+                      onGridTypeChanged: (value) {
+                        setState(() {
+                          gridType = value;
+                        });
+                        _saveSettings();
+                      },
+                      onTokenChanged: (value) {
+                        openRouterToken = value;
+                        _saveSettings();
+                      },
+                      onAiModelChanged: (value) {
+                        setState(() {
+                          aiModel = value;
+                        });
+                        _saveSettings();
+                      },
+                      onTutorEnabledChanged: (value) {
+                        setState(() {
+                          tutorEnabled = value;
+                        });
+                        _saveSettings();
+                      },
+                      onSubmitLastImageOnlyChanged: (value) {
+                        setState(() {
+                          submitLastImageOnly = value;
+                        });
+                        _saveSettings();
+                      },
+                      onExportBackup: () async {
+                        try {
+                          final file = await ExportService.exportToZip();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Backup saved to ${file.path}'),
                               ),
-                            ),
-                          ),
-
-                          // Theme Selection
-                          Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Theme',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 8),
-                                SegmentedButton<ThemeMode>(
-                                  segments: const [
-                                    ButtonSegment(
-                                      value: ThemeMode.system,
-                                      label: Text('System'),
-                                      icon: Icon(Icons.brightness_auto),
-                                    ),
-                                    ButtonSegment(
-                                      value: ThemeMode.light,
-                                      label: Text('Light'),
-                                      icon: Icon(Icons.light_mode),
-                                    ),
-                                    ButtonSegment(
-                                      value: ThemeMode.dark,
-                                      label: Text('Dark'),
-                                      icon: Icon(Icons.dark_mode),
-                                    ),
-                                  ],
-                                  selected: {themeMode},
-                                  onSelectionChanged:
-                                      (Set<ThemeMode> newSelection) {
-                                        ref
-                                            .read(themeProvider.notifier)
-                                            .setThemeMode(newSelection.first);
-                                      },
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Divider(),
-
-                          SwitchListTile(
-                            title: const Text('Grid Enabled'),
-                            value: gridEnabled,
-                            onChanged: (bool value) {
-                              setState(() {
-                                gridEnabled = value;
-                              });
-                              _saveSettings();
-                            },
-                          ),
-                          if (gridEnabled)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                              ),
-                              child: DropdownButton<GridType>(
-                                value: gridType,
-                                onChanged: (GridType? newValue) {
-                                  if (newValue != null) {
-                                    setState(() {
-                                      gridType = newValue;
-                                    });
-                                    _saveSettings();
-                                  }
-                                },
-                                items: GridType.values.map((GridType type) {
-                                  return DropdownMenuItem<GridType>(
-                                    value: type,
-                                    child: Text(
-                                      type == GridType.grid
-                                          ? 'Grid (Math)'
-                                          : 'Writing Lines',
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                          const Divider(),
-
-                          // AI Settings
-                          Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'AI Settings',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: _tokenController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'OpenRouter API Token',
-                                    border: OutlineInputBorder(),
-                                    hintText: 'sk-or-v1-...',
-                                  ),
-                                  obscureText: true,
-                                  onChanged: (value) {
-                                    openRouterToken = value;
-                                    _saveSettings();
-                                  },
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'AI Model',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
-                                  value: aiModel,
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                  items: const [
-                                    DropdownMenuItem(
-                                      value: 'google/gemini-2.0-flash-exp:free',
-                                      child: Text('FREE:Gemini 2.0 Flash'),
-                                    ),
-                                    /*
-                                    DropdownMenuItem(
-                                      value: 'bytedance-seed/seed-1.6-flash',
-                                      child: Text('SEED 1.6 Flash'),
-                                    ),
-                                    */
-                                    DropdownMenuItem(
-                                      value: 'google/gemini-3-flash-preview',
-                                      child: Text('Gemini 3 Flash'),
-                                    ),
-                                    /*
-                                    DropdownMenuItem(
-                                      value: 'bytedance-seed/seed-1.6',
-                                      child: Text('SEED 1.6'),
-                                    ),
-                                    */
-                                  ],
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      setState(() {
-                                        aiModel = value;
-                                      });
-                                      _saveSettings();
-                                    }
-                                  },
-                                ),
-                                const SizedBox(height: 8),
-                                SwitchListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Tutor Mode'),
-                                  subtitle: const Text(
-                                    'AI will act as a helpful tutor',
-                                  ),
-                                  value: tutorEnabled,
-                                  onChanged: (bool value) {
-                                    setState(() {
-                                      tutorEnabled = value;
-                                    });
-                                    _saveSettings();
-                                  },
-                                ),
-                                SwitchListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Submit Last Image Only'),
-                                  subtitle: const Text(
-                                    'AI will only receive the last captured image',
-                                  ),
-                                  value: submitLastImageOnly,
-                                  onChanged: (bool value) {
-                                    setState(() {
-                                      submitLastImageOnly = value;
-                                    });
-                                    _saveSettings();
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Backup failed: $e')),
+                            );
+                          }
+                        }
+                      },
                     ),
               body: GestureDetector(
                 onTap: () => FocusScope.of(context).unfocus(),
@@ -766,7 +613,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Future<void> _saveNote() async {
     try {
       final sketch = sketchNotifier.value;
-      final jsonSketch = await _runSerialization(sketch);
+      final jsonSketch = await runSerialization(sketch);
 
       final folder = ref
           .read(folderProvider)
@@ -801,29 +648,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Future<void> _exportPng() async {
     try {
-      final boundary =
-          _exportKey.currentContext?.findRenderObject()
-              as RenderRepaintBoundary?;
-      if (boundary == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Nothing to export')));
-        return;
-      }
-
-      final dpi = MediaQuery.of(context).devicePixelRatio;
-      final ui.Image image = await boundary.toImage(pixelRatio: dpi * 2);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) throw Exception('Failed to encode image');
-      final bytes = byteData.buffer.asUint8List();
-
-      final dir = await _getExportDirectory();
-      final file = File(
-        '${dir.path}/exnote_export_${DateTime.now().millisecondsSinceEpoch}.png',
-      );
-      await file.writeAsBytes(bytes);
-
+      final file = await ExportService.exportToPng(_exportKey, context);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -838,39 +663,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Future<void> _exportPdf() async {
     try {
-      final boundary =
-          _exportKey.currentContext?.findRenderObject()
-              as RenderRepaintBoundary?;
-      if (boundary == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Nothing to export')));
-        return;
-      }
-
-      final dpi = MediaQuery.of(context).devicePixelRatio;
-      final ui.Image image = await boundary.toImage(pixelRatio: dpi * 2);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) throw Exception('Failed to encode image');
-      final bytes = byteData.buffer.asUint8List();
-
-      final doc = pw.Document();
-      final pwImage = pw.MemoryImage(bytes);
-      doc.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          build: (pw.Context ctx) =>
-              pw.Center(child: pw.Image(pwImage, fit: pw.BoxFit.contain)),
-        ),
-      );
-
-      final dir = await _getExportDirectory();
-      final file = File(
-        '${dir.path}/exnote_export_${DateTime.now().millisecondsSinceEpoch}.pdf',
-      );
-      await file.writeAsBytes(await doc.save());
-
+      final file = await ExportService.exportToPdf(_exportKey, context);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -883,77 +676,38 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
-  Future<Directory> _getExportDirectory() async {
-    if (Platform.isAndroid) {
-      // Standard public Download folder
-      final downloadDir = Directory('/storage/emulated/0/Download');
-      if (await downloadDir.exists()) {
-        return downloadDir;
-      }
-
-      // Fallback to Documents if Download doesn't exist
-      final documentsDir = Directory('/storage/emulated/0/Documents');
-      if (await documentsDir.exists()) {
-        return documentsDir;
-      }
-
-      // Fallback to app-specific external storage
-      final externalDir = await getExternalStorageDirectory();
-      if (externalDir != null) return externalDir;
-    }
-
-    // On iOS or as final fallback, use application documents directory
-    // (Visible in Files app due to Info.plist changes)
-    return await getApplicationDocumentsDirectory();
-  }
-
   Future<String?> _captureCanvas() async {
-    try {
-      final boundary =
-          _exportKey.currentContext?.findRenderObject()
-              as RenderRepaintBoundary?;
-      if (boundary == null) return null;
-
-      final image = await boundary.toImage(pixelRatio: 2.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return null;
-
-      final pngBytes = byteData.buffer.asUint8List();
-      return base64Encode(pngBytes);
-    } catch (e) {
-      debugPrint('Error capturing canvas: $e');
-      return null;
-    }
+    return await ExportService.captureCanvas(_exportKey);
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final settings = await SettingsService.loadSettings();
     if (mounted) {
       setState(() {
-        widthNotifier.value = prefs.getDouble('strokeWidth') ?? 2.0;
-        gridEnabled = prefs.getBool('gridEnabled') ?? false;
-        gridType = GridType.values[prefs.getInt('gridType') ?? 0];
-        openRouterToken = prefs.getString('openRouterToken') ?? '';
-        aiModel =
-            prefs.getString('aiModel') ?? 'google/gemini-2.0-flash-exp:free';
+        widthNotifier.value = settings['strokeWidth'];
+        gridEnabled = settings['gridEnabled'];
+        gridType = settings['gridType'];
+        openRouterToken = settings['openRouterToken'];
+        aiModel = settings['aiModel'];
         _tokenController.text = openRouterToken;
-        tutorEnabled = prefs.getBool('tutorEnabled') ?? false;
-        submitLastImageOnly = prefs.getBool('submitLastImageOnly') ?? true;
-        aiDrawerWidth = prefs.getDouble('aiDrawerWidth') ?? 320.0;
+        tutorEnabled = settings['tutorEnabled'];
+        submitLastImageOnly = settings['submitLastImageOnly'];
+        aiDrawerWidth = settings['aiDrawerWidth'];
       });
     }
   }
 
   Future<void> _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('strokeWidth', widthNotifier.value);
-    await prefs.setBool('gridEnabled', gridEnabled);
-    await prefs.setInt('gridType', gridType.index);
-    await prefs.setString('openRouterToken', openRouterToken);
-    await prefs.setString('aiModel', aiModel);
-    await prefs.setBool('tutorEnabled', tutorEnabled);
-    await prefs.setBool('submitLastImageOnly', submitLastImageOnly);
-    await prefs.setDouble('aiDrawerWidth', aiDrawerWidth);
+    await SettingsService.saveSettings(
+      strokeWidth: widthNotifier.value,
+      gridEnabled: gridEnabled,
+      gridType: gridType,
+      openRouterToken: openRouterToken,
+      aiModel: aiModel,
+      tutorEnabled: tutorEnabled,
+      submitLastImageOnly: submitLastImageOnly,
+      aiDrawerWidth: aiDrawerWidth,
+    );
   }
 
   void _scheduleAutoSave() {
@@ -962,93 +716,4 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       _saveNote();
     });
   }
-}
-
-class GridPainter extends CustomPainter {
-  final Matrix4 matrix;
-  final GridType gridType;
-
-  GridPainter({required this.matrix, required this.gridType});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Compute the inverse transformation
-    final inverse = Matrix4.tryInvert(matrix);
-    if (inverse == null) return;
-
-    // The visible rect in local coordinates is 0,0 to size.width, size.height
-    // Transform to world coordinates
-    final topLeft = inverse.transform3(vm.Vector3(0, 0, 0));
-    final bottomRight = inverse.transform3(
-      vm.Vector3(size.width, size.height, 0),
-    );
-
-    final minX = topLeft.x - 1000; // margin
-    final maxX = bottomRight.x + 1000;
-    final minY = topLeft.y - 1000;
-    final maxY = bottomRight.y + 1000;
-
-    // Calculate current scale from matrix
-    final double scale = matrix.getMaxScaleOnAxis();
-
-    // Level of Detail (LOD) for grid
-    // Base spacing is 20.0. We want to keep the visual spacing roughly constant.
-    // If scale is 0.5, we want spacing to be 40.0.
-    // If scale is 0.25, we want spacing to be 80.0.
-    double spacing = 20.0;
-    if (scale < 0.8) {
-      // Find the power of 2 that brings the spacing back to a readable range
-      double factor = 1.0 / scale;
-      // Round to nearest power of 2 for clean grid jumps (2, 4, 8, 16...)
-      double powerOfTwo = 1.0;
-      while (powerOfTwo < factor * 0.5) {
-        powerOfTwo *= 2;
-      }
-      spacing *= powerOfTwo;
-    }
-
-    final paint = Paint()
-      ..color = Colors.grey.withOpacity(0.3)
-      ..strokeWidth = 1.0 / scale; // Keep line width constant on screen
-
-    if (gridType == GridType.grid) {
-      // Draw grid (vertical and horizontal lines for math)
-      for (
-        double x = (minX / spacing).floor() * spacing;
-        x <= maxX;
-        x += spacing
-      ) {
-        canvas.drawLine(Offset(x, minY), Offset(x, maxY), paint);
-      }
-
-      for (
-        double y = (minY / spacing).floor() * spacing;
-        y <= maxY;
-        y += spacing
-      ) {
-        canvas.drawLine(Offset(minX, y), Offset(maxX, y), paint);
-      }
-    } else {
-      // Draw horizontal lines only (for writing)
-      for (
-        double y = (minY / spacing).floor() * spacing;
-        y <= maxY;
-        y += spacing
-      ) {
-        canvas.drawLine(Offset(minX, y), Offset(maxX, y), paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant GridPainter oldDelegate) =>
-      matrix != oldDelegate.matrix || gridType != oldDelegate.gridType;
-}
-
-String _serializeSketch(Sketch sketch) {
-  return jsonEncode(sketch.toJson());
-}
-
-Future<String> _runSerialization(Sketch sketch) {
-  return Isolate.run(() => _serializeSketch(sketch));
 }

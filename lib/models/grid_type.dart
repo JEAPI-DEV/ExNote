@@ -1,0 +1,1 @@
+enum GridType { grid, writingLines }
