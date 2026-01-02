@@ -54,6 +54,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   bool gridEnabled = false;
   GridType gridType = GridType.grid;
+  double gridSpacing = AppConfig.defaultGridSpacing;
   RightDrawerContent _rightDrawerContent = RightDrawerContent.settings;
 
   Timer? _autoSaveTimer;
@@ -433,6 +434,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                   : SettingsDrawer(
                       gridEnabled: gridEnabled,
                       gridType: gridType,
+                      gridSpacing: gridSpacing,
                       aiModel: aiModel,
                       tutorEnabled: tutorEnabled,
                       submitLastImageOnly: submitLastImageOnly,
@@ -446,6 +448,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                       onGridTypeChanged: (value) {
                         setState(() {
                           gridType = value;
+                        });
+                        _saveSettings();
+                      },
+                      onGridSpacingChanged: (value) {
+                        setState(() {
+                          gridSpacing = value;
                         });
                         _saveSettings();
                       },
@@ -528,6 +536,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                                             matrix:
                                                 _transformationController.value,
                                             gridType: gridType,
+                                            spacing: gridSpacing,
                                           ),
                                         ),
                                       ),
@@ -687,6 +696,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         widthNotifier.value = settings['strokeWidth'];
         gridEnabled = settings['gridEnabled'];
         gridType = settings['gridType'];
+        gridSpacing = settings['gridSpacing'];
         openRouterToken = settings['openRouterToken'];
         aiModel = settings['aiModel'];
         _tokenController.text = openRouterToken;
@@ -702,6 +712,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       strokeWidth: widthNotifier.value,
       gridEnabled: gridEnabled,
       gridType: gridType,
+      gridSpacing: gridSpacing,
       openRouterToken: openRouterToken,
       aiModel: aiModel,
       tutorEnabled: tutorEnabled,

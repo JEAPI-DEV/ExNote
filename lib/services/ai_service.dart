@@ -30,7 +30,6 @@ class AiService {
         {'role': 'system', 'content': systemPrompt},
       ];
 
-      // Find the index of the last message with an image if we only want to submit the last one
       int lastImageIndex = -1;
       if (submitLastImageOnly) {
         lastImageIndex = history.lastIndexWhere(
@@ -73,15 +72,37 @@ class AiService {
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',
+          'HTTP-Referer':
+              'https://github.com/jeapi/excerciser', // Required by OpenRouter
           'X-Title': 'ExNote', // Optional
         },
-        body: jsonEncode({'model': model, 'messages': messages}),
+        body: jsonEncode({
+          'model': model,
+          'messages': messages,
+          // Optional parameters for better control
+          'temperature': 0.7,
+          'top_p': 1.0,
+        }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['choices'][0]['message']['content'] ??
-            'No response from AI';
+        if (data['choices'] != null && (data['choices'] as List).isNotEmpty) {
+          final choice = data['choices'][0];
+          final message = choice['message'];
+          String content = message['content'] ?? '';
+
+          // Handle reasoning/thought process if available (e.g. for reasoning models)
+          final reasoning = message['reasoning'];
+          if (reasoning != null && reasoning.toString().isNotEmpty) {
+            // Format reasoning as a blockquote
+            content =
+                '> **Reasoning:**\n> ${reasoning.toString().replaceAll('\n', '\n> ')}\n\n$content';
+          }
+
+          return content.isEmpty ? 'No response from AI' : content;
+        }
+        return 'No response from AI';
       } else {
         return 'Error: ${response.statusCode} - ${response.body}';
       }

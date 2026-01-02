@@ -14,6 +14,7 @@ class AppConfig {
   static const double defaultAiDrawerWidth = 320.0;
   static const bool defaultGridEnabled = false;
   static const int defaultGridTypeIndex = 0;
+  static const double defaultGridSpacing = 40.0;
   static const bool defaultTutorEnabled = false;
   static const bool defaultSubmitLastImageOnly = true;
 }

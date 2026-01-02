@@ -12,6 +12,8 @@ class SettingsService {
           prefs.getBool('gridEnabled') ?? AppConfig.defaultGridEnabled,
       'gridType': GridType
           .values[prefs.getInt('gridType') ?? AppConfig.defaultGridTypeIndex],
+      'gridSpacing':
+          prefs.getDouble('gridSpacing') ?? AppConfig.defaultGridSpacing,
       'openRouterToken': prefs.getString('openRouterToken') ?? '',
       'aiModel': prefs.getString('aiModel') ?? AppConfig.defaultAiModel,
       'tutorEnabled':
@@ -28,6 +30,7 @@ class SettingsService {
     required double strokeWidth,
     required bool gridEnabled,
     required GridType gridType,
+    required double gridSpacing,
     required String openRouterToken,
     required String aiModel,
     required bool tutorEnabled,
@@ -38,6 +41,7 @@ class SettingsService {
     await prefs.setDouble('strokeWidth', strokeWidth);
     await prefs.setBool('gridEnabled', gridEnabled);
     await prefs.setInt('gridType', gridType.index);
+    await prefs.setDouble('gridSpacing', gridSpacing);
     await prefs.setString('openRouterToken', openRouterToken);
     await prefs.setString('aiModel', aiModel);
     await prefs.setBool('tutorEnabled', tutorEnabled);

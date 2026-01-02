@@ -10,9 +10,11 @@ class SettingsDrawer extends ConsumerWidget {
   final String aiModel;
   final bool tutorEnabled;
   final bool submitLastImageOnly;
+  final double gridSpacing;
   final TextEditingController tokenController;
   final ValueChanged<bool> onGridEnabledChanged;
   final ValueChanged<GridType> onGridTypeChanged;
+  final ValueChanged<double> onGridSpacingChanged;
   final ValueChanged<String> onTokenChanged;
   final ValueChanged<String> onAiModelChanged;
   final ValueChanged<bool> onTutorEnabledChanged;
@@ -23,12 +25,14 @@ class SettingsDrawer extends ConsumerWidget {
     super.key,
     required this.gridEnabled,
     required this.gridType,
+    required this.gridSpacing,
     required this.aiModel,
     required this.tutorEnabled,
     required this.submitLastImageOnly,
     required this.tokenController,
     required this.onGridEnabledChanged,
     required this.onGridTypeChanged,
+    required this.onGridSpacingChanged,
     required this.onTokenChanged,
     required this.onAiModelChanged,
     required this.onTutorEnabledChanged,
@@ -100,7 +104,7 @@ class SettingsDrawer extends ConsumerWidget {
             value: gridEnabled,
             onChanged: onGridEnabledChanged,
           ),
-          if (gridEnabled)
+          if (gridEnabled) ...[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: DropdownButton<GridType>(
@@ -120,6 +124,29 @@ class SettingsDrawer extends ConsumerWidget {
                 }).toList(),
               ),
             ),
+            if (gridType == GridType.grid)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    Text(
+                      'Grid Spacing: ${gridSpacing.toInt()}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    Slider(
+                      value: gridSpacing,
+                      min: 20.0,
+                      max: 100.0,
+                      divisions: 16,
+                      label: gridSpacing.round().toString(),
+                      onChanged: onGridSpacingChanged,
+                    ),
+                  ],
+                ),
+              ),
+          ],
           const Divider(),
 
           // AI Settings
