@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 import '../providers/folder_provider.dart';
 import '../models/selection.dart';
 import '../widgets/selection_overlay.dart';
+import '../widgets/link_overlay_painter.dart';
 import 'note_screen.dart';
 
 class PDFViewerScreen extends ConsumerStatefulWidget {
@@ -172,6 +173,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                                     PhotoViewComputedScale.contained * 1.0,
                                 initialScale:
                                     PhotoViewComputedScale.contained * 1.0,
+                                disableGestures: true,
                                 heroAttributes: PhotoViewHeroAttributes(
                                   tag: '${document.id}-$index',
                                 ),
@@ -203,86 +205,42 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
               // Hyperlinks
               IgnorePointer(
                 ignoring: _isEditingMode,
-                child: Stack(
-                  children: list.selections.map((s) {
-                    if (s.pageIndex >= _pageWidths.length ||
-                        s.pageIndex >= _pageHeights.length) {
-                      return const SizedBox.shrink();
-                    }
-                    final viewAspectRatio = viewSize.width / viewSize.height;
-                    final pageWidth = _pageWidths[s.pageIndex];
-                    final pageHeight = _pageHeights[s.pageIndex];
-                    final pageAspectRatio = pageWidth / pageHeight;
-
-                    double actualPageWidth, actualPageHeight;
-                    double offsetX = 0, offsetY = 0;
-                    if (pageAspectRatio > viewAspectRatio) {
-                      actualPageWidth = viewSize.width;
-                      actualPageHeight = viewSize.width / pageAspectRatio;
-                      offsetY = 0; // Pages are not centered vertically
-                    } else {
-                      actualPageHeight = viewSize.height;
-                      actualPageWidth = viewSize.height * pageAspectRatio;
-                      offsetX = (viewSize.width - actualPageWidth) / 2;
-                      offsetY = 0;
-                    }
-
-                    double cumulativeTop = 0;
-                    for (int i = 0; i < s.pageIndex; i++) {
-                      final prevPageAspectRatio =
-                          _pageWidths[i] / _pageHeights[i];
-                      double prevActualPageHeight;
-                      if (prevPageAspectRatio > viewAspectRatio) {
-                        prevActualPageHeight =
-                            viewSize.width / prevPageAspectRatio;
-                      } else {
-                        prevActualPageHeight = viewSize.height;
-                      }
-                      cumulativeTop += prevActualPageHeight;
-                    }
-
-                    final screenLeft =
-                        offsetX + (s.left / pageWidth) * actualPageWidth;
-                    final screenTop =
-                        cumulativeTop +
-                        offsetY +
-                        (s.top / pageHeight) * actualPageHeight -
-                        _scrollOffset;
-                    final screenWidth = (s.width / pageWidth) * actualPageWidth;
-
-                    return Positioned(
-                      left: screenLeft + screenWidth - 24,
-                      top: screenTop,
-                      child: GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => NoteScreen(
-                              folderId: widget.folderId,
-                              exerciseListId: widget.exerciseListId,
-                              selectionId: s.id,
-                              noteId: s.noteId,
-                            ),
-                          ),
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.8),
-                            shape: BoxShape.circle,
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black26, blurRadius: 4),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.link,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
+                child: GestureDetector(
+                  onTapUp: (details) {
+                    if (_isEditingMode) return;
+                    final selection = LinkOverlayPainter.findSelectionAt(
+                      position: details.localPosition,
+                      selections: list.selections,
+                      pageWidths: _pageWidths,
+                      pageHeights: _pageHeights,
+                      scrollOffset: _scrollOffset,
+                      viewSize: viewSize,
                     );
-                  }).toList(),
+
+                    if (selection != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NoteScreen(
+                            folderId: widget.folderId,
+                            exerciseListId: widget.exerciseListId,
+                            selectionId: selection.id,
+                            noteId: selection.noteId,
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  child: CustomPaint(
+                    size: Size.infinite,
+                    painter: LinkOverlayPainter(
+                      selections: list.selections,
+                      pageWidths: _pageWidths,
+                      pageHeights: _pageHeights,
+                      scrollOffset: _scrollOffset,
+                      viewSize: viewSize,
+                    ),
+                  ),
                 ),
               ),
               if (_isProcessing)
