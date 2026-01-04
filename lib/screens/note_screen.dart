@@ -1,24 +1,21 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scribble/scribble.dart';
-import 'package:flutter/rendering.dart';
 import '../providers/folder_provider.dart';
-import '../widgets/fast_drawing_canvas.dart';
 import '../models/drawing_tool.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_toolbar.dart';
 import '../widgets/ai_chat_drawer.dart';
 import '../widgets/settings_drawer.dart';
-import '../models/undo_action.dart';
+import '../widgets/note_canvas.dart';
 import '../models/chat_message.dart';
 import '../models/grid_type.dart';
 import '../models/right_drawer_content.dart';
-import '../widgets/grid_painter.dart';
-import '../utils/sketch_serializer.dart';
 import '../utils/app_config.dart';
+import '../utils/undo_redo_manager.dart';
+import '../utils/clipboard_manager.dart';
+import '../services/note_manager.dart';
 import '../services/export_service.dart';
 import '../services/settings_service.dart';
 
@@ -69,16 +66,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   double aiDrawerWidth = AppConfig.defaultAiDrawerWidth;
   final TextEditingController _tokenController = TextEditingController();
 
-  // Undo/Redo History (Git-like)
-  final List<UndoAction> _undoStack = [];
-  final List<UndoAction> _redoStack = [];
-  final ValueNotifier<int> _historyNotifier = ValueNotifier(0);
-  bool _isLoading = true;
+  // Logic Managers
+  late UndoRedoManager _undoRedoManager;
+  late ClipboardManager _clipboardManager;
+  late NoteManager _noteManager;
 
-  // Clipboard
-  List<SketchLine> _clipboard = [];
-
-  // AI Chat History
+  bool _isLoading = true; // AI Chat History
   final List<ChatMessage> _aiChatHistory = [];
   final TextEditingController _aiChatController = TextEditingController();
 
@@ -91,6 +84,39 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     widthNotifier = ValueNotifier(2.0);
     toolNotifier = ValueNotifier(DrawingTool.pen);
 
+    _undoRedoManager = UndoRedoManager(
+      sketchNotifier: sketchNotifier,
+      onStateChanged: _scheduleAutoSave,
+    );
+
+    _clipboardManager = ClipboardManager(
+      selectionNotifier: selectionNotifier,
+      sketchNotifier: sketchNotifier,
+      toolNotifier: toolNotifier,
+      undoRedoManager: _undoRedoManager,
+      onCopy: () {
+        if (mounted) {
+          setState(() {}); // Update UI to enable Paste button
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Copied to clipboard'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      },
+    );
+
+    _noteManager = NoteManager(
+      ref: ref,
+      folderId: widget.folderId,
+      exerciseListId: widget.exerciseListId,
+      selectionId: widget.selectionId,
+      noteId: widget.noteId,
+      sketchNotifier: sketchNotifier,
+      undoRedoManager: _undoRedoManager,
+    );
+
     _loadSettings();
     _loadNote();
 
@@ -99,202 +125,20 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     });
   }
 
-  void _applyAction(UndoAction action) {
-    _undoStack.add(action);
-    _redoStack.clear();
-    _historyNotifier.value++;
-    _scheduleAutoSave();
-  }
-
-  void _undo() {
-    if (_undoStack.isNotEmpty) {
-      final action = _undoStack.removeLast();
-      final currentLines = List<SketchLine>.from(sketchNotifier.value.lines);
-      action.undo(currentLines);
-      sketchNotifier.value = Sketch(lines: currentLines);
-      _redoStack.add(action);
-      _historyNotifier.value++;
-      _scheduleAutoSave();
-    }
-  }
-
-  void _redo() {
-    if (_redoStack.isNotEmpty) {
-      final action = _redoStack.removeLast();
-      final currentLines = List<SketchLine>.from(sketchNotifier.value.lines);
-      action.redo(currentLines);
-      sketchNotifier.value = Sketch(lines: currentLines);
-      _undoStack.add(action);
-      _historyNotifier.value++;
-      _scheduleAutoSave();
-    }
-  }
-
-  void _deleteSelection() {
-    final selectedLines = selectionNotifier.value;
-    if (selectedLines.isEmpty) return;
-
-    final currentSketch = sketchNotifier.value;
-    final remainingLines = <SketchLine>[];
-    final removedLines = <SketchLine>[];
-    final originalIndices = <int>[];
-
-    for (int i = 0; i < currentSketch.lines.length; i++) {
-      final line = currentSketch.lines[i];
-      if (selectedLines.contains(line)) {
-        removedLines.add(line);
-        originalIndices.add(i);
-      } else {
-        remainingLines.add(line);
-      }
-    }
-
-    sketchNotifier.value = Sketch(lines: remainingLines);
-    _applyAction(RemoveLinesAction(removedLines, originalIndices));
-    selectionNotifier.value = [];
-  }
-
-  void _copy() {
-    final selected = selectionNotifier.value;
-    if (selected.isEmpty) return;
-
-    // Deep copy
-    _clipboard = selected
-        .map(
-          (line) => line.copyWith(
-            points: line.points
-                .map((p) => Point(p.x, p.y, pressure: p.pressure))
-                .toList(),
-          ),
-        )
-        .toList();
-
-    setState(() {}); // Update UI to enable Paste button
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Copied to clipboard'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-  }
-
-  void _paste() {
-    if (_clipboard.isEmpty) return;
-
-    final currentSketch = sketchNotifier.value;
-
-    // Paste with offset
-    final offset = 20.0;
-    final pastedLines = _clipboard.map((line) {
-      final newPoints = line.points
-          .map((p) => Point(p.x + offset, p.y + offset, pressure: p.pressure))
-          .toList();
-      return line.copyWith(points: newPoints);
-    }).toList();
-
-    // Update clipboard to have the offset for next paste
-    _clipboard = pastedLines;
-
-    sketchNotifier.value = Sketch(
-      lines: [...currentSketch.lines, ...pastedLines],
-    );
-    _applyAction(AddLinesAction(pastedLines));
-
-    // Select pasted lines
-    selectionNotifier.value = pastedLines;
-    toolNotifier.value = DrawingTool.selection;
-  }
-
   Future<void> _loadNote() async {
-    try {
-      final folder = ref
-          .read(folderProvider)
-          .firstWhere((f) => f.id == widget.folderId);
-
-      // Load sketch data from separate file
-      String? scribbleData = await ref
-          .read(folderProvider.notifier)
-          .loadNoteData(widget.noteId);
-      debugPrint(
-        'DEBUG: loadNoteData for ${widget.noteId} returned: ${scribbleData?.length ?? "null"} chars',
-      );
-
-      // Migration Path: If new file is missing, check legacy data in folders.json
-      if (scribbleData == null || scribbleData.isEmpty) {
-        final legacyNote = folder.notes[widget.noteId];
-        debugPrint(
-          'DEBUG: legacyNote for ${widget.noteId} exists: ${legacyNote != null}',
-        );
-        if (legacyNote != null) {
-          debugPrint(
-            'DEBUG: legacyNote.scribbleData length: ${legacyNote.scribbleData.length}',
-          );
+    await _noteManager.loadNote(
+      onScreenshotLoaded: (size) {
+        if (mounted) {
+          setState(() {
+            _screenshotSize = size;
+          });
         }
-
-        if (legacyNote != null && legacyNote.scribbleData.isNotEmpty) {
-          debugPrint('Migrating legacy note data for ${widget.noteId}');
-          scribbleData = legacyNote.scribbleData;
-          // Save to new format immediately
-          await ref
-              .read(folderProvider.notifier)
-              .updateNote(
-                widget.folderId,
-                widget.noteId,
-                scribbleData,
-                legacyNote.screenshotPath,
-              );
-        }
-      }
-
-      if (scribbleData != null && scribbleData.isNotEmpty) {
-        try {
-          final sketchJson = jsonDecode(scribbleData) as Map<String, dynamic>;
-          final loadedSketch = Sketch.fromJson(sketchJson);
-
-          sketchNotifier.value = loadedSketch;
-
-          // Reset history to start with this loaded sketch
-          _undoStack.clear();
-          _redoStack.clear();
-        } catch (e) {
-          debugPrint('Error loading note: $e');
-        }
-      }
-
-      // Load screenshot if exists
-      final list = folder.exerciseLists.firstWhere(
-        (l) => l.id == widget.exerciseListId,
-      );
-      final selection = list.selections.firstWhere(
-        (s) => s.id == widget.selectionId,
-      );
-
-      if (selection.screenshotPath != null) {
-        // Get image dimensions
-        final image = Image.file(File(selection.screenshotPath!));
-        image.image
-            .resolve(const ImageConfiguration())
-            .addListener(
-              ImageStreamListener((ImageInfo info, bool _) {
-                if (mounted) {
-                  setState(() {
-                    _screenshotSize = Size(
-                      info.image.width.toDouble() / 2,
-                      info.image.height.toDouble() / 2,
-                    );
-                  });
-                }
-              }),
-            );
-      }
-    } catch (e) {
-      debugPrint('Error loading note: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      },
+    );
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -347,16 +191,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
               appBar: PreferredSize(
                 preferredSize: const Size.fromHeight(48),
                 child: ValueListenableBuilder<int>(
-                  valueListenable: _historyNotifier,
+                  valueListenable: _undoRedoManager.historyNotifier,
                   builder: (context, _, __) {
                     return ValueListenableBuilder<List<SketchLine>>(
                       valueListenable: selectionNotifier,
                       builder: (context, selectedLines, _) {
                         return NoteAppBar(
-                          onUndo: _undo,
-                          onRedo: _redo,
-                          onCopy: _copy,
-                          onPaste: _paste,
+                          onUndo: _undoRedoManager.undo,
+                          onRedo: _undoRedoManager.redo,
+                          onCopy: _clipboardManager.copy,
+                          onPaste: _clipboardManager.paste,
                           onExportPng: _exportPng,
                           onExportPdf: _exportPdf,
                           onSave: () {
@@ -377,7 +221,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                             }
                           },
                           onDelete: selectedLines.isNotEmpty
-                              ? _deleteSelection
+                              ? _clipboardManager.deleteSelection
                               : null,
                           onChat: () {
                             setState(
@@ -386,10 +230,10 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                             );
                             _scaffoldKey.currentState?.openEndDrawer();
                           },
-                          canUndo: _undoStack.isNotEmpty,
-                          canRedo: _redoStack.isNotEmpty,
+                          canUndo: _undoRedoManager.canUndo,
+                          canRedo: _undoRedoManager.canRedo,
                           canCopy: selectedLines.isNotEmpty,
-                          canPaste: _clipboard.isNotEmpty,
+                          canPaste: _clipboardManager.canPaste,
                         );
                       },
                     );
@@ -506,99 +350,20 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                     if (_isLoading)
                       const Center(child: CircularProgressIndicator())
                     else
-                      GestureDetector(
-                        onScaleStart: (details) {
-                          if (details.pointerCount < 2) {
-                            // Prevent single finger gesture
-                          }
-                        },
-                        child: RepaintBoundary(
-                          key: _exportKey,
-                          child: InteractiveViewer(
-                            constrained: false,
-                            transformationController: _transformationController,
-                            minScale: 0.01,
-                            maxScale: 4.0,
-                            panEnabled: false,
-                            scaleEnabled: true,
-                            boundaryMargin: const EdgeInsets.all(50000.0),
-                            child: ColoredBox(
-                              color: Theme.of(context).scaffoldBackgroundColor,
-                              child: SizedBox(
-                                width: 100000.0,
-                                height: 100000.0,
-                                child: Stack(
-                                  children: [
-                                    if (gridEnabled)
-                                      Positioned.fill(
-                                        child: CustomPaint(
-                                          painter: GridPainter(
-                                            matrix:
-                                                _transformationController.value,
-                                            gridType: gridType,
-                                            spacing: gridSpacing,
-                                          ),
-                                        ),
-                                      ),
-                                    Positioned(
-                                      top: 0,
-                                      left: 0,
-                                      child:
-                                          selection.screenshotPath != null &&
-                                              _screenshotSize != null
-                                          ? Image.file(
-                                              File(selection.screenshotPath!),
-                                              width: _screenshotSize!.width,
-                                              height: _screenshotSize!.height,
-                                              fit: BoxFit.contain,
-                                            )
-                                          : selection.screenshotPath != null
-                                          ? Image.file(
-                                              File(selection.screenshotPath!),
-                                              width: 400,
-                                              fit: BoxFit.contain,
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ),
-                                    SizedBox.expand(
-                                      child: ValueListenableBuilder<Color>(
-                                        valueListenable: colorNotifier,
-                                        builder: (context, color, _) {
-                                          return ValueListenableBuilder<double>(
-                                            valueListenable: widthNotifier,
-                                            builder: (context, width, _) {
-                                              return ValueListenableBuilder<
-                                                DrawingTool
-                                              >(
-                                                valueListenable: toolNotifier,
-                                                builder: (context, tool, _) {
-                                                  return FastDrawingCanvas(
-                                                    sketchNotifier:
-                                                        sketchNotifier,
-                                                    selectionNotifier:
-                                                        selectionNotifier,
-                                                    currentColor: color,
-                                                    currentWidth: width,
-                                                    currentTool: tool,
-                                                    scale:
-                                                        _transformationController
-                                                            .value
-                                                            .getMaxScaleOnAxis(),
-                                                    onAction: _applyAction,
-                                                  );
-                                                },
-                                              );
-                                            },
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                      NoteCanvas(
+                        transformationController: _transformationController,
+                        gridEnabled: gridEnabled,
+                        gridType: gridType,
+                        gridSpacing: gridSpacing,
+                        selection: selection,
+                        screenshotSize: _screenshotSize,
+                        exportKey: _exportKey,
+                        colorNotifier: colorNotifier,
+                        widthNotifier: widthNotifier,
+                        toolNotifier: toolNotifier,
+                        sketchNotifier: sketchNotifier,
+                        selectionNotifier: selectionNotifier,
+                        onAction: _undoRedoManager.applyAction,
                       ),
                     Positioned(
                       bottom: 0,
@@ -621,28 +386,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Future<void> _saveNote() async {
     try {
-      final sketch = sketchNotifier.value;
-      final jsonSketch = await runSerialization(sketch);
-
-      final folder = ref
-          .read(folderProvider)
-          .firstWhere((f) => f.id == widget.folderId);
-      final list = folder.exerciseLists.firstWhere(
-        (l) => l.id == widget.exerciseListId,
-      );
-      final selection = list.selections.firstWhere(
-        (s) => s.id == widget.selectionId,
-      );
-
-      await ref
-          .read(folderProvider.notifier)
-          .updateNote(
-            widget.folderId,
-            widget.noteId,
-            jsonSketch,
-            selection.screenshotPath,
-          );
-
+      await _noteManager.saveNote();
       if (!mounted) return;
     } catch (e) {
       if (!mounted) return;

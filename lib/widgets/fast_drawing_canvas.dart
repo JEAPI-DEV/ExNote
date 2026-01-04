@@ -1,8 +1,9 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
+import '../controllers/drawing_canvas_controller.dart';
+import 'fast_sketch_painter.dart';
 
 /// High-performance custom drawing widget that's compatible with Scribble's
 /// Sketch format but uses raw Listener for immediate pointer event processing.
@@ -31,414 +32,80 @@ class FastDrawingCanvas extends StatefulWidget {
 }
 
 class FastDrawingCanvasState extends State<FastDrawingCanvas> {
-  final ValueNotifier<List<Point>?> _currentLineNotifier = ValueNotifier(null);
+  late DrawingCanvasController _controller;
 
-  // Caching
-  ui.Picture? _cachedSketchPicture;
-  Sketch? _lastSketch;
-  bool? _lastIsDark;
+  @override
+  void initState() {
+    super.initState();
+    _controller = DrawingCanvasController(
+      sketchNotifier: widget.sketchNotifier,
+      selectionNotifier: widget.selectionNotifier,
+      onAction: widget.onAction,
+    );
+    _updateController();
+  }
 
-  // Selection State
-  List<Offset>? _lassoPoints;
-  Offset? _dragStart;
-  Offset _currentDragOffset = Offset.zero;
-  bool _isDraggingSelection = false;
+  @override
+  void didUpdateWidget(FastDrawingCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updateController();
+  }
 
-  // Eraser Session State
-  final Set<SketchLine> _erasedLinesInSession = {};
-  final List<int> _erasedIndicesInSession = [];
-  List<SketchLine>? _initialLinesInSession;
-
-  // Bounding Box Cache
-  final Map<SketchLine, Rect> _lineBoundsCache = {};
+  void _updateController() {
+    _controller
+      ..currentColor = widget.currentColor
+      ..currentWidth = widget.currentWidth
+      ..currentTool = widget.currentTool
+      ..scale = widget.scale;
+  }
 
   @override
   void dispose() {
-    _currentLineNotifier.dispose();
-    _cachedSketchPicture?.dispose();
+    _controller.dispose();
     super.dispose();
-  }
-
-  void _handlePointerDown(PointerDownEvent event) {
-    // Only handle stylus/pen events
-    if (event.kind != ui.PointerDeviceKind.stylus &&
-        event.kind != ui.PointerDeviceKind.invertedStylus) {
-      return;
-    }
-
-    if (widget.currentTool == DrawingTool.strokeEraser) {
-      _initialLinesInSession = List.from(widget.sketchNotifier.value.lines);
-      _handleStrokeEraser(event.localPosition);
-      return;
-    }
-
-    if (widget.currentTool == DrawingTool.selection) {
-      _handleSelectionDown(event.localPosition);
-      return;
-    }
-
-    // Clear selection if drawing with other tools
-    if (widget.selectionNotifier.value.isNotEmpty) {
-      widget.selectionNotifier.value = [];
-    }
-
-    _currentLineNotifier.value = [
-      Point(
-        event.localPosition.dx,
-        event.localPosition.dy,
-        pressure: event.pressure,
-      ),
-    ];
-  }
-
-  void _handlePointerMove(PointerMoveEvent event) {
-    // Only handle stylus/pen events
-    if (event.kind != ui.PointerDeviceKind.stylus &&
-        event.kind != ui.PointerDeviceKind.invertedStylus) {
-      return;
-    }
-
-    if (widget.currentTool == DrawingTool.strokeEraser) {
-      _handleStrokeEraser(event.localPosition);
-      return;
-    }
-
-    if (widget.currentTool == DrawingTool.selection) {
-      _handleSelectionMove(event.localPosition);
-      return;
-    }
-
-    if (_currentLineNotifier.value == null) return;
-
-    // Optimize: Add to existing list instead of creating new one every move
-    final points = _currentLineNotifier.value!;
-    points.add(
-      Point(
-        event.localPosition.dx,
-        event.localPosition.dy,
-        pressure: event.pressure,
-      ),
-    );
-    _currentLineNotifier.value = List.from(points);
-  }
-
-  void _handlePointerUp(PointerUpEvent event) {
-    if (widget.currentTool == DrawingTool.strokeEraser) {
-      if (_erasedLinesInSession.isNotEmpty) {
-        widget.onAction(
-          RemoveLinesAction(
-            _erasedLinesInSession.toList(),
-            _erasedIndicesInSession.toList(),
-          ),
-        );
-        _erasedLinesInSession.clear();
-        _erasedIndicesInSession.clear();
-        _initialLinesInSession = null;
-      }
-      return;
-    }
-
-    if (widget.currentTool == DrawingTool.selection) {
-      _handleSelectionUp();
-      return;
-    }
-
-    final currentLinePoints = _currentLineNotifier.value;
-    if (currentLinePoints == null || currentLinePoints.isEmpty) return;
-
-    // Add the completed line to the sketch
-    final currentSketch = widget.sketchNotifier.value;
-    final newLine = SketchLine(
-      points: currentLinePoints,
-      color: widget.currentTool == DrawingTool.pixelEraser
-          ? 0
-          : widget.currentColor.value,
-      width: widget.currentWidth,
-    );
-
-    widget.sketchNotifier.value = Sketch(
-      lines: [...currentSketch.lines, newLine],
-    );
-    widget.onAction(AddLinesAction([newLine]));
-
-    _currentLineNotifier.value = null;
-  }
-
-  void _handleSelectionUp() {
-    if (_isDraggingSelection) {
-      // Apply move to selected lines
-      _applyMoveToSelection();
-      setState(() {
-        _isDraggingSelection = false;
-        _currentDragOffset = Offset.zero;
-        _dragStart = null;
-      });
-    } else if (_lassoPoints != null) {
-      // Close lasso and find selected lines
-      _findSelectedLines();
-      setState(() {
-        _lassoPoints = null;
-      });
-    }
-  }
-
-  void _handlePointerCancel(PointerCancelEvent event) {
-    _currentLineNotifier.value = null;
-    setState(() {
-      _lassoPoints = null;
-      _isDraggingSelection = false;
-      _currentDragOffset = Offset.zero;
-      _initialLinesInSession = null;
-    });
-  }
-
-  // --- Selection Logic ---
-
-  void _handleSelectionDown(Offset position) {
-    final selectedLines = widget.selectionNotifier.value;
-
-    // Check if tapping inside existing selection to start drag
-    if (selectedLines.isNotEmpty &&
-        _isPointInSelectionBounds(position, selectedLines)) {
-      setState(() {
-        _isDraggingSelection = true;
-        _dragStart = position;
-        _currentDragOffset = Offset.zero;
-      });
-    } else {
-      // Start new lasso selection
-      widget.selectionNotifier.value = []; // Clear previous
-      setState(() {
-        _lassoPoints = [position];
-        _isDraggingSelection = false;
-      });
-    }
-  }
-
-  void _handleSelectionMove(Offset position) {
-    if (_isDraggingSelection) {
-      setState(() {
-        _currentDragOffset = position - _dragStart!;
-      });
-    } else if (_lassoPoints != null) {
-      setState(() {
-        _lassoPoints = [..._lassoPoints!, position];
-      });
-    }
-  }
-
-  bool _isPointInSelectionBounds(Offset point, List<SketchLine> lines) {
-    if (lines.isEmpty) return false;
-
-    double minX = double.infinity, maxX = double.negativeInfinity;
-    double minY = double.infinity, maxY = double.negativeInfinity;
-
-    for (final line in lines) {
-      for (final p in line.points) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      }
-    }
-
-    // Add some padding
-    const padding = 20.0;
-    return point.dx >= minX - padding &&
-        point.dx <= maxX + padding &&
-        point.dy >= minY - padding &&
-        point.dy <= maxY + padding;
-  }
-
-  void _findSelectedLines() {
-    if (_lassoPoints == null || _lassoPoints!.length < 3) return;
-
-    final currentSketch = widget.sketchNotifier.value;
-    final selected = <SketchLine>[];
-    final path = Path()..addPolygon(_lassoPoints!, true);
-
-    for (final line in currentSketch.lines) {
-      // Check if any point of the line is inside the lasso polygon
-      bool isSelected = false;
-      for (final p in line.points) {
-        if (path.contains(Offset(p.x, p.y))) {
-          isSelected = true;
-          break;
-        }
-      }
-      if (isSelected) {
-        selected.add(line);
-      }
-    }
-
-    widget.selectionNotifier.value = selected;
-  }
-
-  void _applyMoveToSelection() {
-    if (_currentDragOffset == Offset.zero) return;
-
-    final currentSketch = widget.sketchNotifier.value;
-    final selectedLines = widget.selectionNotifier.value;
-    final selectedSet = selectedLines.toSet();
-
-    final newLines = currentSketch.lines.map((line) {
-      if (selectedSet.contains(line)) {
-        // Move this line
-        final newPoints = line.points
-            .map(
-              (p) => Point(
-                p.x + _currentDragOffset.dx,
-                p.y + _currentDragOffset.dy,
-                pressure: p.pressure,
-              ),
-            )
-            .toList();
-        return line.copyWith(points: newPoints);
-      }
-      return line;
-    }).toList();
-
-    // Update sketch
-    widget.sketchNotifier.value = Sketch(lines: newLines);
-
-    // Update selection to point to new lines
-    final newSelectedLines = <SketchLine>[];
-    final oldSelectedLines = <SketchLine>[];
-    final indices = <int>[];
-
-    for (int i = 0; i < currentSketch.lines.length; i++) {
-      if (selectedSet.contains(currentSketch.lines[i])) {
-        newSelectedLines.add(newLines[i]);
-        oldSelectedLines.add(currentSketch.lines[i]);
-        indices.add(i);
-      }
-    }
-    widget.selectionNotifier.value = newSelectedLines;
-    widget.onAction(
-      MoveLinesAction(oldSelectedLines, newSelectedLines, indices),
-    );
-  }
-
-  // --- Eraser Logic ---
-
-  void _handleStrokeEraser(Offset position) {
-    final currentSketch = widget.sketchNotifier.value;
-    final eraserRadius = widget.currentWidth * 2;
-
-    final linesToRemove = <SketchLine>{};
-
-    for (final line in currentSketch.lines) {
-      if (_isLineHit(line, position, eraserRadius)) {
-        linesToRemove.add(line);
-      }
-    }
-
-    if (linesToRemove.isNotEmpty) {
-      for (final line in linesToRemove) {
-        if (!_erasedLinesInSession.contains(line)) {
-          _erasedLinesInSession.add(line);
-          final index =
-              _initialLinesInSession?.indexOf(line) ??
-              currentSketch.lines.indexOf(line);
-          _erasedIndicesInSession.add(index);
-        }
-      }
-
-      final newLines = currentSketch.lines
-          .where((l) => !linesToRemove.contains(l))
-          .toList();
-      widget.sketchNotifier.value = Sketch(lines: newLines);
-    }
-  }
-
-  bool _isLineHit(SketchLine line, Offset hitPoint, double radius) {
-    if (line.points.isEmpty) return false;
-
-    final bounds = _lineBoundsCache.putIfAbsent(line, () {
-      double minX = double.infinity, maxX = double.negativeInfinity;
-      double minY = double.infinity, maxY = double.negativeInfinity;
-
-      for (final p in line.points) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      }
-      return Rect.fromLTRB(minX, minY, maxX, maxY);
-    });
-
-    if (hitPoint.dx < bounds.left - radius ||
-        hitPoint.dx > bounds.right + radius ||
-        hitPoint.dy < bounds.top - radius ||
-        hitPoint.dy > bounds.bottom + radius) {
-      return false;
-    }
-
-    for (int i = 0; i < line.points.length - 1; i++) {
-      final p1 = Offset(line.points[i].x, line.points[i].y);
-      final p2 = Offset(line.points[i + 1].x, line.points[i + 1].y);
-
-      if (_distanceToSegment(hitPoint, p1, p2) <= radius) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  double _distanceToSegment(Offset p, Offset a, Offset b) {
-    final pa = p - a;
-    final ba = b - a;
-    final h = (pa.dx * ba.dx + pa.dy * ba.dy) / (ba.dx * ba.dx + ba.dy * ba.dy);
-    final clampedH = h.clamp(0.0, 1.0);
-    final closest = a + ba * clampedH;
-    return (p - closest).distance;
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    _controller.updateTheme(isDark);
 
     return Listener(
-      onPointerDown: _handlePointerDown,
-      onPointerMove: _handlePointerMove,
-      onPointerUp: _handlePointerUp,
-      onPointerCancel: _handlePointerCancel,
+      onPointerDown: _controller.handlePointerDown,
+      onPointerMove: _controller.handlePointerMove,
+      onPointerUp: _controller.handlePointerUp,
+      onPointerCancel: _controller.handlePointerCancel,
       behavior: HitTestBehavior.opaque,
-      child: ValueListenableBuilder<Sketch>(
-        valueListenable: widget.sketchNotifier,
-        builder: (context, sketch, _) {
-          // Invalidate cache if sketch or theme changed
-          if (_lastSketch != sketch || _lastIsDark != isDark) {
-            _cachedSketchPicture?.dispose();
-            _cachedSketchPicture = null;
-            _lastSketch = sketch;
-            _lastIsDark = isDark;
-          }
-          return ValueListenableBuilder<List<SketchLine>>(
-            valueListenable: widget.selectionNotifier,
-            builder: (context, selectedLines, _) {
-              return ValueListenableBuilder<List<Point>?>(
-                valueListenable: _currentLineNotifier,
-                builder: (context, currentLinePoints, _) {
-                  return CustomPaint(
-                    painter: FastSketchPainter(
-                      sketch: sketch,
-                      currentLinePoints: currentLinePoints,
-                      currentColor: widget.currentColor,
-                      currentWidth: widget.currentWidth,
-                      currentTool: widget.currentTool,
-                      selectedLines: selectedLines,
-                      lassoPoints: _lassoPoints,
-                      dragOffset: _currentDragOffset,
-                      isDark: isDark,
-                      scale: widget.scale,
-                      cachedPicture: _cachedSketchPicture,
-                      onCacheUpdate: (picture) {
-                        _cachedSketchPicture = picture;
-                      },
-                    ),
-                    child: Container(),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return ValueListenableBuilder<Sketch>(
+            valueListenable: widget.sketchNotifier,
+            builder: (context, sketch, _) {
+              return ValueListenableBuilder<List<SketchLine>>(
+                valueListenable: widget.selectionNotifier,
+                builder: (context, selectedLines, _) {
+                  return ValueListenableBuilder<List<Point>?>(
+                    valueListenable: _controller.currentLineNotifier,
+                    builder: (context, currentLinePoints, _) {
+                      return CustomPaint(
+                        painter: FastSketchPainter(
+                          sketch: sketch,
+                          currentLinePoints: currentLinePoints,
+                          currentColor: widget.currentColor,
+                          currentWidth: widget.currentWidth,
+                          currentTool: widget.currentTool,
+                          selectedLines: selectedLines,
+                          lassoPoints: _controller.lassoPoints,
+                          dragOffset: _controller.currentDragOffset,
+                          isDark: isDark,
+                          scale: widget.scale,
+                          cachedPicture: _controller.cachedSketchPicture,
+                          onCacheUpdate: _controller.updateCache,
+                        ),
+                        child: Container(),
+                      );
+                    },
                   );
                 },
               );
@@ -447,249 +114,5 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
         },
       ),
     );
-  }
-}
-
-class FastSketchPainter extends CustomPainter {
-  final Sketch sketch;
-  final List<Point>? currentLinePoints;
-  final Color currentColor;
-  final double currentWidth;
-  final DrawingTool currentTool;
-  final List<SketchLine> selectedLines;
-  final List<Offset>? lassoPoints;
-  final Offset dragOffset;
-  final bool isDark;
-  final double scale;
-
-  // Caching
-  final ui.Picture? cachedPicture;
-  final Function(ui.Picture) onCacheUpdate;
-
-  FastSketchPainter({
-    required this.sketch,
-    this.currentLinePoints,
-    required this.currentColor,
-    required this.currentWidth,
-    required this.currentTool,
-    this.selectedLines = const [],
-    this.lassoPoints,
-    this.dragOffset = Offset.zero,
-    this.isDark = false,
-    this.scale = 1.0,
-    this.cachedPicture,
-    required this.onCacheUpdate,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Draw cached sketch
-    if (cachedPicture == null) {
-      final recorder = ui.PictureRecorder();
-      final recordingCanvas = Canvas(recorder);
-      _drawSketch(recordingCanvas, size);
-      final picture = recorder.endRecording();
-      onCacheUpdate(picture);
-      canvas.drawPicture(picture);
-    } else {
-      canvas.drawPicture(cachedPicture!);
-    }
-
-    // Draw active elements (current line, lasso, selection)
-    _drawActiveElements(canvas, size);
-  }
-
-  void _drawSketch(Canvas canvas, Size size) {
-    final selectedSet = selectedLines.toSet();
-
-    // We only need saveLayer if there are erasers in the sketch
-    bool hasErasers = sketch.lines.any((l) => l.color == 0);
-    if (hasErasers) {
-      canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
-    }
-
-    for (final line in sketch.lines) {
-      // If line is selected and being dragged, don't draw it in the cache
-      if (selectedSet.contains(line) && dragOffset != Offset.zero) {
-        continue;
-      }
-      _drawLine(canvas, line.points, Color(line.color), line.width);
-    }
-
-    if (hasErasers) {
-      canvas.restore();
-    }
-  }
-
-  void _drawActiveElements(Canvas canvas, Size size) {
-    // Draw dragged lines
-    if (dragOffset != Offset.zero) {
-      for (final line in selectedLines) {
-        canvas.save();
-        canvas.translate(dragOffset.dx, dragOffset.dy);
-        _drawLine(canvas, line.points, Color(line.color), line.width);
-        canvas.restore();
-      }
-    }
-
-    // Draw current line being drawn
-    if (currentLinePoints != null && currentLinePoints!.isNotEmpty) {
-      final isPixelEraser = currentTool == DrawingTool.pixelEraser;
-      if (isPixelEraser) {
-        canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
-        if (cachedPicture != null) {
-          canvas.drawPicture(cachedPicture!);
-        }
-      }
-
-      _drawLine(
-        canvas,
-        currentLinePoints!,
-        isPixelEraser ? const Color(0x00000000) : currentColor,
-        currentWidth,
-        isEraserLine: isPixelEraser,
-      );
-
-      if (isPixelEraser) {
-        canvas.restore();
-      }
-    }
-
-    // Draw Lasso
-    if (lassoPoints != null && lassoPoints!.isNotEmpty) {
-      final paint = Paint()
-        ..color = Colors.blue
-        ..strokeWidth = 1.0
-        ..style = PaintingStyle.stroke;
-
-      final path = Path()..addPolygon(lassoPoints!, false);
-      canvas.drawPath(path, paint);
-    }
-
-    // Draw Selection Bounds
-    if (selectedLines.isNotEmpty) {
-      _drawSelectionBounds(canvas, selectedLines);
-    }
-  }
-
-  void _drawSelectionBounds(Canvas canvas, List<SketchLine> lines) {
-    double minX = double.infinity, maxX = double.negativeInfinity;
-    double minY = double.infinity, maxY = double.negativeInfinity;
-
-    for (final line in lines) {
-      for (final p in line.points) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      }
-    }
-
-    if (minX == double.infinity) return;
-
-    final rect = Rect.fromLTRB(minX, minY, maxX, maxY);
-    final shiftedRect = rect.shift(dragOffset);
-
-    final paint = Paint()
-      ..color = Colors.blue
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-
-    _drawDashedRect(canvas, shiftedRect, paint);
-  }
-
-  void _drawDashedRect(Canvas canvas, Rect rect, Paint paint) {
-    final path = Path()..addRect(rect);
-    const dashWidth = 5.0;
-    const dashSpace = 5.0;
-    double distance = 0.0;
-
-    for (final metric in path.computeMetrics()) {
-      while (distance < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(distance, distance + dashWidth),
-          paint,
-        );
-        distance += dashWidth + dashSpace;
-      }
-    }
-  }
-
-  void _drawLine(
-    Canvas canvas,
-    List<Point> points,
-    Color color,
-    double width, {
-    bool isEraserLine = false,
-  }) {
-    if (points.isEmpty) return;
-
-    final isEraser = isEraserLine || color.value == 0;
-
-    // Smart Color Inversion
-    Color drawColor = color;
-    if (!isEraser) {
-      if (isDark && color.value == Colors.black.value) {
-        drawColor = Colors.white;
-      } else if (!isDark && color.value == Colors.white.value) {
-        drawColor = Colors.black;
-      }
-    }
-
-    final paint = Paint()
-      ..color = isEraser ? Colors.black : drawColor
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke
-      ..blendMode = isEraser ? BlendMode.clear : BlendMode.srcOver;
-
-    if (points.length == 1) {
-      final point = points[0];
-      final pressure = point.pressure;
-      final currentWidth = width * (0.4 + pressure * 0.6);
-      canvas.drawCircle(
-        Offset(point.x, point.y),
-        currentWidth / 2,
-        paint..style = PaintingStyle.fill,
-      );
-    } else {
-      // Optimization: At low zoom levels, pressure variations are not visible.
-      // Using drawPath is significantly faster than segment-by-segment drawing.
-      if (scale < 0.5) {
-        paint.strokeWidth = width * 0.7; // Use a fixed average width
-        final path = Path();
-        path.moveTo(points[0].x, points[0].y);
-        for (int i = 1; i < points.length; i++) {
-          path.lineTo(points[i].x, points[i].y);
-        }
-        canvas.drawPath(path, paint);
-      } else {
-        for (int i = 0; i < points.length - 1; i++) {
-          final p1 = points[i];
-          final p2 = points[i + 1];
-
-          // Average pressure for the segment
-          final pressure = (p1.pressure + p2.pressure) / 2;
-          final currentWidth = width * (0.2 + pressure * 0.6);
-
-          paint.strokeWidth = currentWidth;
-          canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), paint);
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(FastSketchPainter oldDelegate) {
-    return oldDelegate.sketch != sketch ||
-        oldDelegate.currentLinePoints != currentLinePoints ||
-        oldDelegate.currentColor != currentColor ||
-        oldDelegate.currentWidth != currentWidth ||
-        oldDelegate.currentTool != currentTool ||
-        oldDelegate.selectedLines != selectedLines ||
-        oldDelegate.lassoPoints != lassoPoints ||
-        oldDelegate.dragOffset != dragOffset ||
-        oldDelegate.isDark != isDark ||
-        oldDelegate.cachedPicture != cachedPicture;
   }
 }

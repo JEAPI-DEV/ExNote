@@ -7,6 +7,7 @@ class AppConfig {
     {'id': 'z-ai/glm-4.6v', 'name': 'GLM 4.6V'},
     {'id': 'nvidia/nemotron-nano-12b-v2-vl:free', 'name': 'FREE:NV Nano V2'},
     {'id': 'qwen/qwen3-vl-235b-a22b-thinking', 'name': 'Qwen3 VL 235B'},
+    // {'id': 'deepseek/deepseek-v3.2-speciale', 'name': 'DeepSeek V3.2 Speciale'}, nice model but has no image viewing capability
   ];
 
   static const String defaultAiModel = 'google/gemini-2.0-flash-exp:free';
