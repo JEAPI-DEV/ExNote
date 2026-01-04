@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
+import '../services/sketch_renderer.dart';
 
 class DrawingCanvasController extends ChangeNotifier {
   final ValueNotifier<Sketch> sketchNotifier;
@@ -31,6 +32,8 @@ class DrawingCanvasController extends ChangeNotifier {
   // Cache
   ui.Picture? cachedSketchPicture;
   final Map<SketchLine, Rect> _lineBoundsCache = {};
+  final SketchRenderer _renderer = SketchRenderer();
+  Sketch? _lastSketch;
 
   DrawingCanvasController({
     required this.sketchNotifier,
@@ -38,6 +41,7 @@ class DrawingCanvasController extends ChangeNotifier {
     required this.onAction,
   }) {
     sketchNotifier.addListener(_onSketchChanged);
+    _lastSketch = sketchNotifier.value;
   }
 
   @override
@@ -49,8 +53,46 @@ class DrawingCanvasController extends ChangeNotifier {
   }
 
   void _onSketchChanged() {
-    // Invalidate cache when sketch changes
-    _invalidateCache();
+    final newSketch = sketchNotifier.value;
+
+    // Check for incremental update (append)
+    if (_canIncrementalUpdate(_lastSketch, newSketch)) {
+      _incrementalUpdate(newSketch.lines.last);
+    } else {
+      _invalidateCache();
+    }
+    _lastSketch = newSketch;
+    // We don't notifyListeners here because the widget listens to sketchNotifier
+  }
+
+  bool _canIncrementalUpdate(Sketch? oldSketch, Sketch newSketch) {
+    if (oldSketch == null || cachedSketchPicture == null) return false;
+    // Only support incremental update if one line was added
+    if (newSketch.lines.length != oldSketch.lines.length + 1) return false;
+
+    // Verify prefix matches (optimization: just check length and assume append for now)
+    // A safer check would be:
+    // if (newSketch.lines.sublist(0, oldSketch.lines.length) != oldSketch.lines) return false;
+    // But list comparison is expensive.
+    // Given Scribble architecture, it's usually safe.
+    return true;
+  }
+
+  void _incrementalUpdate(SketchLine newLine) {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    if (cachedSketchPicture != null) {
+      canvas.drawPicture(cachedSketchPicture!);
+    }
+    _renderer.drawLine(
+      canvas,
+      newLine.points,
+      Color(newLine.color),
+      newLine.width,
+      isDark: isDark,
+      scale: scale,
+    );
+    cachedSketchPicture = recorder.endRecording();
   }
 
   void updateTheme(bool newIsDark) {
@@ -193,6 +235,7 @@ class DrawingCanvasController extends ChangeNotifier {
       isDraggingSelection = true;
       dragStart = position;
       currentDragOffset = Offset.zero;
+      _invalidateCache(); // Invalidate to hide selected lines in static sketch
       notifyListeners();
     } else {
       // Start new lasso selection

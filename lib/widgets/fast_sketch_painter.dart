@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
+import '../services/sketch_renderer.dart';
 
 class FastSketchPainter extends CustomPainter {
   final Sketch sketch;
@@ -12,12 +13,15 @@ class FastSketchPainter extends CustomPainter {
   final List<SketchLine> selectedLines;
   final List<Offset>? lassoPoints;
   final Offset dragOffset;
+  final bool isDraggingSelection;
   final bool isDark;
   final double scale;
 
   // Caching
   final ui.Picture? cachedPicture;
   final Function(ui.Picture) onCacheUpdate;
+
+  final SketchRenderer _renderer = SketchRenderer();
 
   FastSketchPainter({
     required this.sketch,
@@ -28,6 +32,7 @@ class FastSketchPainter extends CustomPainter {
     this.selectedLines = const [],
     this.lassoPoints,
     this.dragOffset = Offset.zero,
+    this.isDraggingSelection = false,
     this.isDark = false,
     this.scale = 1.0,
     this.cachedPicture,
@@ -38,10 +43,13 @@ class FastSketchPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // Draw cached sketch
     if (cachedPicture == null) {
-      final recorder = ui.PictureRecorder();
-      final recordingCanvas = Canvas(recorder);
-      _drawSketch(recordingCanvas, size);
-      final picture = recorder.endRecording();
+      final picture = _renderer.renderSketch(
+        sketch: sketch,
+        isDark: isDark,
+        scale: scale,
+        selectedLines: selectedLines,
+        skipSelectedLines: isDraggingSelection,
+      );
       onCacheUpdate(picture);
       canvas.drawPicture(picture);
     } else {
@@ -52,35 +60,20 @@ class FastSketchPainter extends CustomPainter {
     _drawActiveElements(canvas, size);
   }
 
-  void _drawSketch(Canvas canvas, Size size) {
-    final selectedSet = selectedLines.toSet();
-
-    // We only need saveLayer if there are erasers in the sketch
-    bool hasErasers = sketch.lines.any((l) => l.color == 0);
-    if (hasErasers) {
-      canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
-    }
-
-    for (final line in sketch.lines) {
-      // If line is selected and being dragged, don't draw it in the cache
-      if (selectedSet.contains(line) && dragOffset != Offset.zero) {
-        continue;
-      }
-      _drawLine(canvas, line.points, Color(line.color), line.width);
-    }
-
-    if (hasErasers) {
-      canvas.restore();
-    }
-  }
-
   void _drawActiveElements(Canvas canvas, Size size) {
     // Draw dragged lines
-    if (dragOffset != Offset.zero) {
+    if (isDraggingSelection || dragOffset != Offset.zero) {
       for (final line in selectedLines) {
         canvas.save();
         canvas.translate(dragOffset.dx, dragOffset.dy);
-        _drawLine(canvas, line.points, Color(line.color), line.width);
+        _renderer.drawLine(
+          canvas,
+          line.points,
+          Color(line.color),
+          line.width,
+          isDark: isDark,
+          scale: scale,
+        );
         canvas.restore();
       }
     }
@@ -95,12 +88,14 @@ class FastSketchPainter extends CustomPainter {
         }
       }
 
-      _drawLine(
+      _renderer.drawLine(
         canvas,
         currentLinePoints!,
         isPixelEraser ? const Color(0x00000000) : currentColor,
         currentWidth,
         isEraserLine: isPixelEraser,
+        isDark: isDark,
+        scale: scale,
       );
 
       if (isPixelEraser) {
@@ -168,70 +163,6 @@ class FastSketchPainter extends CustomPainter {
     }
   }
 
-  void _drawLine(
-    Canvas canvas,
-    List<Point> points,
-    Color color,
-    double width, {
-    bool isEraserLine = false,
-  }) {
-    if (points.isEmpty) return;
-
-    final isEraser = isEraserLine || color.value == 0;
-
-    // Smart Color Inversion
-    Color drawColor = color;
-    if (!isEraser) {
-      if (isDark && color.value == Colors.black.value) {
-        drawColor = Colors.white;
-      } else if (!isDark && color.value == Colors.white.value) {
-        drawColor = Colors.black;
-      }
-    }
-
-    final paint = Paint()
-      ..color = isEraser ? Colors.black : drawColor
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke
-      ..blendMode = isEraser ? BlendMode.clear : BlendMode.srcOver;
-
-    if (points.length == 1) {
-      final point = points[0];
-      final pressure = point.pressure;
-      final currentWidth = width * (0.4 + pressure * 0.6);
-      canvas.drawCircle(
-        Offset(point.x, point.y),
-        currentWidth / 2,
-        paint..style = PaintingStyle.fill,
-      );
-    } else {
-      // Optimization: At low zoom levels, pressure variations are not visible.
-      // Using drawPath is significantly faster than segment-by-segment drawing.
-      if (scale < 0.5) {
-        paint.strokeWidth = width * 0.7; // Use a fixed average width
-        final path = Path();
-        path.moveTo(points[0].x, points[0].y);
-        for (int i = 1; i < points.length; i++) {
-          path.lineTo(points[i].x, points[i].y);
-        }
-        canvas.drawPath(path, paint);
-      } else {
-        for (int i = 0; i < points.length - 1; i++) {
-          final p1 = points[i];
-          final p2 = points[i + 1];
-
-          // Average pressure for the segment
-          final pressure = (p1.pressure + p2.pressure) / 2;
-          final currentWidth = width * (0.2 + pressure * 0.6);
-
-          paint.strokeWidth = currentWidth;
-          canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), paint);
-        }
-      }
-    }
-  }
-
   @override
   bool shouldRepaint(FastSketchPainter oldDelegate) {
     return oldDelegate.sketch != sketch ||
@@ -242,6 +173,7 @@ class FastSketchPainter extends CustomPainter {
         oldDelegate.selectedLines != selectedLines ||
         oldDelegate.lassoPoints != lassoPoints ||
         oldDelegate.dragOffset != dragOffset ||
+        oldDelegate.isDraggingSelection != isDraggingSelection ||
         oldDelegate.isDark != isDark ||
         oldDelegate.cachedPicture != cachedPicture;
   }

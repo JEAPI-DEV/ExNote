@@ -98,6 +98,7 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
                           selectedLines: selectedLines,
                           lassoPoints: _controller.lassoPoints,
                           dragOffset: _controller.currentDragOffset,
+                          isDraggingSelection: _controller.isDraggingSelection,
                           isDark: isDark,
                           scale: widget.scale,
                           cachedPicture: _controller.cachedSketchPicture,
