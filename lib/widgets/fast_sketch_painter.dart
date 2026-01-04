@@ -4,18 +4,12 @@ import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../services/sketch_renderer.dart';
 
-class FastSketchPainter extends CustomPainter {
+class StaticSketchPainter extends CustomPainter {
   final Sketch sketch;
-  final List<Point>? currentLinePoints;
-  final Color currentColor;
-  final double currentWidth;
-  final DrawingTool currentTool;
-  final List<SketchLine> selectedLines;
-  final List<Offset>? lassoPoints;
-  final Offset dragOffset;
-  final bool isDraggingSelection;
   final bool isDark;
   final double scale;
+  final List<SketchLine> selectedLines;
+  final bool isDraggingSelection;
 
   // Caching
   final ui.Picture? cachedPicture;
@@ -23,25 +17,18 @@ class FastSketchPainter extends CustomPainter {
 
   final SketchRenderer _renderer = SketchRenderer();
 
-  FastSketchPainter({
+  StaticSketchPainter({
     required this.sketch,
-    this.currentLinePoints,
-    required this.currentColor,
-    required this.currentWidth,
-    required this.currentTool,
+    required this.isDark,
+    required this.scale,
     this.selectedLines = const [],
-    this.lassoPoints,
-    this.dragOffset = Offset.zero,
     this.isDraggingSelection = false,
-    this.isDark = false,
-    this.scale = 1.0,
     this.cachedPicture,
     required this.onCacheUpdate,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Draw cached sketch
     if (cachedPicture == null) {
       final picture = _renderer.renderSketch(
         sketch: sketch,
@@ -55,12 +42,52 @@ class FastSketchPainter extends CustomPainter {
     } else {
       canvas.drawPicture(cachedPicture!);
     }
-
-    // Draw active elements (current line, lasso, selection)
-    _drawActiveElements(canvas, size);
   }
 
-  void _drawActiveElements(Canvas canvas, Size size) {
+  @override
+  bool shouldRepaint(StaticSketchPainter oldDelegate) {
+    return oldDelegate.sketch != sketch ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.scale != scale ||
+        oldDelegate.selectedLines != selectedLines ||
+        oldDelegate.isDraggingSelection != isDraggingSelection ||
+        oldDelegate.cachedPicture != cachedPicture;
+  }
+}
+
+class ActiveSketchPainter extends CustomPainter {
+  final List<Point>? currentLinePoints;
+  final Color currentColor;
+  final double currentWidth;
+  final DrawingTool currentTool;
+  final List<SketchLine> selectedLines;
+  final List<Offset>? lassoPoints;
+  final Offset dragOffset;
+  final bool isDraggingSelection;
+  final bool isDark;
+  final double scale;
+
+  // Needed for pixel eraser masking
+  final ui.Picture? cachedPicture;
+
+  final SketchRenderer _renderer = SketchRenderer();
+
+  ActiveSketchPainter({
+    this.currentLinePoints,
+    required this.currentColor,
+    required this.currentWidth,
+    required this.currentTool,
+    this.selectedLines = const [],
+    this.lassoPoints,
+    this.dragOffset = Offset.zero,
+    this.isDraggingSelection = false,
+    this.isDark = false,
+    this.scale = 1.0,
+    this.cachedPicture,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
     // Draw dragged lines
     if (isDraggingSelection || dragOffset != Offset.zero) {
       for (final line in selectedLines) {
@@ -164,9 +191,8 @@ class FastSketchPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(FastSketchPainter oldDelegate) {
-    return oldDelegate.sketch != sketch ||
-        oldDelegate.currentLinePoints != currentLinePoints ||
+  bool shouldRepaint(ActiveSketchPainter oldDelegate) {
+    return oldDelegate.currentLinePoints != currentLinePoints ||
         oldDelegate.currentColor != currentColor ||
         oldDelegate.currentWidth != currentWidth ||
         oldDelegate.currentTool != currentTool ||
@@ -175,6 +201,7 @@ class FastSketchPainter extends CustomPainter {
         oldDelegate.dragOffset != dragOffset ||
         oldDelegate.isDraggingSelection != isDraggingSelection ||
         oldDelegate.isDark != isDark ||
+        oldDelegate.scale != scale ||
         oldDelegate.cachedPicture != cachedPicture;
   }
 }

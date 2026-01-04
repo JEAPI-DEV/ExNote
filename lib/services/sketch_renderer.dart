@@ -54,20 +54,85 @@ class SketchRenderer {
           path.lineTo(points[i].x, points[i].y);
         }
         canvas.drawPath(path, paint);
-      } else {
-        for (int i = 0; i < points.length - 1; i++) {
-          final p1 = points[i];
-          final p2 = points[i + 1];
-
-          // Average pressure for the segment
-          final pressure = (p1.pressure + p2.pressure) / 2;
-          final currentWidth = width * (0.2 + pressure * 0.6);
-
-          paint.strokeWidth = currentWidth;
-          canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), paint);
+      } else if (scale < 0.8) {
+        // Medium zoom: Use simplified path with fewer segments
+        // Adjust width to match visual weight of pressure-sensitive lines
+        paint.strokeWidth = width * 0.8;
+        final path = Path();
+        path.moveTo(points[0].x, points[0].y);
+        // Skip every other point to reduce drawing calls
+        for (int i = 1; i < points.length; i += 2) {
+          path.lineTo(points[i].x, points[i].y);
         }
+        // Ensure last point is drawn
+        if (points.length > 1) {
+          path.lineTo(points.last.x, points.last.y);
+        }
+        canvas.drawPath(path, paint);
+      } else {
+        // High quality rendering using vertices for variable width
+        _drawSmoothLine(canvas, points, paint, width);
       }
     }
+  }
+
+  void _drawSmoothLine(
+    Canvas canvas,
+    List<Point> points,
+    Paint paint,
+    double baseWidth,
+  ) {
+    if (points.length < 2) return;
+
+    final vertices = <Offset>[];
+    final indices = <int>[];
+
+    for (int i = 0; i < points.length; i++) {
+      final p = points[i];
+      final pressure = p.pressure;
+      final radius = (baseWidth * (0.2 + pressure * 0.6)) / 2;
+
+      // Calculate direction
+      Offset dir;
+      if (i == 0) {
+        dir = Offset(points[1].x - p.x, points[1].y - p.y);
+      } else if (i == points.length - 1) {
+        dir = Offset(p.x - points[i - 1].x, p.y - points[i - 1].y);
+      } else {
+        // Average direction
+        final prev = points[i - 1];
+        final next = points[i + 1];
+        dir = Offset(next.x - prev.x, next.y - prev.y);
+      }
+
+      final distance = dir.distance;
+      if (distance == 0) {
+        vertices.add(Offset(p.x, p.y));
+        vertices.add(Offset(p.x, p.y));
+        continue;
+      }
+
+      // Normalize and rotate 90 degrees
+      final normal = Offset(-dir.dy / distance, dir.dx / distance);
+
+      vertices.add(Offset(p.x + normal.dx * radius, p.y + normal.dy * radius));
+      vertices.add(Offset(p.x - normal.dx * radius, p.y - normal.dy * radius));
+    }
+
+    // Generate triangle strip indices
+    for (int i = 0; i < points.length - 1; i++) {
+      final base = i * 2;
+      indices.addAll([base, base + 1, base + 2, base + 1, base + 3, base + 2]);
+    }
+
+    final vertexMode = ui.VertexMode.triangles;
+    final uiVertices = ui.Vertices(vertexMode, vertices, indices: indices);
+
+    canvas.drawVertices(
+      uiVertices,
+      BlendMode.srcOver,
+      paint..style = PaintingStyle.fill,
+    );
   }
 
   /// Renders the sketch into a Picture.

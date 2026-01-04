@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
-import '../services/sketch_renderer.dart';
 
 class DrawingCanvasController extends ChangeNotifier {
   final ValueNotifier<Sketch> sketchNotifier;
@@ -14,8 +13,28 @@ class DrawingCanvasController extends ChangeNotifier {
   Color currentColor = Colors.black;
   double currentWidth = 2.0;
   DrawingTool currentTool = DrawingTool.pen;
-  double scale = 1.0;
+
+  double _scale = 1.0;
+  double get scale => _scale;
+  set scale(double value) {
+    if (_scale == value) return;
+    final oldLod = _getLodLevel(_scale);
+    final newLod = _getLodLevel(value);
+    _scale = value;
+
+    if (oldLod != newLod) {
+      _invalidateCache();
+      notifyListeners();
+    }
+  }
+
   bool isDark = false;
+
+  int _getLodLevel(double s) {
+    if (s < 0.5) return 0;
+    if (s < 0.8) return 1;
+    return 2;
+  }
 
   // Transient State
   final ValueNotifier<List<Point>?> currentLineNotifier = ValueNotifier(null);
@@ -32,8 +51,6 @@ class DrawingCanvasController extends ChangeNotifier {
   // Cache
   ui.Picture? cachedSketchPicture;
   final Map<SketchLine, Rect> _lineBoundsCache = {};
-  final SketchRenderer _renderer = SketchRenderer();
-  Sketch? _lastSketch;
 
   DrawingCanvasController({
     required this.sketchNotifier,
@@ -41,7 +58,6 @@ class DrawingCanvasController extends ChangeNotifier {
     required this.onAction,
   }) {
     sketchNotifier.addListener(_onSketchChanged);
-    _lastSketch = sketchNotifier.value;
   }
 
   @override
@@ -53,46 +69,14 @@ class DrawingCanvasController extends ChangeNotifier {
   }
 
   void _onSketchChanged() {
-    final newSketch = sketchNotifier.value;
+    // Always invalidate cache on sketch change to prevent picture nesting depth issues.
+    // While incremental updates are faster for a single frame, they create a chain of
+    // nested pictures that degrades performance over time (O(N) depth).
+    // Since we use RepaintBoundary for the static layer, the cost of redrawing the
+    // full sketch on PointerUp is acceptable and keeps the rendering tree flat.
+    _invalidateCache();
 
-    // Check for incremental update (append)
-    if (_canIncrementalUpdate(_lastSketch, newSketch)) {
-      _incrementalUpdate(newSketch.lines.last);
-    } else {
-      _invalidateCache();
-    }
-    _lastSketch = newSketch;
     // We don't notifyListeners here because the widget listens to sketchNotifier
-  }
-
-  bool _canIncrementalUpdate(Sketch? oldSketch, Sketch newSketch) {
-    if (oldSketch == null || cachedSketchPicture == null) return false;
-    // Only support incremental update if one line was added
-    if (newSketch.lines.length != oldSketch.lines.length + 1) return false;
-
-    // Verify prefix matches (optimization: just check length and assume append for now)
-    // A safer check would be:
-    // if (newSketch.lines.sublist(0, oldSketch.lines.length) != oldSketch.lines) return false;
-    // But list comparison is expensive.
-    // Given Scribble architecture, it's usually safe.
-    return true;
-  }
-
-  void _incrementalUpdate(SketchLine newLine) {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    if (cachedSketchPicture != null) {
-      canvas.drawPicture(cachedSketchPicture!);
-    }
-    _renderer.drawLine(
-      canvas,
-      newLine.points,
-      Color(newLine.color),
-      newLine.width,
-      isDark: isDark,
-      scale: scale,
-    );
-    cachedSketchPicture = recorder.endRecording();
   }
 
   void updateTheme(bool newIsDark) {
