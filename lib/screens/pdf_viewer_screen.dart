@@ -303,8 +303,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       if (renderBox == null) return;
       final viewSize = renderBox.size;
       final viewAspectRatio = viewSize.width / viewSize.height;
-
-      // Calculate screen tops for all pages to find which pages are spanned
       List<double> pageScreenTops = [];
       List<double> pageScreenHeights = [];
       double cumTop = 0;
@@ -321,7 +319,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         cumTop += actualPageHeight;
       }
 
-      // Find start and end page indices
       int startPageIndex = -1;
       int endPageIndex = -1;
 
@@ -329,7 +326,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         final top = pageScreenTops[i];
         final bottom = top + pageScreenHeights[i];
 
-        // Check if selection overlaps with this page
         if (_selectionRect!.bottom > top && _selectionRect!.top < bottom) {
           if (startPageIndex == -1) startPageIndex = i;
           endPageIndex = i;
@@ -342,7 +338,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         int totalWidth = 0;
         int totalHeight = 0;
 
-        // Render all spanned pages
         for (int i = startPageIndex; i <= endPageIndex; i++) {
           final page = await document.getPage(i + 1);
           final pageImage = await page.render(
@@ -362,12 +357,10 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         }
 
         if (renderedPages.isNotEmpty) {
-          // Stitch pages together
           final stitchedImage = img.Image(
             width: totalWidth,
             height: totalHeight,
           );
-          // Fill with white in case pages have different widths
           img.fill(stitchedImage, color: img.ColorRgb8(255, 255, 255));
 
           int currentY = 0;
@@ -376,7 +369,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
             currentY += pageImg.height;
           }
 
-          // Calculate selection relative to the start page's top
           final firstPage = await document.getPage(startPageIndex + 1);
           final firstPageAspectRatio = firstPage.width / firstPage.height;
 
@@ -390,7 +382,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
             offsetX = (viewSize.width - actualFirstPageWidth) / 2;
           }
 
-          // Selection relative to the top of the first spanned page
           final relativeLeft =
               (_selectionRect!.left - offsetX) / actualFirstPageWidth;
           final relativeTop =
@@ -398,12 +389,10 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
               pageScreenHeights[startPageIndex];
           final relativeWidth = _selectionRect!.width / actualFirstPageWidth;
 
-          // Crop coordinates on the stitched image
           int cropX = (relativeLeft * firstPage.width * scaleFactor).toInt();
           int cropY = (relativeTop * firstPage.height * scaleFactor).toInt();
           int cropWidth = (relativeWidth * firstPage.width * scaleFactor)
               .toInt();
-          // For height, we need to be careful. Selection height in pixels on stitched image:
           // (Selection Height / Screen Height of Page) * PDF Height of Page * Scale
           int cropHeight =
               ((_selectionRect!.height / pageScreenHeights[startPageIndex]) *
@@ -424,7 +413,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
             height: cropHeight,
           );
 
-          // Add white background with padding
           const int padding = 20;
           final bgWidth = croppedImage.width + 2 * padding;
           final bgHeight = croppedImage.height + 2 * padding;
@@ -456,7 +444,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       return;
     }
 
-    // Save selection metadata (using start page as reference)
     final document2 = await _pdfController.document;
     final renderBox =
         _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;

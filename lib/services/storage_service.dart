@@ -58,8 +58,6 @@ class StorageService {
 }
 
 String _serializeFolders(List<Folder> folders) {
-  // DO NOT clear scribbleData here anymore.
-  // We will handle clearing it only after we are 100% sure it's migrated.
   final jsonList = folders.map((f) => f.toJson()).toList();
   return jsonEncode(jsonList);
 }

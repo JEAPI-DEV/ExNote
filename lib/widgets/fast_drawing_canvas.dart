@@ -5,8 +5,6 @@ import '../models/undo_action.dart';
 import '../controllers/drawing_canvas_controller.dart';
 import 'fast_sketch_painter.dart';
 
-/// High-performance custom drawing widget that's compatible with Scribble's
-/// Sketch format but uses raw Listener for immediate pointer event processing.
 class FastDrawingCanvas extends StatefulWidget {
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;

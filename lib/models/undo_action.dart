@@ -31,18 +31,14 @@ class RemoveLinesAction extends UndoAction {
 
   @override
   void undo(List<SketchLine> lines) {
-    // Create a list of pairs (index, line) and sort by index
     final indexedLines = <_IndexedLine>[];
     for (int i = 0; i < removedLines.length; i++) {
       indexedLines.add(_IndexedLine(originalIndices[i], removedLines[i]));
     }
 
-    // Sort ascending by index to ensure that when we insert,
-    // we don't shift the positions of lines we haven't inserted yet.
     indexedLines.sort((a, b) => a.index.compareTo(b.index));
 
     for (final item in indexedLines) {
-      // Ensure we don't insert out of bounds (shouldn't happen with correct indices)
       final index = item.index.clamp(0, lines.length);
       lines.insert(index, item.line);
     }

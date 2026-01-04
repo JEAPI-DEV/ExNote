@@ -39,10 +39,9 @@ class GridPainter extends CustomPainter {
 
     final paint = Paint()
       ..color = Colors.grey.withOpacity(0.3)
-      ..strokeWidth = 1.0; // Constant world-space width
+      ..strokeWidth = 1.0;
 
     if (gridType == GridType.grid) {
-      // Draw grid (vertical and horizontal lines for math)
       for (
         double x = (minX / spacing).floor() * spacing;
         x <= maxX;
@@ -59,7 +58,6 @@ class GridPainter extends CustomPainter {
         canvas.drawLine(Offset(minX, y), Offset(maxX, y), paint);
       }
     } else {
-      // Draw horizontal lines only (for writing)
       for (
         double y = (minY / spacing).floor() * spacing;
         y <= maxY;

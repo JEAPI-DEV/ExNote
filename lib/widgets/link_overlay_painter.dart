@@ -33,11 +33,6 @@ class LinkOverlayPainter extends CustomPainter {
       textAlign: TextAlign.center,
     );
 
-    // Pre-calculate page layout
-    // Note: In a real optimization, this should be cached outside paint if viewSize/pages don't change.
-    // But this is still O(Pages) which is much smaller than O(Selections) usually,
-    // and definitely faster than Widget building.
-
     final viewAspectRatio = viewSize.width / viewSize.height;
     final pageOffsets = <double>[0];
     double currentOffset = 0;

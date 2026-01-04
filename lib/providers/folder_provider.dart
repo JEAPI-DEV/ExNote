@@ -71,10 +71,8 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     String scribbleData,
     String? screenshotPath,
   ) async {
-    // Save sketch data to separate file
     await _storage.saveNote(noteId, scribbleData);
 
-    // Update state (we still keep it in memory for now, but scribbleData in folders.json will be empty on next save)
     state = [
       for (final folder in state)
         if (folder.id == folderId)
@@ -83,7 +81,7 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
               ...folder.notes,
               noteId: Note(
                 id: noteId,
-                scribbleData: "", // Don't store large data in the global state
+                scribbleData: "",
                 screenshotPath: screenshotPath,
               ),
             },

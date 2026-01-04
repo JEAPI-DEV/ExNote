@@ -39,9 +39,7 @@ class AiService {
 
       for (int i = 0; i < history.length; i++) {
         final msg = history[i];
-        // Include image if:
-        // 1. It exists AND
-        // 2. We are NOT restricting to last image OR this IS the last image
+
         final shouldIncludeImage =
             msg.base64Image != null &&
             (!submitLastImageOnly || i == lastImageIndex);
@@ -74,12 +72,11 @@ class AiService {
           'Content-Type': 'application/json',
           'HTTP-Referer':
               'https://github.com/jeapi/excerciser', // Required by OpenRouter
-          'X-Title': 'ExNote', // Optional
+          'X-Title': 'ExNote',
         },
         body: jsonEncode({
           'model': model,
           'messages': messages,
-          // Optional parameters for better control
           'temperature': 0.7,
           'top_p': 1.0,
         }),
@@ -92,10 +89,8 @@ class AiService {
           final message = choice['message'];
           String content = message['content'] ?? '';
 
-          // Handle reasoning/thought process if available (e.g. for reasoning models)
           final reasoning = message['reasoning'];
           if (reasoning != null && reasoning.toString().isNotEmpty) {
-            // Format reasoning as a blockquote
             content =
                 '> **Reasoning:**\n> ${reasoning.toString().replaceAll('\n', '\n> ')}\n\n$content';
           }

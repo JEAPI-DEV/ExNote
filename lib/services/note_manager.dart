@@ -33,18 +33,15 @@ class NoteManager {
           .read(folderProvider)
           .firstWhere((f) => f.id == folderId);
 
-      // Load sketch data from separate file
       String? scribbleData = await ref
           .read(folderProvider.notifier)
           .loadNoteData(noteId);
 
-      // Migration Path: If new file is missing, check legacy data in folders.json
       if (scribbleData == null || scribbleData.isEmpty) {
         final legacyNote = folder.notes[noteId];
         if (legacyNote != null && legacyNote.scribbleData.isNotEmpty) {
           debugPrint('Migrating legacy note data for $noteId');
           scribbleData = legacyNote.scribbleData;
-          // Save to new format immediately
           await ref
               .read(folderProvider.notifier)
               .updateNote(
@@ -62,22 +59,18 @@ class NoteManager {
           final loadedSketch = Sketch.fromJson(sketchJson);
 
           sketchNotifier.value = loadedSketch;
-
-          // Reset history to start with this loaded sketch
           undoRedoManager.clear();
         } catch (e) {
           debugPrint('Error loading note: $e');
         }
       }
 
-      // Load screenshot if exists
       final list = folder.exerciseLists.firstWhere(
         (l) => l.id == exerciseListId,
       );
       final selection = list.selections.firstWhere((s) => s.id == selectionId);
 
       if (selection.screenshotPath != null) {
-        // Get image dimensions
         final image = Image.file(File(selection.screenshotPath!));
         image.image
             .resolve(const ImageConfiguration())

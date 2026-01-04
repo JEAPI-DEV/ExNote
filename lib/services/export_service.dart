@@ -114,24 +114,19 @@ class ExportService {
 
   static Future<Directory> _getExportDirectory() async {
     if (Platform.isAndroid) {
-      // Standard public Download folder
       final downloadDir = Directory('/storage/emulated/0/Download');
       if (await downloadDir.exists()) {
         return downloadDir;
       }
 
-      // Fallback to Documents if Download doesn't exist
       final documentsDir = Directory('/storage/emulated/0/Documents');
       if (await documentsDir.exists()) {
         return documentsDir;
       }
 
-      // Fallback to app-specific external storage
       final externalDir = await getExternalStorageDirectory();
       if (externalDir != null) return externalDir;
     }
-
-    // On iOS or as final fallback, use application documents directory
     return await getApplicationDocumentsDirectory();
   }
 }

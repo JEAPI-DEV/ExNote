@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 
 class SketchRenderer {
-  /// Draws a single line on the canvas.
   void drawLine(
     Canvas canvas,
     List<Point> points,
@@ -16,8 +15,6 @@ class SketchRenderer {
     if (points.isEmpty) return;
 
     final isEraser = isEraserLine || color.value == 0;
-
-    // Smart Color Inversion
     Color drawColor = color;
     if (!isEraser) {
       if (isDark && color.value == Colors.black.value) {
@@ -44,19 +41,16 @@ class SketchRenderer {
         paint..style = PaintingStyle.fill,
       );
     } else {
-      // Optimization: At low zoom levels, pressure variations are not visible.
-      // Using drawPath is significantly faster than segment-by-segment drawing.
       if (scale < 0.5) {
-        paint.strokeWidth = width * 0.7; // Use a fixed average width
+        paint.strokeWidth = width * 0.7;
         final path = Path();
         path.moveTo(points[0].x, points[0].y);
         for (int i = 1; i < points.length; i++) {
           path.lineTo(points[i].x, points[i].y);
         }
         canvas.drawPath(path, paint);
+        // if zoom is 80% or less
       } else if (scale < 0.8) {
-        // Medium zoom: Use simplified path with fewer segments
-        // Adjust width to match visual weight of pressure-sensitive lines
         paint.strokeWidth = width * 0.8;
         final path = Path();
         path.moveTo(points[0].x, points[0].y);
@@ -64,13 +58,11 @@ class SketchRenderer {
         for (int i = 1; i < points.length; i += 2) {
           path.lineTo(points[i].x, points[i].y);
         }
-        // Ensure last point is drawn
         if (points.length > 1) {
           path.lineTo(points.last.x, points.last.y);
         }
         canvas.drawPath(path, paint);
       } else {
-        // High quality rendering using vertices for variable width
         _drawSmoothLine(canvas, points, paint, width);
       }
     }
@@ -112,14 +104,12 @@ class SketchRenderer {
         continue;
       }
 
-      // Normalize and rotate 90 degrees
       final normal = Offset(-dir.dy / distance, dir.dx / distance);
 
       vertices.add(Offset(p.x + normal.dx * radius, p.y + normal.dy * radius));
       vertices.add(Offset(p.x - normal.dx * radius, p.y - normal.dy * radius));
     }
 
-    // Generate triangle strip indices
     for (int i = 0; i < points.length - 1; i++) {
       final base = i * 2;
       indices.addAll([base, base + 1, base + 2, base + 1, base + 3, base + 2]);
@@ -135,7 +125,6 @@ class SketchRenderer {
     );
   }
 
-  /// Renders the sketch into a Picture.
   ui.Picture renderSketch({
     required Sketch sketch,
     required bool isDark,
@@ -146,7 +135,6 @@ class SketchRenderer {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    // We only need saveLayer if there are erasers in the sketch
     bool hasErasers = sketch.lines.any((l) => l.color == 0);
 
     if (hasErasers) {
@@ -156,7 +144,6 @@ class SketchRenderer {
     final selectedSet = selectedLines.toSet();
 
     for (final line in sketch.lines) {
-      // If line is selected and we should skip it (e.g. being dragged), don't draw it in the cache
       if (selectedSet.contains(line) && skipSelectedLines) {
         continue;
       }
