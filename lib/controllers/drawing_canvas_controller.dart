@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
@@ -149,15 +150,43 @@ class DrawingCanvasController extends ChangeNotifier {
 
     if (currentLineNotifier.value == null) return;
 
-    // Optimize: Add to existing list instead of creating new one every move
     final points = currentLineNotifier.value!;
-    points.add(
-      Point(
-        event.localPosition.dx,
-        event.localPosition.dy,
-        pressure: event.pressure,
-      ),
+    if (points.isEmpty) return;
+
+    final lastPoint = points.last;
+    final currentPoint = Point(
+      event.localPosition.dx,
+      event.localPosition.dy,
+      pressure: event.pressure,
     );
+
+    // Calculate distance in canvas coordinates
+    final dx = currentPoint.x - lastPoint.x;
+    final dy = currentPoint.y - lastPoint.y;
+    final distance = math.sqrt(dx * dx + dy * dy);
+
+    // Interpolate points if the distance in screen coordinates is too large.
+    // This ensures high quality drawing even when zoomed out.
+    final screenDistance = distance * _scale;
+    const double kThreshold = 2.0; // 2 screen pixels
+
+    if (screenDistance > kThreshold) {
+      final int steps = (screenDistance / kThreshold).floor();
+      for (int i = 1; i < steps; i++) {
+        final t = i / steps;
+        points.add(
+          Point(
+            lastPoint.x + dx * t,
+            lastPoint.y + dy * t,
+            pressure:
+                lastPoint.pressure +
+                (currentPoint.pressure - lastPoint.pressure) * t,
+          ),
+        );
+      }
+    }
+
+    points.add(currentPoint);
     currentLineNotifier.value = List.from(points);
   }
 
