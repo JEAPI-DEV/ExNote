@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
+import '../models/grid_type.dart';
 
 class SketchRenderer {
   void drawLine(
@@ -41,30 +42,30 @@ class SketchRenderer {
         paint..style = PaintingStyle.fill,
       );
     } else {
-      if (scale < 0.5) {
-        paint.strokeWidth = width * 0.7;
-        final path = Path();
-        path.moveTo(points[0].x, points[0].y);
-        for (int i = 1; i < points.length; i++) {
-          path.lineTo(points[i].x, points[i].y);
-        }
-        canvas.drawPath(path, paint);
-        // if zoom is 80% or less
-      } else if (scale < 0.8) {
-        paint.strokeWidth = width * 0.8;
-        final path = Path();
-        path.moveTo(points[0].x, points[0].y);
-        // Skip every other point to reduce drawing calls
-        for (int i = 1; i < points.length; i += 2) {
-          path.lineTo(points[i].x, points[i].y);
-        }
-        if (points.length > 1) {
-          path.lineTo(points.last.x, points.last.y);
-        }
-        canvas.drawPath(path, paint);
-      } else {
-        _drawSmoothLine(canvas, points, paint, width);
-      }
+      // if (scale < 0.5) {
+      //   paint.strokeWidth = width * 0.5;
+      //   final path = Path();
+      //   path.moveTo(points[0].x, points[0].y);
+      //   for (int i = 1; i < points.length; i++) {
+      //     path.lineTo(points[i].x, points[i].y);
+      //   }
+      //   canvas.drawPath(path, paint);
+      // if zoom is 80% or less
+      // } else if (scale < 0.8) {
+      //   paint.strokeWidth = width * 0.8;
+      //   final path = Path();
+      //   path.moveTo(points[0].x, points[0].y);
+      //   // Skip every other point to reduce drawing calls
+      //   for (int i = 1; i < points.length; i += 2) {
+      //     path.lineTo(points[i].x, points[i].y);
+      //   }
+      //   if (points.length > 1) {
+      //     path.lineTo(points.last.x, points.last.y);
+      //   }
+      //   canvas.drawPath(path, paint);
+      // } else {
+      _drawSmoothLine(canvas, points, paint, width);
+      // }
     }
   }
 
@@ -162,5 +163,84 @@ class SketchRenderer {
     }
 
     return recorder.endRecording();
+  }
+
+  Future<ui.Image> renderToImage(
+    Sketch sketch, {
+    required Size size,
+    ui.Image? backgroundImage,
+    Rect? backgroundRect,
+    bool isDark = false,
+    double sketchScale = 1.0,
+    Offset offset = Offset.zero,
+    double scale = 1.0,
+    bool gridEnabled = false,
+    GridType gridType = GridType.grid,
+    double gridSpacing = 40.0,
+  }) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // Draw background color
+    final bgPaint = Paint()
+      ..color = isDark ? const Color(0xFF121212) : Colors.white;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), bgPaint);
+
+    canvas.save();
+    canvas.translate(offset.dx, offset.dy);
+    canvas.scale(scale);
+
+    // Draw grid
+    if (gridEnabled) {
+      final gridPaint = Paint()
+        ..color = (isDark ? Colors.white : Colors.black).withOpacity(0.1)
+        ..strokeWidth = 1.0 / scale; // Keep grid lines thin
+
+      // Draw grid over a large enough area to cover the transformed view
+      // For simplicity, we can just draw it based on the size and inverse transform
+      // but here we can just draw a large enough grid or calculate bounds.
+      // Let's just draw it relative to the content bounds if we have them,
+      // or just a very large area.
+      for (double x = -10000; x <= 10000; x += gridSpacing) {
+        canvas.drawLine(Offset(x, -10000), Offset(x, 10000), gridPaint);
+      }
+      for (double y = -10000; y <= 10000; y += gridSpacing) {
+        canvas.drawLine(Offset(-10000, y), Offset(10000, y), gridPaint);
+      }
+    }
+
+    if (backgroundImage != null) {
+      canvas.drawImageRect(
+        backgroundImage,
+        Rect.fromLTWH(
+          0,
+          0,
+          backgroundImage.width.toDouble(),
+          backgroundImage.height.toDouble(),
+        ),
+        backgroundRect ?? Rect.fromLTWH(0, 0, size.width, size.height),
+        Paint(),
+      );
+    }
+
+    if (sketchScale != 1.0) {
+      canvas.save();
+      canvas.scale(sketchScale);
+    }
+
+    final picture = renderSketch(sketch: sketch, isDark: isDark, scale: 1.0);
+    canvas.drawPicture(picture);
+
+    if (sketchScale != 1.0) {
+      canvas.restore();
+    }
+
+    canvas.restore();
+
+    final img = await recorder.endRecording().toImage(
+      size.width.toInt(),
+      size.height.toInt(),
+    );
+    return img;
   }
 }
