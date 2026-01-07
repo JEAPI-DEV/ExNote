@@ -18,6 +18,7 @@ import '../utils/clipboard_manager.dart';
 import '../services/note_manager.dart';
 import '../services/export_service.dart';
 import '../services/settings_service.dart';
+import '../services/stylus_shortcut_manager.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -84,6 +85,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     widthNotifier = ValueNotifier(2.0);
     toolNotifier = ValueNotifier(DrawingTool.pen);
 
+    StylusShortcutManager.instance.attach(toolNotifier);
+
     _undoRedoManager = UndoRedoManager(
       sketchNotifier: sketchNotifier,
       onStateChanged: _scheduleAutoSave,
@@ -146,6 +149,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   void dispose() {
     _autoSaveTimer?.cancel();
     _saveSettings();
+    StylusShortcutManager.instance.detach(toolNotifier);
     sketchNotifier.dispose();
     selectionNotifier.dispose();
     colorNotifier.dispose();
