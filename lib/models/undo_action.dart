@@ -79,3 +79,25 @@ class MoveLinesAction extends UndoAction {
     }
   }
 }
+
+class TransformLinesAction extends UndoAction {
+  final List<SketchLine> oldLines;
+  final List<SketchLine> newLines;
+  final List<int> indices;
+
+  TransformLinesAction(this.oldLines, this.newLines, this.indices);
+
+  @override
+  void undo(List<SketchLine> lines) {
+    for (int i = 0; i < indices.length; i++) {
+      lines[indices[i]] = oldLines[i];
+    }
+  }
+
+  @override
+  void redo(List<SketchLine> lines) {
+    for (int i = 0; i < indices.length; i++) {
+      lines[indices[i]] = newLines[i];
+    }
+  }
+}

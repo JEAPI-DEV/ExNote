@@ -10,6 +10,7 @@ class StaticSketchPainter extends CustomPainter {
   final double scale;
   final List<SketchLine> selectedLines;
   final bool isDraggingSelection;
+  final bool isResizingSelection;
 
   // Caching
   final ui.Picture? cachedPicture;
@@ -23,6 +24,7 @@ class StaticSketchPainter extends CustomPainter {
     required this.scale,
     this.selectedLines = const [],
     this.isDraggingSelection = false,
+    this.isResizingSelection = false,
     this.cachedPicture,
     required this.onCacheUpdate,
   });
@@ -35,7 +37,7 @@ class StaticSketchPainter extends CustomPainter {
         isDark: isDark,
         scale: scale,
         selectedLines: selectedLines,
-        skipSelectedLines: isDraggingSelection,
+        skipSelectedLines: isDraggingSelection || isResizingSelection,
       );
       onCacheUpdate(picture);
       canvas.drawPicture(picture);
@@ -51,6 +53,7 @@ class StaticSketchPainter extends CustomPainter {
         oldDelegate.scale != scale ||
         oldDelegate.selectedLines != selectedLines ||
         oldDelegate.isDraggingSelection != isDraggingSelection ||
+        oldDelegate.isResizingSelection != isResizingSelection ||
         oldDelegate.cachedPicture != cachedPicture;
   }
 }
@@ -61,11 +64,15 @@ class ActiveSketchPainter extends CustomPainter {
   final double currentWidth;
   final DrawingTool currentTool;
   final List<SketchLine> selectedLines;
+  final List<SketchLine>? previewLines;
   final List<Offset>? lassoPoints;
   final Offset dragOffset;
   final bool isDraggingSelection;
+  final bool isResizingSelection;
   final bool isDark;
   final double scale;
+  final Rect? selectionRect;
+  final bool showHandles;
 
   // Needed for pixel eraser masking
   final ui.Picture? cachedPicture;
@@ -78,19 +85,27 @@ class ActiveSketchPainter extends CustomPainter {
     required this.currentWidth,
     required this.currentTool,
     this.selectedLines = const [],
+    this.previewLines,
     this.lassoPoints,
     this.dragOffset = Offset.zero,
     this.isDraggingSelection = false,
+    this.isResizingSelection = false,
     this.isDark = false,
     this.scale = 1.0,
+    this.selectionRect,
+    this.showHandles = false,
     this.cachedPicture,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Draw dragged lines
-    if (isDraggingSelection || dragOffset != Offset.zero) {
-      for (final line in selectedLines) {
+    final linesToDraw = previewLines ?? selectedLines;
+
+    // Draw dragged or resized lines
+    if (isDraggingSelection ||
+        dragOffset != Offset.zero ||
+        isResizingSelection) {
+      for (final line in linesToDraw) {
         canvas.save();
         canvas.translate(dragOffset.dx, dragOffset.dy);
         _renderer.drawLine(
@@ -142,27 +157,12 @@ class ActiveSketchPainter extends CustomPainter {
     }
 
     // Draw Selection Bounds
-    if (selectedLines.isNotEmpty) {
-      _drawSelectionBounds(canvas, selectedLines);
+    if (selectionRect != null) {
+      _drawSelectionBounds(canvas, selectionRect!);
     }
   }
 
-  void _drawSelectionBounds(Canvas canvas, List<SketchLine> lines) {
-    double minX = double.infinity, maxX = double.negativeInfinity;
-    double minY = double.infinity, maxY = double.negativeInfinity;
-
-    for (final line in lines) {
-      for (final p in line.points) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      }
-    }
-
-    if (minX == double.infinity) return;
-
-    final rect = Rect.fromLTRB(minX, minY, maxX, maxY);
+  void _drawSelectionBounds(Canvas canvas, Rect rect) {
     final shiftedRect = rect.shift(dragOffset);
 
     final paint = Paint()
@@ -171,6 +171,10 @@ class ActiveSketchPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     _drawDashedRect(canvas, shiftedRect, paint);
+
+    if (showHandles) {
+      _drawHandles(canvas, shiftedRect);
+    }
   }
 
   void _drawDashedRect(Canvas canvas, Rect rect, Paint paint) {
@@ -190,6 +194,31 @@ class ActiveSketchPainter extends CustomPainter {
     }
   }
 
+  void _drawHandles(Canvas canvas, Rect rect) {
+    const double size = 10.0;
+    final handlePaint = Paint()
+      ..color = Colors.blue
+      ..style = PaintingStyle.fill;
+
+    final handles = [
+      rect.topLeft,
+      Offset(rect.center.dx, rect.top),
+      rect.topRight,
+      Offset(rect.left, rect.center.dy),
+      Offset(rect.right, rect.center.dy),
+      rect.bottomLeft,
+      Offset(rect.center.dx, rect.bottom),
+      rect.bottomRight,
+    ];
+
+    for (final center in handles) {
+      canvas.drawRect(
+        Rect.fromCenter(center: center, width: size, height: size),
+        handlePaint,
+      );
+    }
+  }
+
   @override
   bool shouldRepaint(ActiveSketchPainter oldDelegate) {
     return oldDelegate.currentLinePoints != currentLinePoints ||
@@ -197,9 +226,13 @@ class ActiveSketchPainter extends CustomPainter {
         oldDelegate.currentWidth != currentWidth ||
         oldDelegate.currentTool != currentTool ||
         oldDelegate.selectedLines != selectedLines ||
+        oldDelegate.previewLines != previewLines ||
         oldDelegate.lassoPoints != lassoPoints ||
         oldDelegate.dragOffset != dragOffset ||
         oldDelegate.isDraggingSelection != isDraggingSelection ||
+        oldDelegate.isResizingSelection != isResizingSelection ||
+        oldDelegate.selectionRect != selectionRect ||
+        oldDelegate.showHandles != showHandles ||
         oldDelegate.isDark != isDark ||
         oldDelegate.scale != scale ||
         oldDelegate.cachedPicture != cachedPicture;

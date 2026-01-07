@@ -5,6 +5,8 @@ import '../models/undo_action.dart';
 import 'undo_redo_manager.dart';
 
 class ClipboardManager {
+  static List<SketchLine> _globalClipboard = [];
+
   List<SketchLine> _clipboard = [];
 
   final ValueNotifier<List<SketchLine>> selectionNotifier;
@@ -21,7 +23,7 @@ class ClipboardManager {
     required this.onCopy,
   });
 
-  bool get canPaste => _clipboard.isNotEmpty;
+  bool get canPaste => _clipboard.isNotEmpty || _globalClipboard.isNotEmpty;
 
   void copy() {
     final selected = selectionNotifier.value;
@@ -37,11 +39,25 @@ class ClipboardManager {
         )
         .toList();
 
+    _globalClipboard = _clipboard;
+
     onCopy();
   }
 
   void paste() {
-    if (_clipboard.isEmpty) return;
+    if (_clipboard.isEmpty && _globalClipboard.isEmpty) return;
+
+    if (_clipboard.isEmpty) {
+      _clipboard = _globalClipboard
+          .map(
+            (line) => line.copyWith(
+              points: line.points
+                  .map((p) => Point(p.x, p.y, pressure: p.pressure))
+                  .toList(),
+            ),
+          )
+          .toList();
+    }
 
     final currentSketch = sketchNotifier.value;
     const offset = 20.0;
@@ -54,6 +70,7 @@ class ClipboardManager {
     }).toList();
 
     _clipboard = pastedLines;
+    _globalClipboard = pastedLines;
 
     sketchNotifier.value = Sketch(
       lines: [...currentSketch.lines, ...pastedLines],
@@ -62,7 +79,7 @@ class ClipboardManager {
     undoRedoManager.applyAction(AddLinesAction(pastedLines));
 
     selectionNotifier.value = pastedLines;
-    toolNotifier.value = DrawingTool.selection;
+    toolNotifier.value = DrawingTool.editSelection;
   }
 
   void deleteSelection() {

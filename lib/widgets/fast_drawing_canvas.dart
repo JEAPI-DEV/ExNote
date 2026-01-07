@@ -95,9 +95,11 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
                               sketch: sketch,
                               isDark: isDark,
                               scale: widget.scale,
-                              selectedLines: selectedLines,
+                              selectedLines: _controller.selectionForPainting,
                               isDraggingSelection:
                                   _controller.isDraggingSelection,
+                              isResizingSelection:
+                                  _controller.isResizingSelection,
                               cachedPicture: _controller.cachedSketchPicture,
                               onCacheUpdate: _controller.updateCache,
                             ),
@@ -116,12 +118,20 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
                                   currentWidth: widget.currentWidth,
                                   currentTool: widget.currentTool,
                                   selectedLines: selectedLines,
+                                  previewLines:
+                                      _controller.selectionForPainting,
                                   lassoPoints: _controller.lassoPoints,
                                   dragOffset: _controller.currentDragOffset,
                                   isDraggingSelection:
                                       _controller.isDraggingSelection,
+                                  isResizingSelection:
+                                      _controller.isResizingSelection,
                                   isDark: isDark,
                                   scale: widget.scale,
+                                  selectionRect: _controller.selectionBounds,
+                                  showHandles:
+                                      widget.currentTool ==
+                                      DrawingTool.editSelection,
                                   cachedPicture:
                                       _controller.cachedSketchPicture,
                                 ),

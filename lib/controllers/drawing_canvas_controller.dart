@@ -5,6 +5,17 @@ import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
 
+enum _ResizeHandle {
+  topLeft,
+  topCenter,
+  topRight,
+  centerLeft,
+  centerRight,
+  bottomLeft,
+  bottomCenter,
+  bottomRight,
+}
+
 class DrawingCanvasController extends ChangeNotifier {
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
@@ -43,6 +54,15 @@ class DrawingCanvasController extends ChangeNotifier {
   Offset? dragStart;
   Offset currentDragOffset = Offset.zero;
   bool isDraggingSelection = false;
+  bool isResizingSelection = false;
+
+  // Resize helpers
+  _ResizeHandle? _activeHandle;
+  Rect? _resizeStartRect;
+  Rect? _resizePreviewRect;
+  List<SketchLine>? _resizeOriginalLines;
+  List<SketchLine>? _resizePreviewLines;
+  List<int>? _resizeSelectionIndices;
 
   // Eraser State
   final Set<SketchLine> _erasedLinesInSession = {};
@@ -112,7 +132,8 @@ class DrawingCanvasController extends ChangeNotifier {
       return;
     }
 
-    if (currentTool == DrawingTool.selection) {
+    if (currentTool == DrawingTool.selection ||
+        currentTool == DrawingTool.editSelection) {
       _handleSelectionDown(event.localPosition);
       return;
     }
@@ -143,7 +164,8 @@ class DrawingCanvasController extends ChangeNotifier {
       return;
     }
 
-    if (currentTool == DrawingTool.selection) {
+    if (currentTool == DrawingTool.selection ||
+        currentTool == DrawingTool.editSelection) {
       _handleSelectionMove(event.localPosition);
       return;
     }
@@ -206,7 +228,8 @@ class DrawingCanvasController extends ChangeNotifier {
       return;
     }
 
-    if (currentTool == DrawingTool.selection) {
+    if (currentTool == DrawingTool.selection ||
+        currentTool == DrawingTool.editSelection) {
       _handleSelectionUp();
       return;
     }
@@ -232,7 +255,14 @@ class DrawingCanvasController extends ChangeNotifier {
     currentLineNotifier.value = null;
     lassoPoints = null;
     isDraggingSelection = false;
+    isResizingSelection = false;
     currentDragOffset = Offset.zero;
+    _activeHandle = null;
+    _resizePreviewLines = null;
+    _resizeOriginalLines = null;
+    _resizePreviewRect = null;
+    _resizeStartRect = null;
+    _resizeSelectionIndices = null;
     _initialLinesInSession = null;
     notifyListeners();
   }
@@ -241,6 +271,17 @@ class DrawingCanvasController extends ChangeNotifier {
 
   void _handleSelectionDown(Offset position) {
     final selectedLines = selectionNotifier.value;
+    final bounds = _computeSelectionBounds(selectedLines);
+
+    if (currentTool == DrawingTool.editSelection &&
+        selectedLines.isNotEmpty &&
+        bounds != null) {
+      final handle = _hitTestHandle(position, bounds);
+      if (handle != null) {
+        _startResize(handle, bounds, selectedLines);
+        return;
+      }
+    }
 
     // Check if tapping inside existing selection to start drag
     if (selectedLines.isNotEmpty &&
@@ -255,6 +296,8 @@ class DrawingCanvasController extends ChangeNotifier {
       selectionNotifier.value = []; // Clear previous
       lassoPoints = [position];
       isDraggingSelection = false;
+      isResizingSelection = false;
+      _activeHandle = null;
       notifyListeners();
     }
   }
@@ -263,6 +306,11 @@ class DrawingCanvasController extends ChangeNotifier {
     if (isDraggingSelection) {
       currentDragOffset = position - dragStart!;
       notifyListeners();
+    } else if (isResizingSelection &&
+        _activeHandle != null &&
+        _resizeStartRect != null &&
+        _resizeOriginalLines != null) {
+      _updateResizePreview(position);
     } else if (lassoPoints != null) {
       lassoPoints = [...lassoPoints!, position];
       notifyListeners();
@@ -271,22 +319,25 @@ class DrawingCanvasController extends ChangeNotifier {
 
   void _handleSelectionUp() {
     if (isDraggingSelection) {
-      // Apply move to selected lines
       _applyMoveToSelection();
       isDraggingSelection = false;
       currentDragOffset = Offset.zero;
       dragStart = null;
       notifyListeners();
+    } else if (isResizingSelection &&
+        _resizePreviewLines != null &&
+        _resizeSelectionIndices != null &&
+        _resizeOriginalLines != null) {
+      _commitResize();
     } else if (lassoPoints != null) {
-      // Close lasso and find selected lines
       _findSelectedLines();
       lassoPoints = null;
       notifyListeners();
     }
   }
 
-  bool _isPointInSelectionBounds(Offset point, List<SketchLine> lines) {
-    if (lines.isEmpty) return false;
+  Rect? _computeSelectionBounds(List<SketchLine> lines) {
+    if (lines.isEmpty) return null;
 
     double minX = double.infinity, maxX = double.negativeInfinity;
     double minY = double.infinity, maxY = double.negativeInfinity;
@@ -300,12 +351,24 @@ class DrawingCanvasController extends ChangeNotifier {
       }
     }
 
-    // Add some padding
+    if (minX == double.infinity) return null;
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
+  }
+
+  Rect? get selectionBounds =>
+      _resizePreviewRect ??
+      _computeSelectionBounds(_resizePreviewLines ?? selectionNotifier.value);
+
+  List<SketchLine> get selectionForPainting =>
+      _resizePreviewLines ?? selectionNotifier.value;
+
+  bool _isPointInSelectionBounds(Offset point, List<SketchLine> lines) {
+    final rect = _computeSelectionBounds(lines);
+    if (rect == null) return false;
+
     const padding = 20.0;
-    return point.dx >= minX - padding &&
-        point.dx <= maxX + padding &&
-        point.dy >= minY - padding &&
-        point.dy <= maxY + padding;
+    final padded = rect.inflate(padding);
+    return padded.contains(point);
   }
 
   void _findSelectedLines() {
@@ -373,6 +436,240 @@ class DrawingCanvasController extends ChangeNotifier {
     }
     selectionNotifier.value = newSelectedLines;
     onAction(MoveLinesAction(oldSelectedLines, newSelectedLines, indices));
+  }
+
+  void _startResize(
+    _ResizeHandle handle,
+    Rect bounds,
+    List<SketchLine> selectedLines,
+  ) {
+    final sketch = sketchNotifier.value;
+    final selectedSet = selectedLines.toSet();
+    final indices = <int>[];
+    final originals = <SketchLine>[];
+
+    for (int i = 0; i < sketch.lines.length; i++) {
+      if (selectedSet.contains(sketch.lines[i])) {
+        indices.add(i);
+        originals.add(sketch.lines[i]);
+      }
+    }
+
+    _resizeSelectionIndices = indices;
+    _resizeOriginalLines = originals
+        .map(
+          (line) => line.copyWith(
+            points: line.points
+                .map((p) => Point(p.x, p.y, pressure: p.pressure))
+                .toList(),
+          ),
+        )
+        .toList();
+    _resizePreviewLines = _resizeOriginalLines
+        ?.map(
+          (line) => line.copyWith(
+            points: line.points
+                .map((p) => Point(p.x, p.y, pressure: p.pressure))
+                .toList(),
+          ),
+        )
+        .toList();
+    _resizeStartRect = bounds;
+    _resizePreviewRect = bounds;
+    _activeHandle = handle;
+    isResizingSelection = true;
+    dragStart = null;
+    currentDragOffset = Offset.zero;
+    _invalidateCache();
+    notifyListeners();
+  }
+
+  void _updateResizePreview(Offset position) {
+    if (_activeHandle == null ||
+        _resizeStartRect == null ||
+        _resizeOriginalLines == null)
+      return;
+
+    final newRect = _computeResizedRect(position);
+    _resizePreviewRect = newRect;
+    _resizePreviewLines = _applyResizeToLines(
+      _resizeOriginalLines!,
+      _resizeStartRect!,
+      newRect,
+    );
+    notifyListeners();
+  }
+
+  Rect _computeResizedRect(Offset pointer) {
+    double left = _resizeStartRect!.left;
+    double right = _resizeStartRect!.right;
+    double top = _resizeStartRect!.top;
+    double bottom = _resizeStartRect!.bottom;
+    const minSize = 8.0;
+
+    switch (_activeHandle!) {
+      case _ResizeHandle.topLeft:
+        left = pointer.dx;
+        top = pointer.dy;
+        break;
+      case _ResizeHandle.topCenter:
+        top = pointer.dy;
+        break;
+      case _ResizeHandle.topRight:
+        right = pointer.dx;
+        top = pointer.dy;
+        break;
+      case _ResizeHandle.centerLeft:
+        left = pointer.dx;
+        break;
+      case _ResizeHandle.centerRight:
+        right = pointer.dx;
+        break;
+      case _ResizeHandle.bottomLeft:
+        left = pointer.dx;
+        bottom = pointer.dy;
+        break;
+      case _ResizeHandle.bottomCenter:
+        bottom = pointer.dy;
+        break;
+      case _ResizeHandle.bottomRight:
+        right = pointer.dx;
+        bottom = pointer.dy;
+        break;
+    }
+
+    if ((right - left).abs() < minSize) {
+      if (_activeHandle == _ResizeHandle.topLeft ||
+          _activeHandle == _ResizeHandle.centerLeft ||
+          _activeHandle == _ResizeHandle.bottomLeft) {
+        left = right - minSize;
+      } else {
+        right = left + minSize;
+      }
+    }
+
+    if ((bottom - top).abs() < minSize) {
+      if (_activeHandle == _ResizeHandle.topLeft ||
+          _activeHandle == _ResizeHandle.topCenter ||
+          _activeHandle == _ResizeHandle.topRight) {
+        top = bottom - minSize;
+      } else {
+        bottom = top + minSize;
+      }
+    }
+
+    if (left > right) {
+      final temp = left;
+      left = right;
+      right = temp;
+    }
+
+    if (top > bottom) {
+      final temp = top;
+      top = bottom;
+      bottom = temp;
+    }
+
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  List<SketchLine> _applyResizeToLines(
+    List<SketchLine> lines,
+    Rect from,
+    Rect to,
+  ) {
+    final width = from.width == 0 ? 0.0001 : from.width;
+    final height = from.height == 0 ? 0.0001 : from.height;
+
+    return lines
+        .map(
+          (line) => line.copyWith(
+            points: line.points
+                .map(
+                  (p) => Point(
+                    to.left + ((p.x - from.left) / width) * to.width,
+                    to.top + ((p.y - from.top) / height) * to.height,
+                    pressure: p.pressure,
+                  ),
+                )
+                .toList(),
+          ),
+        )
+        .toList();
+  }
+
+  void _commitResize() {
+    if (_resizePreviewLines == null ||
+        _resizeSelectionIndices == null ||
+        _resizeOriginalLines == null) {
+      _resetResizeState();
+      return;
+    }
+
+    if (_resizeStartRect == _resizePreviewRect) {
+      _resetResizeState();
+      notifyListeners();
+      return;
+    }
+
+    final sketch = sketchNotifier.value;
+    final updatedLines = [...sketch.lines];
+
+    for (int i = 0; i < _resizeSelectionIndices!.length; i++) {
+      updatedLines[_resizeSelectionIndices![i]] = _resizePreviewLines![i];
+    }
+
+    sketchNotifier.value = Sketch(lines: updatedLines);
+    selectionNotifier.value = _resizePreviewLines!;
+
+    onAction(
+      TransformLinesAction(
+        _resizeOriginalLines!,
+        _resizePreviewLines!,
+        _resizeSelectionIndices!,
+      ),
+    );
+
+    _resetResizeState();
+    notifyListeners();
+  }
+
+  void _resetResizeState() {
+    isResizingSelection = false;
+    _activeHandle = null;
+    _resizePreviewLines = null;
+    _resizeOriginalLines = null;
+    _resizePreviewRect = null;
+    _resizeStartRect = null;
+    _resizeSelectionIndices = null;
+  }
+
+  _ResizeHandle? _hitTestHandle(Offset point, Rect bounds) {
+    const handleSize = 16.0;
+
+    final handles = {
+      _ResizeHandle.topLeft: Offset(bounds.left, bounds.top),
+      _ResizeHandle.topCenter: Offset(bounds.center.dx, bounds.top),
+      _ResizeHandle.topRight: Offset(bounds.right, bounds.top),
+      _ResizeHandle.centerLeft: Offset(bounds.left, bounds.center.dy),
+      _ResizeHandle.centerRight: Offset(bounds.right, bounds.center.dy),
+      _ResizeHandle.bottomLeft: Offset(bounds.left, bounds.bottom),
+      _ResizeHandle.bottomCenter: Offset(bounds.center.dx, bounds.bottom),
+      _ResizeHandle.bottomRight: Offset(bounds.right, bounds.bottom),
+    };
+
+    for (final entry in handles.entries) {
+      final rect = Rect.fromCenter(
+        center: entry.value,
+        width: handleSize,
+        height: handleSize,
+      );
+      if (rect.contains(point)) {
+        return entry.key;
+      }
+    }
+
+    return null;
   }
 
   // --- Eraser Logic ---
