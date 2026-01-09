@@ -23,6 +23,12 @@ class SettingsService {
           AppConfig.defaultSubmitLastImageOnly,
       'aiDrawerWidth':
           prefs.getDouble('aiDrawerWidth') ?? AppConfig.defaultAiDrawerWidth,
+      'waifuFetcherEnabled':
+          prefs.getBool('waifuFetcherEnabled') ??
+          AppConfig.defaultWaifuFetcherEnabled,
+      'waifuImageWidth':
+          prefs.getDouble('waifuImageWidth') ??
+          AppConfig.defaultWaifuImageWidth,
     };
   }
 
@@ -36,6 +42,8 @@ class SettingsService {
     required bool tutorEnabled,
     required bool submitLastImageOnly,
     required double aiDrawerWidth,
+    required bool waifuFetcherEnabled,
+    required double waifuImageWidth,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('strokeWidth', strokeWidth);
@@ -47,5 +55,7 @@ class SettingsService {
     await prefs.setBool('tutorEnabled', tutorEnabled);
     await prefs.setBool('submitLastImageOnly', submitLastImageOnly);
     await prefs.setDouble('aiDrawerWidth', aiDrawerWidth);
+    await prefs.setBool('waifuFetcherEnabled', waifuFetcherEnabled);
+    await prefs.setDouble('waifuImageWidth', waifuImageWidth);
   }
 }

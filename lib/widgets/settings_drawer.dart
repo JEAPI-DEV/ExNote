@@ -10,6 +10,8 @@ class SettingsDrawer extends ConsumerWidget {
   final String aiModel;
   final bool tutorEnabled;
   final bool submitLastImageOnly;
+  final bool waifuFetcherEnabled;
+  final double waifuImageWidth;
   final double gridSpacing;
   final TextEditingController tokenController;
   final ValueChanged<bool> onGridEnabledChanged;
@@ -19,6 +21,8 @@ class SettingsDrawer extends ConsumerWidget {
   final ValueChanged<String> onAiModelChanged;
   final ValueChanged<bool> onTutorEnabledChanged;
   final ValueChanged<bool> onSubmitLastImageOnlyChanged;
+  final ValueChanged<bool> onWaifuFetcherEnabledChanged;
+  final ValueChanged<double> onWaifuImageWidthChanged;
   final VoidCallback? onExportBackup;
 
   const SettingsDrawer({
@@ -29,6 +33,8 @@ class SettingsDrawer extends ConsumerWidget {
     required this.aiModel,
     required this.tutorEnabled,
     required this.submitLastImageOnly,
+    required this.waifuFetcherEnabled,
+    required this.waifuImageWidth,
     required this.tokenController,
     required this.onGridEnabledChanged,
     required this.onGridTypeChanged,
@@ -37,6 +43,8 @@ class SettingsDrawer extends ConsumerWidget {
     required this.onAiModelChanged,
     required this.onTutorEnabledChanged,
     required this.onSubmitLastImageOnlyChanged,
+    required this.onWaifuFetcherEnabledChanged,
+    required this.onWaifuImageWidthChanged,
     this.onExportBackup,
   });
 
@@ -211,6 +219,35 @@ class SettingsDrawer extends ConsumerWidget {
                   value: submitLastImageOnly,
                   onChanged: onSubmitLastImageOnlyChanged,
                 ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Anime Background'),
+                  subtitle: const Text('Fetch random anime image on open'),
+                  value: waifuFetcherEnabled,
+                  onChanged: onWaifuFetcherEnabledChanged,
+                ),
+                if (waifuFetcherEnabled)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 8),
+                        Text(
+                          'Image Width: ${waifuImageWidth.toInt()}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        Slider(
+                          value: waifuImageWidth,
+                          min: 200.0,
+                          max: 2000.0,
+                          divisions: 18,
+                          label: waifuImageWidth.round().toString(),
+                          onChanged: onWaifuImageWidthChanged,
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 const Divider(),
                 ListTile(

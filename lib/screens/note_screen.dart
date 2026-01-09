@@ -19,6 +19,7 @@ import '../services/note_manager.dart';
 import '../services/export_service.dart';
 import '../services/settings_service.dart';
 import '../services/stylus_shortcut_manager.dart';
+import '../services/waifu_service.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -65,6 +66,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   bool tutorEnabled = AppConfig.defaultTutorEnabled;
   bool submitLastImageOnly = AppConfig.defaultSubmitLastImageOnly;
   double aiDrawerWidth = AppConfig.defaultAiDrawerWidth;
+  bool waifuFetcherEnabled = AppConfig.defaultWaifuFetcherEnabled;
+  double waifuImageWidth = AppConfig.defaultWaifuImageWidth;
+  String? waifuImageUrl;
   final TextEditingController _tokenController = TextEditingController();
 
   // Logic Managers
@@ -141,6 +145,18 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     if (mounted) {
       setState(() {
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchWaifuImage() async {
+    if (!waifuFetcherEnabled) return;
+
+    final service = WaifuService();
+    final url = await service.fetchWaifuImage('waifu');
+    if (mounted && url != null) {
+      setState(() {
+        waifuImageUrl = url;
       });
     }
   }
@@ -286,6 +302,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                       aiModel: aiModel,
                       tutorEnabled: tutorEnabled,
                       submitLastImageOnly: submitLastImageOnly,
+                      waifuFetcherEnabled: waifuFetcherEnabled,
+                      waifuImageWidth: waifuImageWidth,
                       tokenController: _tokenController,
                       onGridEnabledChanged: (value) {
                         setState(() {
@@ -327,6 +345,23 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         });
                         _saveSettings();
                       },
+                      onWaifuFetcherEnabledChanged: (value) {
+                        setState(() {
+                          waifuFetcherEnabled = value;
+                          if (!value) {
+                            waifuImageUrl = null;
+                          } else {
+                            _fetchWaifuImage();
+                          }
+                        });
+                        _saveSettings();
+                      },
+                      onWaifuImageWidthChanged: (value) {
+                        setState(() {
+                          waifuImageWidth = value;
+                        });
+                        _saveSettings();
+                      },
                       onExportBackup: () async {
                         try {
                           final file = await ExportService.exportToZip();
@@ -360,6 +395,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         gridType: gridType,
                         gridSpacing: gridSpacing,
                         selection: selection,
+                        waifuImageUrl: waifuImageUrl,
+                        waifuImageWidth: waifuImageWidth,
                         screenshotSize: _screenshotSize,
                         exportKey: _exportKey,
                         colorNotifier: colorNotifier,
@@ -454,7 +491,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         tutorEnabled = settings['tutorEnabled'];
         submitLastImageOnly = settings['submitLastImageOnly'];
         aiDrawerWidth = settings['aiDrawerWidth'];
+        waifuFetcherEnabled = settings['waifuFetcherEnabled'];
+        waifuImageWidth = settings['waifuImageWidth'];
       });
+      if (waifuFetcherEnabled) {
+        _fetchWaifuImage();
+      }
     }
   }
 
@@ -469,6 +511,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       tutorEnabled: tutorEnabled,
       submitLastImageOnly: submitLastImageOnly,
       aiDrawerWidth: aiDrawerWidth,
+      waifuFetcherEnabled: waifuFetcherEnabled,
+      waifuImageWidth: waifuImageWidth,
     );
   }
 

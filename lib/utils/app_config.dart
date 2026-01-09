@@ -18,4 +18,6 @@ class AppConfig {
   static const double defaultGridSpacing = 40.0;
   static const bool defaultTutorEnabled = false;
   static const bool defaultSubmitLastImageOnly = true;
+  static const bool defaultWaifuFetcherEnabled = true;
+  static const double defaultWaifuImageWidth = 500.0;
 }

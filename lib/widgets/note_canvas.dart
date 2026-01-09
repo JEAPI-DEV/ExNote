@@ -14,6 +14,8 @@ class NoteCanvas extends StatelessWidget {
   final GridType gridType;
   final double gridSpacing;
   final Selection? selection;
+  final String? waifuImageUrl;
+  final double? waifuImageWidth;
   final Size? screenshotSize;
   final GlobalKey exportKey;
   final ValueNotifier<Color> colorNotifier;
@@ -30,6 +32,8 @@ class NoteCanvas extends StatelessWidget {
     required this.gridType,
     required this.gridSpacing,
     this.selection,
+    this.waifuImageUrl,
+    this.waifuImageWidth,
     this.screenshotSize,
     required this.exportKey,
     required this.colorNotifier,
@@ -72,6 +76,22 @@ class NoteCanvas extends StatelessWidget {
                           matrix: transformationController.value,
                           gridType: gridType,
                           spacing: gridSpacing,
+                        ),
+                      ),
+                    ),
+                  if (waifuImageUrl != null)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      child: Opacity(
+                        opacity: 0.3, // Make it subtle
+                        child: Image.network(
+                          waifuImageUrl!,
+                          width: waifuImageWidth,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const SizedBox.shrink();
+                          },
                         ),
                       ),
                     ),

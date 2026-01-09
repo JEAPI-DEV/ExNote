@@ -1005,6 +1005,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "15.0.2"
+  waifuim_dart:
+    dependency: "direct main"
+    description:
+      name: waifuim_dart
+      sha256: "4c506335213baee67801e3392f64bcbbf56f8bc3fe77158baa15d4858bbbfa6a"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
   watcher:
     dependency: transitive
     description:
