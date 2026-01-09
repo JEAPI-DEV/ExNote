@@ -81,7 +81,7 @@ class NoteCanvas extends StatelessWidget {
                     ),
                   if (waifuImageUrl != null)
                     Positioned(
-                      top: 0,
+                      top: screenshotSize?.height ?? 0,
                       left: 0,
                       child: Opacity(
                         opacity: 0.3, // Make it subtle
