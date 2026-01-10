@@ -61,7 +61,12 @@ class NoteCanvas extends StatelessWidget {
           maxScale: 4.0,
           panEnabled: false,
           scaleEnabled: true,
-          boundaryMargin: const EdgeInsets.all(50000.0),
+          boundaryMargin: const EdgeInsets.fromLTRB(
+            0, // Prevent scrolling left of the canvas
+            0, // Prevent scrolling above the canvas
+            50000.0,
+            50000.0,
+          ),
           child: ColoredBox(
             color: Theme.of(context).scaffoldBackgroundColor,
             child: SizedBox(
