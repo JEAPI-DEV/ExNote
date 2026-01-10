@@ -19,6 +19,7 @@ Folder _$FolderFromJson(Map<String, dynamic> json) => Folder(
         (k, e) => MapEntry(k, Note.fromJson(e as Map<String, dynamic>)),
       ) ??
       const {},
+  isNoteFolder: json['isNoteFolder'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$FolderToJson(Folder instance) => <String, dynamic>{
@@ -26,4 +27,5 @@ Map<String, dynamic> _$FolderToJson(Folder instance) => <String, dynamic>{
   'name': instance.name,
   'exerciseLists': instance.exerciseLists,
   'notes': instance.notes,
+  'isNoteFolder': instance.isNoteFolder,
 };

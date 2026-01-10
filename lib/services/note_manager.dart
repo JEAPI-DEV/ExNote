@@ -10,8 +10,8 @@ import '../utils/sketch_serializer.dart';
 class NoteManager {
   final WidgetRef ref;
   final String folderId;
-  final String exerciseListId;
-  final String selectionId;
+  final String? exerciseListId;
+  final String? selectionId;
   final String noteId;
 
   final ValueNotifier<Sketch> sketchNotifier;
@@ -20,8 +20,8 @@ class NoteManager {
   NoteManager({
     required this.ref,
     required this.folderId,
-    required this.exerciseListId,
-    required this.selectionId,
+    this.exerciseListId,
+    this.selectionId,
     required this.noteId,
     required this.sketchNotifier,
     required this.undoRedoManager,
@@ -65,25 +65,29 @@ class NoteManager {
         }
       }
 
-      final list = folder.exerciseLists.firstWhere(
-        (l) => l.id == exerciseListId,
-      );
-      final selection = list.selections.firstWhere((s) => s.id == selectionId);
+      if (exerciseListId != null && selectionId != null) {
+        final list = folder.exerciseLists.firstWhere(
+          (l) => l.id == exerciseListId,
+        );
+        final selection = list.selections.firstWhere(
+          (s) => s.id == selectionId,
+        );
 
-      if (selection.screenshotPath != null) {
-        final image = Image.file(File(selection.screenshotPath!));
-        image.image
-            .resolve(const ImageConfiguration())
-            .addListener(
-              ImageStreamListener((ImageInfo info, bool _) {
-                onScreenshotLoaded(
-                  Size(
-                    info.image.width.toDouble() / 2,
-                    info.image.height.toDouble() / 2,
-                  ),
-                );
-              }),
-            );
+        if (selection.screenshotPath != null) {
+          final image = Image.file(File(selection.screenshotPath!));
+          image.image
+              .resolve(const ImageConfiguration())
+              .addListener(
+                ImageStreamListener((ImageInfo info, bool _) {
+                  onScreenshotLoaded(
+                    Size(
+                      info.image.width.toDouble() / 2,
+                      info.image.height.toDouble() / 2,
+                    ),
+                  );
+                }),
+              );
+        }
       }
     } catch (e) {
       debugPrint('Error loading note: $e');
@@ -98,14 +102,28 @@ class NoteManager {
       final folder = ref
           .read(folderProvider)
           .firstWhere((f) => f.id == folderId);
-      final list = folder.exerciseLists.firstWhere(
-        (l) => l.id == exerciseListId,
-      );
-      final selection = list.selections.firstWhere((s) => s.id == selectionId);
+
+      String? screenshotPath;
+      if (exerciseListId != null && selectionId != null) {
+        try {
+          final list = folder.exerciseLists.firstWhere(
+            (l) => l.id == exerciseListId,
+          );
+          final selection = list.selections.firstWhere(
+            (s) => s.id == selectionId,
+          );
+          screenshotPath = selection.screenshotPath;
+        } catch (e) {
+          debugPrint('Error getting selection for save: $e');
+        }
+      } else {
+        // For standalone notes, keep existing screenshotPath if any
+        screenshotPath = folder.notes[noteId]?.screenshotPath;
+      }
 
       await ref
           .read(folderProvider.notifier)
-          .updateNote(folderId, noteId, jsonSketch, selection.screenshotPath);
+          .updateNote(folderId, noteId, jsonSketch, screenshotPath);
     } catch (e) {
       debugPrint('Error saving note: $e');
       rethrow;

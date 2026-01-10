@@ -10,10 +10,12 @@ Note _$NoteFromJson(Map<String, dynamic> json) => Note(
   id: json['id'] as String,
   scribbleData: json['scribbleData'] as String,
   screenshotPath: json['screenshotPath'] as String?,
+  name: json['name'] as String?,
 );
 
 Map<String, dynamic> _$NoteToJson(Note instance) => <String, dynamic>{
   'id': instance.id,
   'scribbleData': instance.scribbleData,
   'screenshotPath': instance.screenshotPath,
+  'name': instance.name,
 };

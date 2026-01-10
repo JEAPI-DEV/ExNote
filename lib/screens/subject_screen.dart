@@ -6,6 +6,7 @@ import '../models/exercise_list.dart';
 import '../providers/folder_provider.dart';
 import '../services/pdf_export_service.dart';
 import 'pdf_viewer_screen.dart';
+import 'note_screen.dart';
 
 class SubjectScreen extends ConsumerWidget {
   final String folderId;
@@ -17,6 +18,10 @@ class SubjectScreen extends ConsumerWidget {
     final folder = ref
         .watch(folderProvider)
         .firstWhere((f) => f.id == folderId);
+
+    if (folder.isNoteFolder) {
+      return _buildNoteFolderView(context, ref, folder);
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(folder.name)),
@@ -65,6 +70,98 @@ class SubjectScreen extends ConsumerWidget {
         onPressed: () => _importPDF(context, ref),
         label: const Text('Import PDF'),
         icon: const Icon(Icons.upload_file),
+      ),
+    );
+  }
+
+  Widget _buildNoteFolderView(BuildContext context, WidgetRef ref, folder) {
+    final notes = folder.notes.values.toList();
+
+    return Scaffold(
+      appBar: AppBar(title: Text(folder.name)),
+      body: notes.isEmpty
+          ? const Center(child: Text('No notes yet. Create one!'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: notes.length,
+              itemBuilder: (context, index) {
+                final note = notes[index];
+                return ListTile(
+                  leading: const Icon(Icons.note, color: Colors.blue),
+                  title: Text(note.name ?? 'Untitled Note'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          NoteScreen(folderId: folderId, noteId: note.id),
+                    ),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _showDeleteNoteDialog(context, ref, note),
+                  ),
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddNoteDialog(context, ref),
+        label: const Text('New Note'),
+        icon: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  void _showAddNoteDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Note'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Enter note name'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                ref
+                    .read(folderProvider.notifier)
+                    .addStandaloneNote(folderId, controller.text);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteNoteDialog(BuildContext context, WidgetRef ref, note) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Note'),
+        content: Text('Are you sure you want to delete "${note.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(folderProvider.notifier).deleteNote(folderId, note.id);
+              Navigator.pop(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }

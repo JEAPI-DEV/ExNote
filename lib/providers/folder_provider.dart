@@ -30,8 +30,12 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     return await _storage.loadNote(noteId);
   }
 
-  Future<void> addFolder(String name) async {
-    final newFolder = Folder(id: _uuid.v4(), name: name);
+  Future<void> addFolder(String name, {bool isNoteFolder = false}) async {
+    final newFolder = Folder(
+      id: _uuid.v4(),
+      name: name,
+      isNoteFolder: isNoteFolder,
+    );
     state = [...state, newFolder];
     await _storage.saveFolders(state);
   }
@@ -57,6 +61,39 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     await _storage.saveFolders(state);
   }
 
+  Future<void> addStandaloneNote(String folderId, String noteName) async {
+    final noteId = _uuid.v4();
+    state = [
+      for (final folder in state)
+        if (folder.id == folderId)
+          folder.copyWith(
+            notes: {
+              ...folder.notes,
+              noteId: Note(
+                id: noteId,
+                name: noteName,
+                scribbleData: "", // Ink yet to be saved
+              ),
+            },
+          )
+        else
+          folder,
+    ];
+    await _storage.saveFolders(state);
+  }
+
+  Future<void> deleteNote(String folderId, String noteId) async {
+    state = [
+      for (final folder in state)
+        if (folder.id == folderId)
+          folder.copyWith(notes: Map.from(folder.notes)..remove(noteId))
+        else
+          folder,
+    ];
+    await _storage.saveFolders(state);
+    // Note: PDF selections still reference noteId, but we're mostly focused on general notes here.
+  }
+
   Future<void> updateFolder(Folder updatedFolder) async {
     state = [
       for (final folder in state)
@@ -79,11 +116,12 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
           folder.copyWith(
             notes: {
               ...folder.notes,
-              noteId: Note(
-                id: noteId,
-                scribbleData: "",
-                screenshotPath: screenshotPath,
-              ),
+              noteId:
+                  (folder.notes[noteId] ?? Note(id: noteId, scribbleData: ""))
+                      .copyWith(
+                        scribbleData: "", // Ink is saved separately
+                        screenshotPath: screenshotPath,
+                      ),
             },
           )
         else

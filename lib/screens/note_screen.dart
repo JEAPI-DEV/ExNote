@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scribble/scribble.dart';
 import '../providers/folder_provider.dart';
 import '../models/drawing_tool.dart';
+import '../models/selection.dart';
+import '../models/note.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_toolbar.dart';
 import '../widgets/ai_chat_drawer.dart';
@@ -23,15 +25,15 @@ import '../services/waifu_service.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
-  final String exerciseListId;
-  final String selectionId;
+  final String? exerciseListId;
+  final String? selectionId;
   final String noteId;
 
   const NoteScreen({
     super.key,
     required this.folderId,
-    required this.exerciseListId,
-    required this.selectionId,
+    this.exerciseListId,
+    this.selectionId,
     required this.noteId,
   });
 
@@ -184,12 +186,26 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     final folder = ref
         .watch(folderProvider)
         .firstWhere((f) => f.id == widget.folderId);
-    final list = folder.exerciseLists.firstWhere(
-      (l) => l.id == widget.exerciseListId,
-    );
-    final selection = list.selections.firstWhere(
-      (s) => s.id == widget.selectionId,
-    );
+
+    String title = 'Note';
+    Selection? selection;
+
+    if (widget.exerciseListId != null && widget.selectionId != null) {
+      try {
+        final list = folder.exerciseLists.firstWhere(
+          (l) => l.id == widget.exerciseListId,
+        );
+        selection = list.selections.firstWhere(
+          (s) => s.id == widget.selectionId,
+        );
+        title = 'Exercise';
+      } catch (_) {}
+    } else {
+      final note = folder.notes[widget.noteId];
+      if (note != null && note.name != null) {
+        title = note.name!;
+      }
+    }
 
     return Builder(
       builder: (context) {
@@ -208,59 +224,44 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             },
             behavior: HitTestBehavior.translucent,
             child: Scaffold(
-              key: _scaffoldKey, // Assign GlobalKey
-              extendBodyBehindAppBar: true,
-              appBar: PreferredSize(
-                preferredSize: const Size.fromHeight(48),
-                child: ValueListenableBuilder<int>(
-                  valueListenable: _undoRedoManager.historyNotifier,
-                  builder: (context, _, __) {
-                    return ValueListenableBuilder<List<SketchLine>>(
-                      valueListenable: selectionNotifier,
-                      builder: (context, selectedLines, _) {
-                        return NoteAppBar(
-                          onUndo: _undoRedoManager.undo,
-                          onRedo: _undoRedoManager.redo,
-                          onCopy: _clipboardManager.copy,
-                          onPaste: _clipboardManager.paste,
-                          onExportPng: _exportPng,
-                          onExportPdf: _exportPdf,
-                          onSave: () {
-                            _autoSaveTimer?.cancel();
-                            _saveNote();
-                          },
-                          onSettings: () {
-                            setState(
-                              () => _rightDrawerContent =
-                                  RightDrawerContent.settings,
-                            );
-                            _scaffoldKey.currentState?.openEndDrawer();
-                          },
-                          onBack: () async {
-                            await _saveNote();
-                            if (mounted) {
-                              Navigator.of(context).pop();
-                            }
-                          },
-                          onDelete: selectedLines.isNotEmpty
-                              ? _clipboardManager.deleteSelection
-                              : null,
-                          onChat: () {
-                            setState(
-                              () => _rightDrawerContent =
-                                  RightDrawerContent.aiChat,
-                            );
-                            _scaffoldKey.currentState?.openEndDrawer();
-                          },
-                          canUndo: _undoRedoManager.canUndo,
-                          canRedo: _undoRedoManager.canRedo,
-                          canCopy: selectedLines.isNotEmpty,
-                          canPaste: _clipboardManager.canPaste,
-                        );
-                      },
-                    );
-                  },
-                ),
+              key: _scaffoldKey,
+              appBar: NoteAppBar(
+                title: title,
+                onUndo: _undoRedoManager.undo,
+                onRedo: _undoRedoManager.redo,
+                onCopy: _clipboardManager.copy,
+                onPaste: _clipboardManager.paste,
+                onExportPng: _exportPng,
+                onExportPdf: _exportPdf,
+                onSave: () {
+                  _autoSaveTimer?.cancel();
+                  _saveNote();
+                },
+                onSettings: () {
+                  setState(
+                    () => _rightDrawerContent = RightDrawerContent.settings,
+                  );
+                  _scaffoldKey.currentState?.openEndDrawer();
+                },
+                onBack: () async {
+                  await _saveNote();
+                  if (mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
+                onDelete: selectionNotifier.value.isNotEmpty
+                    ? _clipboardManager.deleteSelection
+                    : null,
+                onChat: () {
+                  setState(
+                    () => _rightDrawerContent = RightDrawerContent.aiChat,
+                  );
+                  _scaffoldKey.currentState?.openEndDrawer();
+                },
+                canUndo: _undoRedoManager.canUndo,
+                canRedo: _undoRedoManager.canRedo,
+                canCopy: selectionNotifier.value.isNotEmpty,
+                canPaste: _clipboardManager.canPaste,
               ),
               endDrawer: _rightDrawerContent == RightDrawerContent.aiChat
                   ? SizedBox(

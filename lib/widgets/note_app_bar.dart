@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
+  final String title;
   final VoidCallback onUndo;
   final VoidCallback onRedo;
   final VoidCallback onCopy;
@@ -19,6 +20,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   const NoteAppBar({
     super.key,
+    this.title = 'Note',
     required this.onUndo,
     required this.onRedo,
     required this.onCopy,
@@ -52,7 +54,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
         tooltip: 'Back',
       ),
       title: Text(
-        'Note',
+        title,
         style: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
