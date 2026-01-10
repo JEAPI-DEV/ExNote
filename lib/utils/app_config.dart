@@ -20,4 +20,27 @@ class AppConfig {
   static const bool defaultSubmitLastImageOnly = true;
   static const bool defaultWaifuFetcherEnabled = true;
   static const double defaultWaifuImageWidth = 500.0;
+  static const String defaultWaifuTag = 'waifu';
+  static const bool defaultWaifuNsfw = false;
+
+  static const List<String> waifuTagsSfw = [
+    'waifu',
+    'maid',
+    'marin-kitagawa',
+    'mori-calliope',
+    'raiden-shogun',
+    'oppai',
+    'selfies',
+    'uniform',
+    'kamisato-ayaka',
+  ];
+
+  static const List<String> waifuTagsNsfw = [
+    'ass',
+    'hentai',
+    'paizuri',
+    'oral',
+    'ecchi',
+    'ero',
+  ];
 }

@@ -29,6 +29,8 @@ class SettingsService {
       'waifuImageWidth':
           prefs.getDouble('waifuImageWidth') ??
           AppConfig.defaultWaifuImageWidth,
+      'waifuTag': prefs.getString('waifuTag') ?? AppConfig.defaultWaifuTag,
+      'waifuNsfw': prefs.getBool('waifuNsfw') ?? AppConfig.defaultWaifuNsfw,
     };
   }
 
@@ -44,6 +46,8 @@ class SettingsService {
     required double aiDrawerWidth,
     required bool waifuFetcherEnabled,
     required double waifuImageWidth,
+    required String waifuTag,
+    required bool waifuNsfw,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('strokeWidth', strokeWidth);
@@ -57,5 +61,7 @@ class SettingsService {
     await prefs.setDouble('aiDrawerWidth', aiDrawerWidth);
     await prefs.setBool('waifuFetcherEnabled', waifuFetcherEnabled);
     await prefs.setDouble('waifuImageWidth', waifuImageWidth);
+    await prefs.setString('waifuTag', waifuTag);
+    await prefs.setBool('waifuNsfw', waifuNsfw);
   }
 }

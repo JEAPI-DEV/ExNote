@@ -12,6 +12,8 @@ class SettingsDrawer extends ConsumerWidget {
   final bool submitLastImageOnly;
   final bool waifuFetcherEnabled;
   final double waifuImageWidth;
+  final String waifuTag;
+  final bool waifuNsfw;
   final double gridSpacing;
   final TextEditingController tokenController;
   final ValueChanged<bool> onGridEnabledChanged;
@@ -23,6 +25,8 @@ class SettingsDrawer extends ConsumerWidget {
   final ValueChanged<bool> onSubmitLastImageOnlyChanged;
   final ValueChanged<bool> onWaifuFetcherEnabledChanged;
   final ValueChanged<double> onWaifuImageWidthChanged;
+  final ValueChanged<String> onWaifuTagChanged;
+  final ValueChanged<bool> onWaifuNsfwChanged;
   final VoidCallback? onExportBackup;
 
   const SettingsDrawer({
@@ -35,6 +39,8 @@ class SettingsDrawer extends ConsumerWidget {
     required this.submitLastImageOnly,
     required this.waifuFetcherEnabled,
     required this.waifuImageWidth,
+    required this.waifuTag,
+    required this.waifuNsfw,
     required this.tokenController,
     required this.onGridEnabledChanged,
     required this.onGridTypeChanged,
@@ -45,6 +51,8 @@ class SettingsDrawer extends ConsumerWidget {
     required this.onSubmitLastImageOnlyChanged,
     required this.onWaifuFetcherEnabledChanged,
     required this.onWaifuImageWidthChanged,
+    required this.onWaifuTagChanged,
+    required this.onWaifuNsfwChanged,
     this.onExportBackup,
   });
 
@@ -244,6 +252,43 @@ class SettingsDrawer extends ConsumerWidget {
                           divisions: 18,
                           label: waifuImageWidth.round().toString(),
                           onChanged: onWaifuImageWidthChanged,
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('NSFW'),
+                          value: waifuNsfw,
+                          onChanged: onWaifuNsfwChanged,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tag',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        DropdownButtonFormField<String>(
+                          value: waifuTag,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          items:
+                              (waifuNsfw
+                                      ? AppConfig.waifuTagsNsfw
+                                      : AppConfig.waifuTagsSfw)
+                                  .map((tag) {
+                                    return DropdownMenuItem(
+                                      value: tag,
+                                      child: Text(tag),
+                                    );
+                                  })
+                                  .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              onWaifuTagChanged(value);
+                            }
+                          },
                         ),
                       ],
                     ),
