@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/folder_provider.dart';
+import '../services/backup_service.dart';
+import '../services/export_service.dart';
 import 'subject_screen.dart';
 
 class FolderScreen extends ConsumerWidget {
@@ -19,6 +21,12 @@ class FolderScreen extends ConsumerWidget {
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           centerTitle: true,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () => _showSettingsDialog(context, ref),
+            ),
+          ],
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Exercises', icon: Icon(Icons.assignment)),
@@ -86,6 +94,62 @@ class FolderScreen extends ConsumerWidget {
             child: const Text('Create'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showSettingsDialog(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            const ListTile(
+              title: Text(
+                'Data Management',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.unarchive),
+              title: const Text('Import Backup'),
+              subtitle: const Text('Import notes from .zip file'),
+              onTap: () {
+                Navigator.pop(context);
+                BackupService.importFromBackup(context, ref);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.archive),
+              title: const Text('Export All Data'),
+              subtitle: const Text('Export all data to ZIP'),
+              onTap: () async {
+                Navigator.pop(context);
+                // Implementation of export from main screen
+                try {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Generating backup...')),
+                  );
+                  // We can reuse ExportService.exportToZip() but it's currently
+                  // static in NoteScreen context locally? No, it's a service.
+                  final file = await ExportService.exportToZip();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Backup saved to ${file.path}')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Export failed: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }

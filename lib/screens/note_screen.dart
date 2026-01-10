@@ -5,7 +5,6 @@ import 'package:scribble/scribble.dart';
 import '../providers/folder_provider.dart';
 import '../models/drawing_tool.dart';
 import '../models/selection.dart';
-import '../models/note.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_toolbar.dart';
 import '../widgets/ai_chat_drawer.dart';
@@ -22,6 +21,7 @@ import '../services/export_service.dart';
 import '../services/settings_service.dart';
 import '../services/stylus_shortcut_manager.dart';
 import '../services/waifu_service.dart';
+import '../services/backup_service.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -399,11 +399,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         } catch (e) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Backup failed: $e')),
+                              SnackBar(content: Text('Export failed: $e')),
                             );
                           }
                         }
                       },
+                      onImportBackup: () =>
+                          BackupService.importFromBackup(context, ref),
                     ),
               body: GestureDetector(
                 onTap: () => FocusScope.of(context).unfocus(),

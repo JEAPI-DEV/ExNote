@@ -4,6 +4,7 @@ import '../models/exercise_list.dart';
 import '../models/note.dart';
 import '../services/storage_service.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:io';
 
 final storageServiceProvider = Provider((ref) => StorageService());
 
@@ -127,6 +128,82 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
         else
           folder,
     ];
+    await _storage.saveFolders(state);
+  }
+
+  Future<void> mergeFromBackup(
+    List<Folder> importedFolders,
+    String sourceDirPath,
+  ) async {
+    final Map<String, Folder> currentFolders = {for (final f in state) f.id: f};
+
+    for (final imported in importedFolders) {
+      if (currentFolders.containsKey(imported.id)) {
+        final existing = currentFolders[imported.id]!;
+        final mergedNotes = {...existing.notes};
+        for (final noteId in imported.notes.keys) {
+          if (!mergedNotes.containsKey(noteId)) {
+            mergedNotes[noteId] = imported.notes[noteId]!;
+            // Copy the note file if it exists in backup
+            final sourceFile = File('$sourceDirPath/note_$noteId.json');
+            if (await sourceFile.exists()) {
+              await _storage.importNoteFile(noteId, sourceFile);
+            }
+
+            // Copy screenshot if it exists
+            final noteObj = imported.notes[noteId]!;
+            if (noteObj.screenshotPath != null) {
+              final screenshotFile = File(
+                '$sourceDirPath/${noteObj.screenshotPath}',
+              );
+              if (await screenshotFile.exists()) {
+                await _storage.importScreenshot(
+                  noteObj.screenshotPath!,
+                  screenshotFile,
+                );
+              }
+            }
+          }
+        }
+
+        final mergedLists = [...existing.exerciseLists];
+        for (final impList in imported.exerciseLists) {
+          if (!mergedLists.any((l) => l.id == impList.id)) {
+            mergedLists.add(impList);
+          }
+        }
+
+        currentFolders[imported.id] = existing.copyWith(
+          notes: mergedNotes,
+          exerciseLists: mergedLists,
+        );
+      } else {
+        currentFolders[imported.id] = imported;
+        // Copy all note files for this new folder
+        for (final noteId in imported.notes.keys) {
+          final sourceFile = File('$sourceDirPath/note_$noteId.json');
+          if (await sourceFile.exists()) {
+            await _storage.importNoteFile(noteId, sourceFile);
+          }
+
+          // Copy screenshot if it exists
+          final noteObj = imported.notes[noteId]!;
+          if (noteObj.screenshotPath != null) {
+            final screenshotFile = File(
+              '$sourceDirPath/${noteObj.screenshotPath}',
+            );
+            if (await screenshotFile.exists()) {
+              await _storage.importScreenshot(
+                noteObj.screenshotPath!,
+                screenshotFile,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    state = currentFolders.values.toList();
     await _storage.saveFolders(state);
   }
 }

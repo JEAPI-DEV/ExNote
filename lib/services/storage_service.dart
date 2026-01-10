@@ -55,6 +55,22 @@ class StorageService {
       return null;
     }
   }
+
+  Future<void> importNoteFile(String noteId, File sourceFile) async {
+    final path = await _localPath;
+    final destination = File('$path/note_$noteId.json');
+    if (await sourceFile.exists()) {
+      await sourceFile.copy(destination.path);
+    }
+  }
+
+  Future<void> importScreenshot(String fileName, File sourceFile) async {
+    final path = await _localPath;
+    final destination = File('$path/$fileName');
+    if (await sourceFile.exists()) {
+      await sourceFile.copy(destination.path);
+    }
+  }
 }
 
 String _serializeFolders(List<Folder> folders) {

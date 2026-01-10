@@ -28,6 +28,7 @@ class SettingsDrawer extends ConsumerWidget {
   final ValueChanged<String> onWaifuTagChanged;
   final ValueChanged<bool> onWaifuNsfwChanged;
   final VoidCallback? onExportBackup;
+  final VoidCallback? onImportBackup;
 
   const SettingsDrawer({
     super.key,
@@ -54,6 +55,7 @@ class SettingsDrawer extends ConsumerWidget {
     required this.onWaifuTagChanged,
     required this.onWaifuNsfwChanged,
     this.onExportBackup,
+    this.onImportBackup,
   });
 
   @override
@@ -300,6 +302,12 @@ class SettingsDrawer extends ConsumerWidget {
                   title: const Text('Backup Data'),
                   subtitle: const Text('Export all data to Zip'),
                   onTap: onExportBackup,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.unarchive),
+                  title: const Text('Import Backup'),
+                  subtitle: const Text('Import from .zip file'),
+                  onTap: onImportBackup,
                 ),
               ],
             ),
