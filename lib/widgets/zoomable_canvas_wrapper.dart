@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class ZoomableCanvasWrapper extends StatefulWidget {
@@ -5,6 +6,8 @@ class ZoomableCanvasWrapper extends StatefulWidget {
   final TransformationController transformationController;
   final double minScale;
   final double maxScale;
+  final bool isZoomLocked;
+  final VoidCallback? onInteraction;
 
   const ZoomableCanvasWrapper({
     super.key,
@@ -12,6 +15,8 @@ class ZoomableCanvasWrapper extends StatefulWidget {
     required this.transformationController,
     this.minScale = 0.1,
     this.maxScale = 10.0,
+    this.isZoomLocked = false,
+    this.onInteraction,
   });
 
   @override
@@ -46,6 +51,12 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
   }
 
   void _onPointerDown(PointerDownEvent event) {
+    // Ignore stylus inputs for zoom/pan calculations (let them pass through for drawing)
+    if (event.kind == PointerDeviceKind.stylus ||
+        event.kind == PointerDeviceKind.invertedStylus) {
+      return;
+    }
+
     debugPrint(
       'ZoomableCanvas: Pointer Down ${event.pointer} at ${event.position}',
     );
@@ -54,6 +65,11 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
   }
 
   void _onPointerMove(PointerMoveEvent event) {
+    if (event.kind == PointerDeviceKind.stylus ||
+        event.kind == PointerDeviceKind.invertedStylus) {
+      return;
+    }
+
     if (!_pointers.containsKey(event.pointer)) return;
     _pointers[event.pointer] = event.position;
 
@@ -63,6 +79,11 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
   }
 
   void _onPointerUp(PointerEvent event) {
+    if (event.kind == PointerDeviceKind.stylus ||
+        event.kind == PointerDeviceKind.invertedStylus) {
+      return;
+    }
+
     debugPrint('ZoomableCanvas: Pointer Up/Cancel ${event.pointer}');
     _pointers.remove(event.pointer);
 
@@ -108,12 +129,13 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
   }
 
   void _updateGesture() {
+    // Notify parent of interaction
+    widget.onInteraction?.call();
+
     if (_startMatrix == null || _startFocalPoint == null) return;
 
     final Offset currentFocalPoint = _calculateFocalPoint();
     final double currentScaleDistance = _calculateScaleDistance();
-
-    // debugPrint('ZoomableCanvas: Update. Focal: $currentFocalPoint, Dist: $currentScaleDistance');
 
     // 1. Calculate Panning (Translation)
     final Offset translationDelta = currentFocalPoint - _startFocalPoint!;
@@ -122,7 +144,7 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
     double scaleRatio = 1.0;
 
     // "Sticky Zoom" Logic
-    if (!_zoomActive) {
+    if (!_zoomActive && !widget.isZoomLocked) {
       // Check threshold
       final double distDiff = (currentScaleDistance - _startScaleDistance!)
           .abs();
@@ -141,7 +163,7 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
       }
     }
 
-    if (_zoomActive) {
+    if (_zoomActive && !widget.isZoomLocked) {
       scaleRatio = currentScaleDistance / _startScaleDistance!;
     }
 
