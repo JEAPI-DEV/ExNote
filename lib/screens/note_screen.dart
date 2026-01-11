@@ -547,6 +547,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   }
 
   void _scheduleAutoSave() {
+    if (mounted) setState(() {});
     _autoSaveTimer?.cancel();
     _autoSaveTimer = Timer(const Duration(seconds: 2), () {
       _saveNote();
