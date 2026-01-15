@@ -191,10 +191,11 @@ class _NoteToolbarState extends State<NoteToolbar> {
       Colors.white,
       Colors.redAccent,
       Colors.blueAccent,
-      Colors.greenAccent,
+      Colors.green,
+      Colors.blue,
+      Colors.red,
       Colors.orangeAccent,
       Colors.purpleAccent,
-      Colors.tealAccent,
     ];
 
     return ValueListenableBuilder<Color>(

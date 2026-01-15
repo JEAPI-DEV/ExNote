@@ -10,7 +10,7 @@ class WaifuService {
       final imageData = await _client.getImage(tag, isNsfw: isNsfw);
       return imageData['url'];
     } catch (e) {
-      print('❌ An error occurred fetching waifu image: $e');
+      print('An error occurred fetching waifu image: $e');
       return null;
     }
   }
