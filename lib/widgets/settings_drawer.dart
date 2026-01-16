@@ -11,9 +11,11 @@ class SettingsDrawer extends ConsumerWidget {
   final bool tutorEnabled;
   final bool submitLastImageOnly;
   final bool waifuFetcherEnabled;
+  final String waifuProvider;
   final double waifuImageWidth;
   final String waifuTag;
   final bool waifuNsfw;
+  final List<String> availableWaifuTags;
   final double gridSpacing;
   final TextEditingController tokenController;
   final ValueChanged<bool> onGridEnabledChanged;
@@ -24,6 +26,7 @@ class SettingsDrawer extends ConsumerWidget {
   final ValueChanged<bool> onTutorEnabledChanged;
   final ValueChanged<bool> onSubmitLastImageOnlyChanged;
   final ValueChanged<bool> onWaifuFetcherEnabledChanged;
+  final ValueChanged<String> onWaifuProviderChanged;
   final ValueChanged<double> onWaifuImageWidthChanged;
   final ValueChanged<String> onWaifuTagChanged;
   final ValueChanged<bool> onWaifuNsfwChanged;
@@ -39,9 +42,11 @@ class SettingsDrawer extends ConsumerWidget {
     required this.tutorEnabled,
     required this.submitLastImageOnly,
     required this.waifuFetcherEnabled,
+    required this.waifuProvider,
     required this.waifuImageWidth,
     required this.waifuTag,
     required this.waifuNsfw,
+    required this.availableWaifuTags,
     required this.tokenController,
     required this.onGridEnabledChanged,
     required this.onGridTypeChanged,
@@ -51,6 +56,7 @@ class SettingsDrawer extends ConsumerWidget {
     required this.onTutorEnabledChanged,
     required this.onSubmitLastImageOnlyChanged,
     required this.onWaifuFetcherEnabledChanged,
+    required this.onWaifuProviderChanged,
     required this.onWaifuImageWidthChanged,
     required this.onWaifuTagChanged,
     required this.onWaifuNsfwChanged,
@@ -244,6 +250,34 @@ class SettingsDrawer extends ConsumerWidget {
                       children: [
                         const SizedBox(height: 8),
                         Text(
+                          'Provider',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        DropdownButtonFormField<String>(
+                          value: waifuProvider,
+                          items: AppConfig.waifuProviders
+                              .map(
+                                (provider) => DropdownMenuItem(
+                                  value: provider,
+                                  child: Text(provider),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              onWaifuProviderChanged(value);
+                            }
+                          },
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
                           'Image Width: ${waifuImageWidth.toInt()}',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
@@ -267,7 +301,9 @@ class SettingsDrawer extends ConsumerWidget {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         DropdownButtonFormField<String>(
-                          value: waifuTag,
+                          value: availableWaifuTags.contains(waifuTag)
+                              ? waifuTag
+                              : availableWaifuTags.firstOrNull,
                           decoration: const InputDecoration(
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(
@@ -275,17 +311,12 @@ class SettingsDrawer extends ConsumerWidget {
                               vertical: 8,
                             ),
                           ),
-                          items:
-                              (waifuNsfw
-                                      ? AppConfig.waifuTagsNsfw
-                                      : AppConfig.waifuTagsSfw)
-                                  .map((tag) {
-                                    return DropdownMenuItem(
-                                      value: tag,
-                                      child: Text(tag),
-                                    );
-                                  })
-                                  .toList(),
+                          items: availableWaifuTags.map((tag) {
+                            return DropdownMenuItem(
+                              value: tag,
+                              child: Text(tag),
+                            );
+                          }).toList(),
                           onChanged: (value) {
                             if (value != null) {
                               onWaifuTagChanged(value);

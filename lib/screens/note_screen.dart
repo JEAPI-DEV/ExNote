@@ -21,6 +21,8 @@ import '../services/export_service.dart';
 import '../services/settings_service.dart';
 import '../services/stylus_shortcut_manager.dart';
 import '../services/waifu_service.dart';
+import '../services/waifu_im_service.dart';
+import '../services/waifu_pics_service.dart';
 import '../services/backup_service.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
@@ -69,11 +71,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   bool submitLastImageOnly = AppConfig.defaultSubmitLastImageOnly;
   double aiDrawerWidth = AppConfig.defaultAiDrawerWidth;
   bool waifuFetcherEnabled = AppConfig.defaultWaifuFetcherEnabled;
+  String waifuProvider = AppConfig.defaultWaifuProvider;
   double waifuImageWidth = AppConfig.defaultWaifuImageWidth;
   String waifuTag = AppConfig.defaultWaifuTag;
   bool waifuNsfw = AppConfig.defaultWaifuNsfw;
   String? waifuImageUrl;
   final TextEditingController _tokenController = TextEditingController();
+  WaifuService? _lastWaifuService;
 
   // Logic Managers
   late UndoRedoManager _undoRedoManager;
@@ -156,12 +160,28 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Future<void> _fetchWaifuImage() async {
     if (!waifuFetcherEnabled) return;
 
-    final service = WaifuService();
+    final WaifuService service = _getWaifuService();
     final url = await service.fetchWaifuImage(waifuTag, isNsfw: waifuNsfw);
     if (mounted && url != null) {
       setState(() {
         waifuImageUrl = url;
       });
+    }
+  }
+
+  WaifuService _getWaifuService() {
+    _lastWaifuService ??= _createWaifuService(waifuProvider);
+    // If provider changed, recreate
+    return _lastWaifuService!;
+  }
+
+  WaifuService _createWaifuService(String provider) {
+    switch (provider) {
+      case 'Waifu.pics':
+        return WaifuPicsService();
+      case 'Waifu.im':
+      default:
+        return WaifuImService();
     }
   }
 
@@ -306,9 +326,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                       tutorEnabled: tutorEnabled,
                       submitLastImageOnly: submitLastImageOnly,
                       waifuFetcherEnabled: waifuFetcherEnabled,
+                      waifuProvider: waifuProvider,
                       waifuImageWidth: waifuImageWidth,
                       waifuTag: waifuTag,
                       waifuNsfw: waifuNsfw,
+                      availableWaifuTags: waifuNsfw
+                          ? _getWaifuService().getNsfwTags()
+                          : _getWaifuService().getSfwTags(),
                       tokenController: _tokenController,
                       onGridEnabledChanged: (value) {
                         setState(() {
@@ -361,6 +385,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         });
                         _saveSettings();
                       },
+                      onWaifuProviderChanged: (value) {
+                        setState(() {
+                          waifuProvider = value;
+                          _lastWaifuService = _createWaifuService(value);
+                          waifuTag = waifuNsfw
+                              ? _getWaifuService().getNsfwTags().first
+                              : _getWaifuService().getSfwTags().first;
+                        });
+                        _saveSettings();
+                      },
                       onWaifuImageWidthChanged: (value) {
                         setState(() {
                           waifuImageWidth = value;
@@ -378,10 +412,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                           waifuNsfw = value;
                           // Reset tag if current tag is not in new list
                           final validTags = value
-                              ? AppConfig.waifuTagsNsfw
-                              : AppConfig.waifuTagsSfw;
+                              ? _getWaifuService().getNsfwTags()
+                              : _getWaifuService().getSfwTags();
                           if (!validTags.contains(waifuTag)) {
-                            waifuTag = validTags.first;
+                            waifuTag = validTags.isNotEmpty
+                                ? validTags.first
+                                : '';
                           }
                         });
                         _saveSettings();
@@ -518,9 +554,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         submitLastImageOnly = settings['submitLastImageOnly'];
         aiDrawerWidth = settings['aiDrawerWidth'];
         waifuFetcherEnabled = settings['waifuFetcherEnabled'];
+        waifuProvider = settings['waifuProvider'];
         waifuImageWidth = settings['waifuImageWidth'];
         waifuTag = settings['waifuTag'];
         waifuNsfw = settings['waifuNsfw'];
+
+        // Ensure service is initialized with correct provider before fetch
+        _lastWaifuService = _createWaifuService(waifuProvider);
       });
       if (waifuFetcherEnabled) {
         _fetchWaifuImage();
@@ -540,6 +580,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       submitLastImageOnly: submitLastImageOnly,
       aiDrawerWidth: aiDrawerWidth,
       waifuFetcherEnabled: waifuFetcherEnabled,
+      waifuProvider: waifuProvider,
       waifuImageWidth: waifuImageWidth,
       waifuTag: waifuTag,
       waifuNsfw: waifuNsfw,
