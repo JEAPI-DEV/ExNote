@@ -131,6 +131,26 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     await _storage.saveFolders(state);
   }
 
+  Future<void> updateNoteName(
+    String folderId,
+    String noteId,
+    String newName,
+  ) async {
+    state = [
+      for (final folder in state)
+        if (folder.id == folderId && folder.notes.containsKey(noteId))
+          folder.copyWith(
+            notes: {
+              ...folder.notes,
+              noteId: folder.notes[noteId]!.copyWith(name: newName),
+            },
+          )
+        else
+          folder,
+    ];
+    await _storage.saveFolders(state);
+  }
+
   Future<void> mergeFromBackup(
     List<Folder> importedFolders,
     String sourceDirPath,
