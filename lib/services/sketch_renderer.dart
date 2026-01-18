@@ -132,6 +132,7 @@ class SketchRenderer {
     required double scale,
     List<SketchLine> selectedLines = const [],
     bool skipSelectedLines = false,
+    ({double top, double bottom})? verticalRange,
   }) {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -148,6 +149,22 @@ class SketchRenderer {
       if (selectedSet.contains(line) && skipSelectedLines) {
         continue;
       }
+
+      if (verticalRange != null) {
+        // Simple bounding box check for the line
+        double lineTop = double.infinity;
+        double lineBottom = double.negativeInfinity;
+        for (final p in line.points) {
+          if (p.y < lineTop) lineTop = p.y;
+          if (p.y > lineBottom) lineBottom = p.y;
+        }
+        final halfWidth = line.width / 2;
+        if (lineBottom + halfWidth < verticalRange.top ||
+            lineTop - halfWidth > verticalRange.bottom) {
+          continue;
+        }
+      }
+
       drawLine(
         canvas,
         line.points,
@@ -177,6 +194,7 @@ class SketchRenderer {
     bool gridEnabled = false,
     GridType gridType = GridType.grid,
     double gridSpacing = 40.0,
+    ({double top, double bottom})? verticalRange,
   }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -196,11 +214,6 @@ class SketchRenderer {
         ..color = (isDark ? Colors.white : Colors.black).withOpacity(0.1)
         ..strokeWidth = 1.0 / scale; // Keep grid lines thin
 
-      // Draw grid over a large enough area to cover the transformed view
-      // For simplicity, we can just draw it based on the size and inverse transform
-      // but here we can just draw a large enough grid or calculate bounds.
-      // Let's just draw it relative to the content bounds if we have them,
-      // or just a very large area.
       for (double x = -10000; x <= 10000; x += gridSpacing) {
         canvas.drawLine(Offset(x, -10000), Offset(x, 10000), gridPaint);
       }
@@ -228,7 +241,12 @@ class SketchRenderer {
       canvas.scale(sketchScale);
     }
 
-    final picture = renderSketch(sketch: sketch, isDark: isDark, scale: 1.0);
+    final picture = renderSketch(
+      sketch: sketch,
+      isDark: isDark,
+      scale: 1.0,
+      verticalRange: verticalRange,
+    );
     canvas.drawPicture(picture);
 
     if (sketchScale != 1.0) {

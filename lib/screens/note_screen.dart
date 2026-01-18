@@ -531,7 +531,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Future<void> _exportPdf() async {
     try {
-      final file = await ExportService.exportToPdf(_exportKey, context);
+      final file = await ExportService.exportToPdf(
+        sketch: sketchNotifier.value,
+        context: context,
+        gridEnabled: gridEnabled,
+        gridType: gridType,
+        gridSpacing: gridSpacing,
+        isDark: Theme.of(context).brightness == Brightness.dark,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,

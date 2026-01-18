@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:archive/archive_io.dart';
@@ -8,6 +9,9 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
+import 'package:scribble/scribble.dart';
+import '../models/grid_type.dart';
+import '../services/sketch_renderer.dart';
 
 class ExportService {
   static Future<File> exportToZip() async {
@@ -59,38 +63,215 @@ class ExportService {
     return file;
   }
 
-  static Future<File> exportToPdf(
-    GlobalKey exportKey,
-    BuildContext context,
-  ) async {
-    final boundary =
-        exportKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    if (boundary == null) {
-      throw Exception('Nothing to export');
+  static Future<File> exportToPdf({
+    required Sketch sketch,
+    required BuildContext context,
+    bool gridEnabled = false,
+    GridType gridType = GridType.grid,
+    double gridSpacing = 40.0,
+    bool isDark = false,
+    ui.Image? backgroundImage,
+    Rect? backgroundRect,
+  }) async {
+    print("[ExportService] Starting PDF export...");
+    final SketchRenderer renderer = SketchRenderer();
+
+    // 1. Calculate Bounds
+    Rect sketchBounds = _getSketchBounds(sketch);
+    print("[ExportService] Sketch bounds: $sketchBounds");
+    if (sketchBounds == Rect.zero) {
+      // Default to A4 if empty
+      sketchBounds = const Rect.fromLTWH(0, 0, 595, 842);
     }
 
-    final dpi = MediaQuery.of(context).devicePixelRatio;
-    final ui.Image image = await boundary.toImage(pixelRatio: dpi * 2);
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData == null) throw Exception('Failed to encode image');
-    final bytes = byteData.buffer.asUint8List();
-
-    final doc = pw.Document();
-    final pwImage = pw.MemoryImage(bytes);
-    doc.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context ctx) =>
-            pw.Center(child: pw.Image(pwImage, fit: pw.BoxFit.contain)),
-      ),
+    // Add padding (5% of width)
+    final padding = sketchBounds.width * 0.05;
+    final contentRect = Rect.fromLTRB(
+      sketchBounds.left - padding,
+      sketchBounds.top - padding,
+      sketchBounds.right + padding,
+      sketchBounds.bottom + padding,
     );
 
+    final double pageWidth = contentRect.width;
+    const double targetPageHeight = 842.0; // A4 height in points
+
+    // 2. Find Split Points
+    print("[ExportService] Finding split points...");
+    final List<double> splitPoints = _findSplitPoints(
+      sketch,
+      contentRect,
+      targetPageHeight,
+    );
+    print("[ExportService] Found ${splitPoints.length - 1} pages.");
+
+    final doc = pw.Document();
+
+    // 3. Render each page
+    for (int i = 0; i < splitPoints.length - 1; i++) {
+      final top = splitPoints[i];
+      final bottom = splitPoints[i + 1];
+      final segmentHeight = bottom - top;
+      print(
+        "[ExportService] Rendering page ${i + 1} (height: $segmentHeight)...",
+      );
+
+      final Size canvasSize = Size(pageWidth * 2, segmentHeight * 2);
+
+      final ui.Image pageImage = await renderer.renderToImage(
+        sketch,
+        size: canvasSize,
+        backgroundImage: backgroundImage,
+        backgroundRect: backgroundRect,
+        isDark: isDark,
+        offset: Offset(-contentRect.left * 2, -top * 2),
+        scale: 2.0,
+        gridEnabled: gridEnabled,
+        gridType: gridType,
+        gridSpacing: gridSpacing * 2,
+        verticalRange: (top: top, bottom: bottom),
+      );
+
+      final byteData = await pageImage.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      if (byteData == null) continue;
+      final bytes = byteData.buffer.asUint8List();
+      final pwImage = pw.MemoryImage(bytes);
+
+      doc.addPage(
+        pw.Page(
+          // Always use targetPageHeight for the page format to ensure "normal A4 pages"
+          pageFormat: PdfPageFormat(pageWidth, targetPageHeight),
+          margin: pw.EdgeInsets.zero,
+          build: (pw.Context ctx) {
+            return pw.Container(
+              alignment: pw.Alignment.topCenter,
+              child: pw.Image(
+                pwImage,
+                width: pageWidth,
+                height: segmentHeight,
+                fit: pw.BoxFit.fill,
+              ),
+            );
+          },
+        ),
+      );
+      pageImage.dispose(); // Free memory
+    }
+
+    print("[ExportService] Saving PDF...");
     final dir = await _getExportDirectory();
     final file = File(
       '${dir.path}/exnote_export_${DateTime.now().millisecondsSinceEpoch}.pdf',
     );
     await file.writeAsBytes(await doc.save());
+    print("[ExportService] PDF saved to ${file.path}");
     return file;
+  }
+
+  static Rect _getSketchBounds(Sketch sketch) {
+    if (sketch.lines.isEmpty) return Rect.zero;
+    double minX = double.infinity, maxX = double.negativeInfinity;
+    double minY = double.infinity, maxY = double.negativeInfinity;
+    for (final line in sketch.lines) {
+      for (final p in line.points) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
+    }
+    if (minX == double.infinity) return Rect.zero;
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
+  }
+
+  static List<double> _findSplitPoints(
+    Sketch sketch,
+    Rect contentRect,
+    double targetHeight,
+  ) {
+    // Optimization: Use a vertical occupancy map
+    final double startY = contentRect.top;
+    final double endY = contentRect.bottom;
+    final int mapSize = (endY - startY).ceil() + 1;
+    if (mapSize <= 0) return [startY, endY];
+
+    final occupancy = List<bool>.filled(mapSize, false);
+
+    for (final line in sketch.lines) {
+      final halfWidth = line.width / 2 + 2; // Buffer
+      for (int i = 0; i < line.points.length - 1; i++) {
+        final p1 = line.points[i];
+        final p2 = line.points[i + 1];
+        final top = (math.min(p1.y, p2.y) - halfWidth - startY).floor().clamp(
+          0,
+          mapSize - 1,
+        );
+        final bottom = (math.max(p1.y, p2.y) + halfWidth - startY).ceil().clamp(
+          0,
+          mapSize - 1,
+        );
+        for (int y = top; y <= bottom; y++) {
+          occupancy[y] = true;
+        }
+      }
+      if (line.points.length == 1) {
+        final p = line.points[0];
+        final top = (p.y - halfWidth - startY).floor().clamp(0, mapSize - 1);
+        final bottom = (p.y + halfWidth - startY).ceil().clamp(0, mapSize - 1);
+        for (int y = top; y <= bottom; y++) {
+          occupancy[y] = true;
+        }
+      }
+    }
+
+    final List<double> splits = [startY];
+    double currentTop = startY;
+
+    while (currentTop < endY) {
+      double nextSplit = currentTop + targetHeight;
+      if (nextSplit >= endY) {
+        splits.add(endY);
+        break;
+      }
+
+      // Search for a gap backwards from targetHeight to targetHeight * 0.7
+      int bestGapIdx = -1;
+      final int startSearch = (nextSplit - startY).floor().clamp(
+        0,
+        mapSize - 1,
+      );
+      final int endSearch = (currentTop + targetHeight * 0.7 - startY)
+          .floor()
+          .clamp(0, mapSize - 1);
+
+      for (int y = startSearch; y >= endSearch; y--) {
+        if (!occupancy[y]) {
+          bestGapIdx = y;
+          break;
+        }
+      }
+
+      // If no gap found, search further up to 50%
+      if (bestGapIdx == -1) {
+        final int endSearchDeep = (currentTop + targetHeight * 0.5 - startY)
+            .floor()
+            .clamp(0, mapSize - 1);
+        for (int y = endSearch; y >= endSearchDeep; y--) {
+          if (!occupancy[y]) {
+            bestGapIdx = y;
+            break;
+          }
+        }
+      }
+
+      double splitY = bestGapIdx == -1 ? nextSplit : startY + bestGapIdx;
+      splits.add(splitY);
+      currentTop = splitY;
+    }
+
+    return splits;
   }
 
   static Future<String?> captureCanvas(GlobalKey exportKey) async {
