@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
+import '../utils/shape_recognizer.dart';
 
 enum _ResizeHandle {
   topLeft,
@@ -25,6 +27,10 @@ class DrawingCanvasController extends ChangeNotifier {
   Color currentColor = Colors.black;
   double currentWidth = 2.0;
   DrawingTool currentTool = DrawingTool.pen;
+  bool shapeSnappingEnabled = true;
+
+  Timer? _shapeSnapTimer;
+  Offset? _lastPointerPosition;
 
   double _scale = 1.0;
   double get scale => _scale;
@@ -150,6 +156,11 @@ class DrawingCanvasController extends ChangeNotifier {
         pressure: event.pressure,
       ),
     ];
+
+    if (shapeSnappingEnabled && currentTool == DrawingTool.pen) {
+      _lastPointerPosition = event.localPosition;
+      _startShapeSnapTimer();
+    }
   }
 
   void handlePointerMove(PointerMoveEvent event) {
@@ -210,6 +221,14 @@ class DrawingCanvasController extends ChangeNotifier {
 
     points.add(currentPoint);
     currentLineNotifier.value = List.from(points);
+
+    if (shapeSnappingEnabled && currentTool == DrawingTool.pen) {
+      final dist = (event.localPosition - _lastPointerPosition!).distance;
+      if (dist > 5.0) {
+        _lastPointerPosition = event.localPosition;
+        _startShapeSnapTimer(); // Reset timer on significant move
+      }
+    }
   }
 
   void handlePointerUp(PointerUpEvent event) {
@@ -249,6 +268,7 @@ class DrawingCanvasController extends ChangeNotifier {
     onAction(AddLinesAction([newLine]));
 
     currentLineNotifier.value = null;
+    _cancelShapeSnapTimer();
   }
 
   void handlePointerCancel(PointerCancelEvent event) {
@@ -264,7 +284,42 @@ class DrawingCanvasController extends ChangeNotifier {
     _resizeStartRect = null;
     _resizeSelectionIndices = null;
     _initialLinesInSession = null;
+    _cancelShapeSnapTimer();
     notifyListeners();
+  }
+
+  void _startShapeSnapTimer() {
+    _shapeSnapTimer?.cancel();
+    _shapeSnapTimer = Timer(const Duration(milliseconds: 700), () {
+      _triggerShapeSnap();
+    });
+  }
+
+  void _cancelShapeSnapTimer() {
+    _shapeSnapTimer?.cancel();
+    _shapeSnapTimer = null;
+  }
+
+  void _triggerShapeSnap() {
+    final points = currentLineNotifier.value;
+    if (points == null || points.length < 5) {
+      print(
+        "[DrawingCanvasController] Triggered snap but too few points: ${points?.length}",
+      );
+      return;
+    }
+
+    print(
+      "[DrawingCanvasController] Triggering shape snap for ${points.length} points",
+    );
+    final recognized = ShapeRecognizer.recognize(points);
+    if (recognized != null) {
+      print("[DrawingCanvasController] Shape recognized: ${recognized.type}");
+      currentLineNotifier.value = recognized.points;
+      notifyListeners();
+    } else {
+      print("[DrawingCanvasController] No shape recognized");
+    }
   }
 
   // --- Selection Logic ---

@@ -23,6 +23,7 @@ class AppConfig {
   static const double defaultWaifuImageWidth = 500.0;
   static const String defaultWaifuTag = 'waifu';
   static const bool defaultWaifuNsfw = false;
+  static const bool defaultShapeSnappingEnabled = true;
 
   static const List<String> waifuProviders = ['Waifu.im', 'Waifu.pics'];
 }

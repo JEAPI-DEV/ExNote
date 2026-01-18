@@ -15,6 +15,7 @@ class SettingsDrawer extends ConsumerWidget {
   final double waifuImageWidth;
   final String waifuTag;
   final bool waifuNsfw;
+  final bool shapeSnappingEnabled;
   final List<String> availableWaifuTags;
   final double gridSpacing;
   final TextEditingController tokenController;
@@ -30,6 +31,7 @@ class SettingsDrawer extends ConsumerWidget {
   final ValueChanged<double> onWaifuImageWidthChanged;
   final ValueChanged<String> onWaifuTagChanged;
   final ValueChanged<bool> onWaifuNsfwChanged;
+  final ValueChanged<bool> onShapeSnappingEnabledChanged;
   final VoidCallback? onExportBackup;
   final VoidCallback? onImportBackup;
 
@@ -46,6 +48,7 @@ class SettingsDrawer extends ConsumerWidget {
     required this.waifuImageWidth,
     required this.waifuTag,
     required this.waifuNsfw,
+    required this.shapeSnappingEnabled,
     required this.availableWaifuTags,
     required this.tokenController,
     required this.onGridEnabledChanged,
@@ -60,6 +63,7 @@ class SettingsDrawer extends ConsumerWidget {
     required this.onWaifuImageWidthChanged,
     required this.onWaifuTagChanged,
     required this.onWaifuNsfwChanged,
+    required this.onShapeSnappingEnabledChanged,
     this.onExportBackup,
     this.onImportBackup,
   });
@@ -171,6 +175,15 @@ class SettingsDrawer extends ConsumerWidget {
                 ),
               ),
           ],
+          const Divider(),
+          SwitchListTile(
+            title: const Text('Shape Snapping'),
+            subtitle: const Text(
+              'Hold at the end of a stroke to snap to shape',
+            ),
+            value: shapeSnappingEnabled,
+            onChanged: onShapeSnappingEnabledChanged,
+          ),
           const Divider(),
 
           // AI Settings

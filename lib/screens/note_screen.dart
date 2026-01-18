@@ -75,6 +75,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   double waifuImageWidth = AppConfig.defaultWaifuImageWidth;
   String waifuTag = AppConfig.defaultWaifuTag;
   bool waifuNsfw = AppConfig.defaultWaifuNsfw;
+  bool shapeSnappingEnabled = AppConfig.defaultShapeSnappingEnabled;
   String? waifuImageUrl;
   final TextEditingController _tokenController = TextEditingController();
   WaifuService? _lastWaifuService;
@@ -330,6 +331,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                       waifuImageWidth: waifuImageWidth,
                       waifuTag: waifuTag,
                       waifuNsfw: waifuNsfw,
+                      shapeSnappingEnabled: shapeSnappingEnabled,
                       availableWaifuTags: waifuNsfw
                           ? _getWaifuService().getNsfwTags()
                           : _getWaifuService().getSfwTags(),
@@ -422,6 +424,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         });
                         _saveSettings();
                       },
+                      onShapeSnappingEnabledChanged: (value) {
+                        setState(() {
+                          shapeSnappingEnabled = value;
+                        });
+                        _saveSettings();
+                      },
                       onExportBackup: () async {
                         try {
                           final file = await ExportService.exportToZip();
@@ -466,6 +474,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         toolNotifier: toolNotifier,
                         sketchNotifier: sketchNotifier,
                         selectionNotifier: selectionNotifier,
+                        shapeSnappingEnabled: shapeSnappingEnabled,
                         onAction: _undoRedoManager.applyAction,
                       ),
                     Positioned(
@@ -558,6 +567,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         waifuImageWidth = settings['waifuImageWidth'];
         waifuTag = settings['waifuTag'];
         waifuNsfw = settings['waifuNsfw'];
+        shapeSnappingEnabled = settings['shapeSnappingEnabled'];
 
         // Ensure service is initialized with correct provider before fetch
         _lastWaifuService = _createWaifuService(waifuProvider);
@@ -584,6 +594,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       waifuImageWidth: waifuImageWidth,
       waifuTag: waifuTag,
       waifuNsfw: waifuNsfw,
+      shapeSnappingEnabled: shapeSnappingEnabled,
     );
   }
 

@@ -25,6 +25,7 @@ class NoteCanvas extends StatefulWidget {
   final ValueNotifier<DrawingTool> toolNotifier;
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
+  final bool shapeSnappingEnabled;
   final Function(UndoAction) onAction;
 
   const NoteCanvas({
@@ -43,6 +44,7 @@ class NoteCanvas extends StatefulWidget {
     required this.toolNotifier,
     required this.sketchNotifier,
     required this.selectionNotifier,
+    required this.shapeSnappingEnabled,
     required this.onAction,
   });
 
@@ -182,6 +184,8 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                                 .value
                                                 .getMaxScaleOnAxis(),
                                             onAction: widget.onAction,
+                                            shapeSnappingEnabled:
+                                                widget.shapeSnappingEnabled,
                                           );
                                         },
                                       );

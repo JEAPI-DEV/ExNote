@@ -12,6 +12,7 @@ class FastDrawingCanvas extends StatefulWidget {
   final double currentWidth;
   final DrawingTool currentTool;
   final double scale;
+  final bool shapeSnappingEnabled;
   final Function(UndoAction) onAction;
 
   const FastDrawingCanvas({
@@ -22,6 +23,7 @@ class FastDrawingCanvas extends StatefulWidget {
     this.currentWidth = 2.0,
     this.currentTool = DrawingTool.pen,
     this.scale = 1.0,
+    required this.shapeSnappingEnabled,
     required this.onAction,
   });
 
@@ -54,7 +56,8 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       ..currentColor = widget.currentColor
       ..currentWidth = widget.currentWidth
       ..currentTool = widget.currentTool
-      ..scale = widget.scale;
+      ..scale = widget.scale
+      ..shapeSnappingEnabled = widget.shapeSnappingEnabled;
   }
 
   @override
