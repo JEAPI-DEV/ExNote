@@ -530,21 +530,77 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   }
 
   Future<void> _exportPdf() async {
+    final TextEditingController controller = TextEditingController(
+      text: 'exnote_export_${DateTime.now().millisecondsSinceEpoch}',
+    );
+
+    final String? filename = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Export PDF'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Filename',
+            hintText: 'Enter filename (without .pdf)',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Export'),
+          ),
+        ],
+      ),
+    );
+
+    if (filename == null || filename.isEmpty) return;
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Generating PDF...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
     try {
       final file = await ExportService.exportToPdf(
         sketch: sketchNotifier.value,
         context: context,
+        filename: filename,
         gridEnabled: gridEnabled,
         gridType: gridType,
         gridSpacing: gridSpacing,
         isDark: Theme.of(context).brightness == Brightness.dark,
       );
       if (!mounted) return;
+      Navigator.pop(context); // Close progress dialog
+
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Exported PDF to ${file.path}')));
     } catch (e) {
       if (!mounted) return;
+      Navigator.pop(context); // Close progress dialog
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('PDF export failed: $e')));

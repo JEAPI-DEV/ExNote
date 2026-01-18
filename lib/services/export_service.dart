@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -66,6 +67,7 @@ class ExportService {
   static Future<File> exportToPdf({
     required Sketch sketch,
     required BuildContext context,
+    String? filename,
     bool gridEnabled = false,
     GridType gridType = GridType.grid,
     double gridSpacing = 40.0,
@@ -105,7 +107,8 @@ class ExportService {
     );
     print("[ExportService] Found ${splitPoints.length - 1} pages.");
 
-    final doc = pw.Document();
+    final List<Uint8List> pageImages = [];
+    final List<double> segmentHeights = [];
 
     // 3. Render each page
     for (int i = 0; i < splitPoints.length - 1; i++) {
@@ -135,13 +138,46 @@ class ExportService {
       final byteData = await pageImage.toByteData(
         format: ui.ImageByteFormat.png,
       );
+      pageImage.dispose(); // Free memory immediately
+
       if (byteData == null) continue;
-      final bytes = byteData.buffer.asUint8List();
-      final pwImage = pw.MemoryImage(bytes);
+      pageImages.add(byteData.buffer.asUint8List());
+      segmentHeights.add(segmentHeight);
+    }
+
+    print("[ExportService] Offloading PDF generation to background...");
+    final dir = await _getExportDirectory();
+    final String finalFilename =
+        filename ?? 'exnote_export_${DateTime.now().millisecondsSinceEpoch}';
+    final String filePath = '${dir.path}/$finalFilename.pdf';
+
+    await compute(_generateAndSavePdf, {
+      'images': pageImages,
+      'pageWidth': pageWidth,
+      'targetPageHeight': targetPageHeight,
+      'segmentHeights': segmentHeights,
+      'filePath': filePath,
+    });
+
+    print("[ExportService] PDF saved to $filePath");
+    return File(filePath);
+  }
+
+  static Future<void> _generateAndSavePdf(Map<String, dynamic> data) async {
+    final List<Uint8List> images = data['images'];
+    final double pageWidth = data['pageWidth'];
+    final double targetPageHeight = data['targetPageHeight'];
+    final List<double> segmentHeights = data['segmentHeights'];
+    final String filePath = data['filePath'];
+
+    final doc = pw.Document();
+
+    for (int i = 0; i < images.length; i++) {
+      final pwImage = pw.MemoryImage(images[i]);
+      final segmentHeight = segmentHeights[i];
 
       doc.addPage(
         pw.Page(
-          // Always use targetPageHeight for the page format to ensure "normal A4 pages"
           pageFormat: PdfPageFormat(pageWidth, targetPageHeight),
           margin: pw.EdgeInsets.zero,
           build: (pw.Context ctx) {
@@ -157,17 +193,10 @@ class ExportService {
           },
         ),
       );
-      pageImage.dispose(); // Free memory
     }
 
-    print("[ExportService] Saving PDF...");
-    final dir = await _getExportDirectory();
-    final file = File(
-      '${dir.path}/exnote_export_${DateTime.now().millisecondsSinceEpoch}.pdf',
-    );
+    final file = File(filePath);
     await file.writeAsBytes(await doc.save());
-    print("[ExportService] PDF saved to ${file.path}");
-    return file;
   }
 
   static Rect _getSketchBounds(Sketch sketch) {
