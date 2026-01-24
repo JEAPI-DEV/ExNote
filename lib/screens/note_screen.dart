@@ -21,8 +21,7 @@ import '../services/export_service.dart';
 import '../services/settings_service.dart';
 import '../services/stylus_shortcut_manager.dart';
 import '../services/waifu_service.dart';
-import '../services/waifu_im_service.dart';
-import '../services/waifu_pics_service.dart';
+import '../services/waifu_provider_registry.dart';
 import '../services/backup_service.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
@@ -171,19 +170,10 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   }
 
   WaifuService _getWaifuService() {
-    _lastWaifuService ??= _createWaifuService(waifuProvider);
-    // If provider changed, recreate
-    return _lastWaifuService!;
-  }
-
-  WaifuService _createWaifuService(String provider) {
-    switch (provider) {
-      case 'Waifu.pics':
-        return WaifuPicsService();
-      case 'Waifu.im':
-      default:
-        return WaifuImService();
+    if (_lastWaifuService == null || _lastWaifuService!.name != waifuProvider) {
+      _lastWaifuService = WaifuProviderRegistry.getProvider(waifuProvider);
     }
+    return _lastWaifuService!;
   }
 
   @override
@@ -390,7 +380,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                       onWaifuProviderChanged: (value) {
                         setState(() {
                           waifuProvider = value;
-                          _lastWaifuService = _createWaifuService(value);
+                          _lastWaifuService = WaifuProviderRegistry.getProvider(
+                            value,
+                          );
                           waifuTag = waifuNsfw
                               ? _getWaifuService().getNsfwTags().first
                               : _getWaifuService().getSfwTags().first;
@@ -633,7 +625,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         shapeSnappingEnabled = settings['shapeSnappingEnabled'];
 
         // Ensure service is initialized with correct provider before fetch
-        _lastWaifuService = _createWaifuService(waifuProvider);
+        _lastWaifuService = WaifuProviderRegistry.getProvider(waifuProvider);
       });
       if (waifuFetcherEnabled) {
         _fetchWaifuImage();

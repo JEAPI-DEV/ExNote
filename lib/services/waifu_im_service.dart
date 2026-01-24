@@ -2,6 +2,9 @@ import 'package:waifuim_dart/waifuim_dart.dart';
 import 'waifu_service.dart';
 
 class WaifuImService implements WaifuService {
+  @override
+  String get name => 'Waifu.im';
+
   final WaifuImClient _client;
 
   WaifuImService({bool debug = false}) : _client = WaifuImClient(debug: debug);

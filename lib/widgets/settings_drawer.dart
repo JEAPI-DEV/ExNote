@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
 import '../models/grid_type.dart';
 import '../utils/app_config.dart';
+import '../services/waifu_provider_registry.dart';
 
 class SettingsDrawer extends ConsumerWidget {
   final bool gridEnabled;
@@ -268,7 +269,7 @@ class SettingsDrawer extends ConsumerWidget {
                         ),
                         DropdownButtonFormField<String>(
                           value: waifuProvider,
-                          items: AppConfig.waifuProviders
+                          items: WaifuProviderRegistry.providerNames
                               .map(
                                 (provider) => DropdownMenuItem(
                                   value: provider,

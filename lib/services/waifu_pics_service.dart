@@ -3,6 +3,9 @@ import 'package:http/http.dart' as http;
 import 'waifu_service.dart';
 
 class WaifuPicsService implements WaifuService {
+  @override
+  String get name => 'Waifu.pics';
+
   static const String _baseUrl = 'https://api.waifu.pics';
 
   @override
