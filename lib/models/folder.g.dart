@@ -21,6 +21,7 @@ Folder _$FolderFromJson(Map<String, dynamic> json) => Folder(
       const {},
   isNoteFolder: json['isNoteFolder'] as bool? ?? false,
   parentId: json['parentId'] as String?,
+  colorHex: json['colorHex'] as String?,
 );
 
 Map<String, dynamic> _$FolderToJson(Folder instance) => <String, dynamic>{
@@ -30,4 +31,5 @@ Map<String, dynamic> _$FolderToJson(Folder instance) => <String, dynamic>{
   'notes': instance.notes,
   'isNoteFolder': instance.isNoteFolder,
   'parentId': instance.parentId,
+  'colorHex': instance.colorHex,
 };

@@ -13,6 +13,7 @@ class Folder {
   @JsonKey(defaultValue: false)
   final bool isNoteFolder;
   final String? parentId;
+  final String? colorHex;
 
   Folder({
     required this.id,
@@ -21,6 +22,7 @@ class Folder {
     this.notes = const {},
     this.isNoteFolder = false,
     this.parentId,
+    this.colorHex,
   });
 
   factory Folder.fromJson(Map<String, dynamic> json) => _$FolderFromJson(json);
@@ -32,6 +34,7 @@ class Folder {
     Map<String, Note>? notes,
     bool? isNoteFolder,
     String? parentId,
+    String? colorHex,
   }) {
     return Folder(
       id: id,
@@ -40,6 +43,7 @@ class Folder {
       notes: notes ?? this.notes,
       isNoteFolder: isNoteFolder ?? this.isNoteFolder,
       parentId: parentId ?? this.parentId,
+      colorHex: colorHex ?? this.colorHex,
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/folder_provider.dart';
 import '../services/backup_service.dart';
 import '../services/export_service.dart';
+import '../widgets/folder_color_picker.dart';
 import 'subject_screen.dart';
 
 class FolderScreen extends ConsumerWidget {
@@ -70,34 +71,55 @@ class FolderScreen extends ConsumerWidget {
     bool isNoteFolder = false,
   }) {
     final controller = TextEditingController();
+    String? selectedColorHex;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isNoteFolder ? 'New Note Folder' : 'New Subject'),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: isNoteFolder ? 'Enter folder name' : 'Enter subject name',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                ref
-                    .read(folderProvider.notifier)
-                    .addFolder(controller.text, isNoteFolder: isNoteFolder);
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(isNoteFolder ? 'New Note Folder' : 'New Subject'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: InputDecoration(
+                    hintText: isNoteFolder
+                        ? 'Enter folder name'
+                        : 'Enter subject name',
+                  ),
+                  autofocus: true,
+                ),
+                FolderColorPicker(
+                  selectedColorHex: selectedColorHex,
+                  onColorSelected: (hex) =>
+                      setState(() => selectedColorHex = hex),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  if (controller.text.isNotEmpty) {
+                    ref
+                        .read(folderProvider.notifier)
+                        .addFolder(
+                          controller.text,
+                          isNoteFolder: isNoteFolder,
+                          colorHex: selectedColorHex,
+                        );
+                    Navigator.pop(context);
+                  }
+                },
+                child: const Text('Create'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -198,8 +220,27 @@ class FolderGrid extends ConsumerWidget {
       itemCount: folders.length,
       itemBuilder: (context, index) {
         final folder = folders[index];
+        final colorHex = folder.colorHex;
+        final baseColor = colorHex != null
+            ? Color(int.parse(colorHex, radix: 16)).withOpacity(1.0)
+            : null;
+
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final bgColor = baseColor != null
+            ? baseColor.withOpacity(isDark ? 0.2 : 0.1)
+            : Theme.of(context).cardColor;
+        final iconColor =
+            baseColor ?? (Theme.of(context).iconTheme.color ?? Colors.blueGrey);
+
         return Card(
-          color: Theme.of(context).cardColor,
+          color: bgColor,
+          elevation: baseColor != null ? 0 : 1, // Flatter look if tinted
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: baseColor != null && !isDark
+                ? BorderSide(color: baseColor.withOpacity(0.3), width: 1)
+                : BorderSide.none,
+          ),
           child: InkWell(
             onTap: () => Navigator.push(
               context,
@@ -215,7 +256,7 @@ class FolderGrid extends ConsumerWidget {
                 Icon(
                   isNoteTab ? Icons.folder_shared : Icons.folder,
                   size: 48,
-                  color: Theme.of(context).iconTheme.color ?? Colors.blueGrey,
+                  color: iconColor,
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -285,32 +326,54 @@ class FolderGrid extends ConsumerWidget {
     dynamic folder,
   ) {
     final controller = TextEditingController(text: folder.name);
+    String? selectedColorHex = folder.colorHex;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename Folder'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Enter new folder name'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                ref
-                    .read(folderProvider.notifier)
-                    .updateFolder(folder.copyWith(name: controller.text));
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Edit Folder'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter new folder name',
+                  ),
+                  autofocus: true,
+                ),
+                FolderColorPicker(
+                  selectedColorHex: selectedColorHex,
+                  onColorSelected: (hex) =>
+                      setState(() => selectedColorHex = hex),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  if (controller.text.isNotEmpty) {
+                    ref
+                        .read(folderProvider.notifier)
+                        .updateFolder(
+                          folder.copyWith(
+                            name: controller.text,
+                            colorHex: selectedColorHex,
+                          ),
+                        );
+                    Navigator.pop(context);
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

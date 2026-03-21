@@ -13,6 +13,7 @@ import 'pdf_viewer_screen.dart';
 import 'page_selection_screen.dart';
 import 'note_screen.dart';
 import 'folder_screen.dart';
+import '../widgets/folder_color_picker.dart';
 
 class SubjectScreen extends ConsumerWidget {
   final String folderId;
@@ -194,36 +195,54 @@ class SubjectScreen extends ConsumerWidget {
     bool isNoteFolder,
   ) {
     final controller = TextEditingController();
+    String? selectedColorHex;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New Subfolder'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Enter folder name'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                ref
-                    .read(folderProvider.notifier)
-                    .addFolder(
-                      controller.text,
-                      isNoteFolder: isNoteFolder,
-                      parentId: folderId,
-                    );
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('New Subfolder'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter folder name',
+                  ),
+                  autofocus: true,
+                ),
+                FolderColorPicker(
+                  selectedColorHex: selectedColorHex,
+                  onColorSelected: (hex) =>
+                      setState(() => selectedColorHex = hex),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  if (controller.text.isNotEmpty) {
+                    ref
+                        .read(folderProvider.notifier)
+                        .addFolder(
+                          controller.text,
+                          isNoteFolder: isNoteFolder,
+                          parentId: folderId,
+                          colorHex: selectedColorHex,
+                        );
+                    Navigator.pop(context);
+                  }
+                },
+                child: const Text('Create'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

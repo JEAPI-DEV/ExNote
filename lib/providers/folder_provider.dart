@@ -35,12 +35,14 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     String name, {
     bool isNoteFolder = false,
     String? parentId,
+    String? colorHex,
   }) async {
     final newFolder = Folder(
       id: _uuid.v4(),
       name: name,
       isNoteFolder: isNoteFolder,
       parentId: parentId,
+      colorHex: colorHex,
     );
     state = [...state, newFolder];
     await _storage.saveFolders(state);
