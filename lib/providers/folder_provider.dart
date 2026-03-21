@@ -31,18 +31,55 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     return await _storage.loadNote(noteId);
   }
 
-  Future<void> addFolder(String name, {bool isNoteFolder = false}) async {
+  Future<void> addFolder(
+    String name, {
+    bool isNoteFolder = false,
+    String? parentId,
+  }) async {
     final newFolder = Folder(
       id: _uuid.v4(),
       name: name,
       isNoteFolder: isNoteFolder,
+      parentId: parentId,
     );
     state = [...state, newFolder];
     await _storage.saveFolders(state);
   }
 
-  Future<void> deleteFolder(String id) async {
-    state = state.where((f) => f.id != id).toList();
+  Future<int> deleteFolder(String id) async {
+    // Delete target plus all its children recursively
+    final Set<String> idsToDelete = {};
+    void findChildren(String currentId) {
+      idsToDelete.add(currentId);
+      final children = state.where((f) => f.parentId == currentId);
+      for (final child in children) {
+        findChildren(child.id);
+      }
+    }
+
+    findChildren(id);
+
+    // Check how many items (notes, lists, etc) we are deleting
+    int deletedFilesCount = 0;
+    for (final folder in state.where((f) => idsToDelete.contains(f.id))) {
+      deletedFilesCount += folder.notes.length;
+      deletedFilesCount += folder.exerciseLists.length;
+    }
+
+    state = state.where((f) => !idsToDelete.contains(f.id)).toList();
+    await _storage.saveFolders(state);
+
+    return deletedFilesCount;
+  }
+
+  Future<void> moveFolder(String folderId, String? newParentId) async {
+    state = [
+      for (final folder in state)
+        if (folder.id == folderId)
+          folder.copyWith(parentId: newParentId)
+        else
+          folder,
+    ];
     await _storage.saveFolders(state);
   }
 

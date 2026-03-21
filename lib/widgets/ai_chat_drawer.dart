@@ -7,7 +7,6 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../services/ai_service.dart';
 import '../models/chat_message.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 
 class AiChatDrawer extends StatefulWidget {
@@ -42,7 +41,6 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   String? _pendingBase64Image;
-  late stt.SpeechToText _speech;
   bool _isListening = false;
   String _lastWords = '';
 
@@ -56,7 +54,6 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
       model: widget.model,
       isTutorMode: widget.isTutorMode,
     );
-    _speech = stt.SpeechToText();
     if (widget.history.isEmpty) {
       widget.history.add(
         ChatMessage(
@@ -108,40 +105,6 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Screenshot added as context')),
       );
-    }
-  }
-
-  void _listen() async {
-    if (!_isListening) {
-      var status = await Permission.microphone.request();
-      if (status.isGranted) {
-        bool available = await _speech.initialize(
-          onStatus: (val) {
-            if (val == 'done' || val == 'notListening') {
-              setState(() => _isListening = false);
-            }
-          },
-          onError: (val) => print('onError: $val'),
-        );
-        if (available) {
-          setState(() => _isListening = true);
-          _speech.listen(
-            onResult: (val) => setState(() {
-              _lastWords = val.recognizedWords;
-              if (val.hasConfidenceRating && val.confidence > 0) {
-                widget.controller.text = _lastWords;
-              }
-            }),
-          );
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Microphone permission denied')),
-        );
-      }
-    } else {
-      setState(() => _isListening = false);
-      _speech.stop();
     }
   }
 
@@ -337,18 +300,6 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
                               constraints: const BoxConstraints(),
                             ),
                             const SizedBox(width: 12),
-                            IconButton(
-                              icon: Icon(
-                                _isListening ? Icons.mic : Icons.mic_none,
-                                size: 20,
-                                color: _isListening
-                                    ? Colors.red
-                                    : Colors.white54,
-                              ),
-                              onPressed: _listen,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextField(

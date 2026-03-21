@@ -12,6 +12,7 @@ class Folder {
   final Map<String, Note> notes;
   @JsonKey(defaultValue: false)
   final bool isNoteFolder;
+  final String? parentId;
 
   Folder({
     required this.id,
@@ -19,6 +20,7 @@ class Folder {
     this.exerciseLists = const [],
     this.notes = const {},
     this.isNoteFolder = false,
+    this.parentId,
   });
 
   factory Folder.fromJson(Map<String, dynamic> json) => _$FolderFromJson(json);
@@ -29,6 +31,7 @@ class Folder {
     List<ExerciseList>? exerciseLists,
     Map<String, Note>? notes,
     bool? isNoteFolder,
+    String? parentId,
   }) {
     return Folder(
       id: id,
@@ -36,6 +39,7 @@ class Folder {
       exerciseLists: exerciseLists ?? this.exerciseLists,
       notes: notes ?? this.notes,
       isNoteFolder: isNoteFolder ?? this.isNoteFolder,
+      parentId: parentId ?? this.parentId,
     );
   }
 }

@@ -12,6 +12,7 @@ import '../services/pdf_processing_service.dart';
 import 'pdf_viewer_screen.dart';
 import 'page_selection_screen.dart';
 import 'note_screen.dart';
+import 'folder_screen.dart';
 
 class SubjectScreen extends ConsumerWidget {
   final String folderId;
@@ -20,62 +21,88 @@ class SubjectScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final folder = ref
-        .watch(folderProvider)
-        .firstWhere((f) => f.id == folderId);
+    final allFolders = ref.watch(folderProvider);
+    final folder = allFolders.firstWhere((f) => f.id == folderId);
+    final subfolders = allFolders.where((f) => f.parentId == folderId).toList();
 
     if (folder.isNoteFolder) {
-      return _buildNoteFolderView(context, ref, folder);
+      return _buildNoteFolderView(context, ref, folder, subfolders);
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(folder.name)),
-      body: folder.exerciseLists.isEmpty
-          ? const Center(child: Text('No exercise lists yet. Import a PDF!'))
-          : ListView.builder(
-              padding: const EdgeInsets.all(8),
-              itemCount: folder.exerciseLists.length,
-              itemBuilder: (context, index) {
-                final list = folder.exerciseLists[index];
-                return ListTile(
-                  leading: const Icon(
-                    Icons.picture_as_pdf,
-                    color: Colors.redAccent,
-                  ),
-                  title: Text(list.name),
-                  subtitle: Text('${list.selections.length} exercises'),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PDFViewerScreen(
-                        folderId: folderId,
-                        exerciseListId: list.id,
-                      ),
+      appBar: AppBar(
+        title: Text(folder.name),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.create_new_folder),
+            onPressed: () => _showAddSubfolderDialog(
+              context,
+              ref,
+              true,
+              false,
+            ), // true = in screen, false = not note
+            tooltip: 'New Subfolder',
+          ),
+        ],
+      ),
+      body: folder.exerciseLists.isEmpty && subfolders.isEmpty
+          ? const Center(child: Text('No lists or folders yet.'))
+          : CustomScrollView(
+              slivers: [
+                if (subfolders.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: FolderGrid(
+                      folders: subfolders,
+                      isNoteTab: false,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                     ),
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.ios_share),
-                        onPressed: () => _exportPDF(context, ref, list),
-                        tooltip: 'Export with Notes',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () =>
-                            _showRenameDialog(context, ref, folder, list),
-                        tooltip: 'Rename',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () =>
-                            _showDeleteDialog(context, ref, folder, list),
-                      ),
-                    ],
+                if (folder.exerciseLists.isNotEmpty)
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final list = folder.exerciseLists[index];
+                      return ListTile(
+                        leading: const Icon(
+                          Icons.picture_as_pdf,
+                          color: Colors.redAccent,
+                        ),
+                        title: Text(list.name),
+                        subtitle: Text('${list.selections.length} exercises'),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => PDFViewerScreen(
+                              folderId: folderId,
+                              exerciseListId: list.id,
+                            ),
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.ios_share),
+                              onPressed: () => _exportPDF(context, ref, list),
+                              tooltip: 'Export with Notes',
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.edit),
+                              onPressed: () =>
+                                  _showRenameDialog(context, ref, folder, list),
+                              tooltip: 'Rename',
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () =>
+                                  _showDeleteDialog(context, ref, folder, list),
+                            ),
+                          ],
+                        ),
+                      );
+                    }, childCount: folder.exerciseLists.length),
                   ),
-                );
-              },
+              ],
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _importPDF(context, ref),
@@ -85,51 +112,118 @@ class SubjectScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildNoteFolderView(BuildContext context, WidgetRef ref, folder) {
+  Widget _buildNoteFolderView(
+    BuildContext context,
+    WidgetRef ref,
+    dynamic folder,
+    List<dynamic> subfolders,
+  ) {
     final notes = folder.notes.values.toList();
 
     return Scaffold(
-      appBar: AppBar(title: Text(folder.name)),
-      body: notes.isEmpty
-          ? const Center(child: Text('No notes yet. Create one!'))
-          : ListView.builder(
-              padding: const EdgeInsets.all(8),
-              itemCount: notes.length,
-              itemBuilder: (context, index) {
-                final note = notes[index];
-                return ListTile(
-                  leading: const Icon(Icons.note, color: Colors.blue),
-                  title: Text(note.name ?? 'Untitled Note'),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          NoteScreen(folderId: folderId, noteId: note.id),
+      appBar: AppBar(
+        title: Text(folder.name),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.create_new_folder),
+            onPressed: () => _showAddSubfolderDialog(context, ref, true, true),
+            tooltip: 'New Subfolder',
+          ),
+        ],
+      ),
+      body: notes.isEmpty && subfolders.isEmpty
+          ? const Center(child: Text('No notes or folders yet.'))
+          : CustomScrollView(
+              slivers: [
+                if (subfolders.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: FolderGrid(
+                      folders: subfolders,
+                      isNoteTab: true,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                     ),
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () =>
-                            _showRenameNoteDialog(context, ref, note),
-                        tooltip: 'Rename',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () =>
-                            _showDeleteNoteDialog(context, ref, note),
-                      ),
-                    ],
+                if (notes.isNotEmpty)
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final note = notes[index];
+                      return ListTile(
+                        leading: const Icon(Icons.note, color: Colors.blue),
+                        title: Text(note.name ?? 'Untitled Note'),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                NoteScreen(folderId: folderId, noteId: note.id),
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit),
+                              onPressed: () =>
+                                  _showRenameNoteDialog(context, ref, note),
+                              tooltip: 'Rename',
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () =>
+                                  _showDeleteNoteDialog(context, ref, note),
+                            ),
+                          ],
+                        ),
+                      );
+                    }, childCount: notes.length),
                   ),
-                );
-              },
+              ],
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddNoteDialog(context, ref),
         label: const Text('New Note'),
         icon: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  void _showAddSubfolderDialog(
+    BuildContext context,
+    WidgetRef ref,
+    bool inScreen,
+    bool isNoteFolder,
+  ) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Subfolder'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Enter folder name'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                ref
+                    .read(folderProvider.notifier)
+                    .addFolder(
+                      controller.text,
+                      isNoteFolder: isNoteFolder,
+                      parentId: folderId,
+                    );
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
       ),
     );
   }
