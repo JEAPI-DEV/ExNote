@@ -4,6 +4,7 @@ import '../providers/folder_provider.dart';
 import '../services/backup_service.dart';
 import '../services/export_service.dart';
 import '../widgets/folder_color_picker.dart';
+import '../widgets/modals/folder_selection_tree.dart';
 import 'subject_screen.dart';
 
 class FolderScreen extends ConsumerWidget {
@@ -386,47 +387,25 @@ class FolderGrid extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) {
-        final allFolders = ref.read(folderProvider);
-        // exclude self and children (to prevent cycles), but for simplicity just exclude self
-        final validParents = allFolders
-            .where(
-              (f) => f.isNoteFolder == folder.isNoteFolder && f.id != folder.id,
-            )
-            .toList();
-
+        final allFolders = ref.watch(folderProvider);
         return AlertDialog(
           title: const Text('Move Folder'),
           content: SizedBox(
             width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: validParents.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  return ListTile(
-                    leading: const Icon(Icons.home),
-                    title: const Text('Root Structure'),
-                    selected: folder.parentId == null,
-                    onTap: () {
-                      ref
-                          .read(folderProvider.notifier)
-                          .moveFolder(folder.id, null);
-                      Navigator.pop(context);
-                    },
-                  );
+            height: 400,
+            child: FolderSelectionTree(
+              allFolders: allFolders,
+              isNoteFolder: folder.isNoteFolder,
+              currentParentId: folder.parentId,
+              excludeFolderId: folder.id,
+              onSelected: (targetFolderId) {
+                // Only allow moving if target is different from current parent
+                if (targetFolderId != folder.parentId) {
+                  ref
+                      .read(folderProvider.notifier)
+                      .moveFolder(folder.id, targetFolderId);
+                  Navigator.pop(context);
                 }
-                final parent = validParents[index - 1];
-                return ListTile(
-                  leading: const Icon(Icons.folder),
-                  title: Text(parent.name),
-                  selected: folder.parentId == parent.id,
-                  onTap: () {
-                    ref
-                        .read(folderProvider.notifier)
-                        .moveFolder(folder.id, parent.id);
-                    Navigator.pop(context);
-                  },
-                );
               },
             ),
           ),

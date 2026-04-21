@@ -85,6 +85,55 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     await _storage.saveFolders(state);
   }
 
+  Future<void> moveNote(
+    String sourceFolderId,
+    String targetFolderId,
+    String noteId,
+  ) async {
+    if (sourceFolderId == targetFolderId) return;
+
+    final sourceFolder = state.firstWhere((f) => f.id == sourceFolderId);
+    final note = sourceFolder.notes[noteId];
+    if (note == null) return;
+
+    state = [
+      for (final folder in state)
+        if (folder.id == sourceFolderId)
+          folder.copyWith(notes: Map.from(folder.notes)..remove(noteId))
+        else if (folder.id == targetFolderId)
+          folder.copyWith(notes: {...folder.notes, noteId: note})
+        else
+          folder,
+    ];
+    await _storage.saveFolders(state);
+  }
+
+  Future<void> moveExerciseList(
+    String sourceFolderId,
+    String targetFolderId,
+    String listId,
+  ) async {
+    if (sourceFolderId == targetFolderId) return;
+
+    final sourceFolder = state.firstWhere((f) => f.id == sourceFolderId);
+    final list = sourceFolder.exerciseLists.firstWhere((l) => l.id == listId);
+
+    state = [
+      for (final folder in state)
+        if (folder.id == sourceFolderId)
+          folder.copyWith(
+            exerciseLists: folder.exerciseLists
+                .where((l) => l.id != listId)
+                .toList(),
+          )
+        else if (folder.id == targetFolderId)
+          folder.copyWith(exerciseLists: [...folder.exerciseLists, list])
+        else
+          folder,
+    ];
+    await _storage.saveFolders(state);
+  }
+
   Future<void> addExerciseList(
     String folderId,
     String name,

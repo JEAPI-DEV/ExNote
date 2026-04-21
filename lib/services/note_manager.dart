@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:scribble/scribble.dart';
 import '../providers/folder_provider.dart';
 import '../utils/undo_redo_manager.dart';
@@ -94,7 +95,7 @@ class NoteManager {
     }
   }
 
-  Future<void> saveNote() async {
+  Future<void> saveNote({String? screenshotBase64}) async {
     try {
       final sketch = sketchNotifier.value;
       final jsonSketch = await runSerialization(sketch);
@@ -117,8 +118,17 @@ class NoteManager {
           debugPrint('Error getting selection for save: $e');
         }
       } else {
-        // For standalone notes, keep existing screenshotPath if any
-        screenshotPath = folder.notes[noteId]?.screenshotPath;
+        // Handle standalone note screenshot capture
+        if (screenshotBase64 != null) {
+          final bytes = base64Decode(screenshotBase64);
+          final appDir = await getApplicationDocumentsDirectory();
+          final fileName = 'note_thumb_$noteId.png';
+          final file = File('${appDir.path}/$fileName');
+          await file.writeAsBytes(bytes);
+          screenshotPath = fileName;
+        } else {
+          screenshotPath = folder.notes[noteId]?.screenshotPath;
+        }
       }
 
       await ref

@@ -869,6 +869,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.10.1"
+  spen_remote:
+    dependency: "direct main"
+    description:
+      name: spen_remote
+      sha256: "28b093dddc86627190bdc458b96ac6c0018431f1f8b7047706e980d0c4933c1c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.4"
   stack_trace:
     dependency: transitive
     description:

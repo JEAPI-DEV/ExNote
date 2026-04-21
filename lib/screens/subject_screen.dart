@@ -14,6 +14,8 @@ import 'page_selection_screen.dart';
 import 'note_screen.dart';
 import 'folder_screen.dart';
 import '../widgets/folder_color_picker.dart';
+import '../widgets/note_card.dart';
+import '../widgets/modals/folder_selection_tree.dart';
 
 class SubjectScreen extends ConsumerWidget {
   final String folderId;
@@ -146,37 +148,37 @@ class SubjectScreen extends ConsumerWidget {
                     ),
                   ),
                 if (notes.isNotEmpty)
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final note = notes[index];
-                      return ListTile(
-                        leading: const Icon(Icons.note, color: Colors.blue),
-                        title: Text(note.name ?? 'Untitled Note'),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                NoteScreen(folderId: folderId, noteId: note.id),
+                  SliverPadding(
+                    padding: const EdgeInsets.all(16),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.9,
                           ),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit),
-                              onPressed: () =>
-                                  _showRenameNoteDialog(context, ref, note),
-                              tooltip: 'Rename',
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final note = notes[index];
+                        return NoteCard(
+                          note: note,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NoteScreen(
+                                folderId: folderId,
+                                noteId: note.id,
+                              ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () =>
-                                  _showDeleteNoteDialog(context, ref, note),
-                            ),
-                          ],
-                        ),
-                      );
-                    }, childCount: notes.length),
+                          ),
+                          onRename: () =>
+                              _showRenameNoteDialog(context, ref, note),
+                          onMove: () => _showMoveNoteDialog(context, ref, note),
+                          onDelete: () =>
+                              _showDeleteNoteDialog(context, ref, note),
+                        );
+                      }, childCount: notes.length),
+                    ),
                   ),
               ],
             ),
@@ -185,6 +187,43 @@ class SubjectScreen extends ConsumerWidget {
         label: const Text('New Note'),
         icon: const Icon(Icons.add),
       ),
+    );
+  }
+
+  void _showMoveNoteDialog(BuildContext context, WidgetRef ref, Note note) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final allFolders = ref.watch(folderProvider);
+        return AlertDialog(
+          title: const Text('Move Note'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: FolderSelectionTree(
+              allFolders: allFolders,
+              isNoteFolder: true,
+              currentParentId: folderId,
+              excludeFolderId: folderId,
+              onSelected: (targetFolderId) {
+                // We are moving a note FROM folderId TO targetFolderId
+                if (targetFolderId != null && targetFolderId != folderId) {
+                  ref
+                      .read(folderProvider.notifier)
+                      .moveNote(folderId, targetFolderId, note.id);
+                  Navigator.pop(context);
+                }
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
     );
   }
 
