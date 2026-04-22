@@ -1,8 +1,4 @@
-import 'package:exnote/services/llm_parser/latex_block_syntax.dart';
-import 'package:exnote/services/llm_parser/latex_element_builder.dart';
-import 'package:exnote/services/llm_parser/latex_inline_syntax.dart';
 import 'package:flutter/material.dart';
-import 'package:markdown/markdown.dart' as md;
 import '../services/ai_service.dart';
 import '../models/chat_message.dart';
 import '../controllers/ai_chat_controller.dart';

@@ -6,7 +6,6 @@ import '../providers/folder_provider.dart';
 import '../models/drawing_tool.dart';
 import '../models/right_drawer_content.dart';
 import '../models/selection.dart';
-import '../models/undo_action.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_toolbar.dart';
 import '../widgets/ai_chat_drawer.dart';
@@ -17,7 +16,7 @@ import '../controllers/ai_chat_controller.dart';
 import '../utils/undo_redo_manager.dart';
 import '../utils/clipboard_manager.dart';
 import '../services/note_manager.dart';
-import '../services/export_service.dart';
+import '../services/export/export_service.dart';
 import '../services/stylus_shortcut_manager.dart';
 import '../services/backup_service.dart';
 
@@ -352,7 +351,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Future<void> _exportPdf() async {
     final TextEditingController controller = TextEditingController(
-      text: 'exnote_export_${DateTime.now().millisecondsSinceEpoch}',
+      text: 'exnote_export_${DateTime.now()}',
     );
 
     final String? filename = await showDialog<String>(

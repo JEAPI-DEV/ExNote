@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
+import 'color_swatch_button.dart';
+import 'edit_selection_controls.dart';
 
 class NoteToolbar extends StatefulWidget {
   final ValueNotifier<Color> colorNotifier;
@@ -29,7 +31,18 @@ class _NoteToolbarState extends State<NoteToolbar> {
   late Color _editColor;
   late double _editWidth;
   final GlobalKey _mainColorKey = GlobalKey();
-  final GlobalKey _editColorKey = GlobalKey();
+
+  static const _mainColors = [
+    Colors.black,
+    Colors.white,
+    Colors.redAccent,
+    Colors.blueAccent,
+    Colors.green,
+    Colors.blue,
+    Colors.red,
+    Colors.orangeAccent,
+    Colors.purpleAccent,
+  ];
 
   @override
   void initState() {
@@ -74,7 +87,20 @@ class _NoteToolbarState extends State<NoteToolbar> {
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildPrimaryColorButton(context),
+              ValueListenableBuilder<Color>(
+                valueListenable: widget.colorNotifier,
+                builder: (context, selectedColor, _) {
+                  return ColorSwatchButton(
+                    selectedColor: selectedColor,
+                    palette: _mainColors,
+                    onPick: (color) {
+                      widget.colorNotifier.value = color;
+                      widget.toolNotifier.value = DrawingTool.pen;
+                    },
+                    buttonKey: _mainColorKey,
+                  );
+                },
+              ),
 
               const SizedBox(width: 12),
               _buildDivider(isDark),
@@ -140,7 +166,20 @@ class _NoteToolbarState extends State<NoteToolbar> {
                 const SizedBox(width: 12),
                 _buildDivider(isDark),
                 const SizedBox(width: 12),
-                _buildEditSelectControls(context),
+                EditSelectionControls(
+                  editColor: _editColor,
+                  editWidth: _editWidth,
+                  onColorChanged: (color) {
+                    setState(() => _editColor = color);
+                    _applyStyleToSelection(color: color);
+                  },
+                  onWidthChanged: (value) {
+                    setState(() => _editWidth = value);
+                  },
+                  onWidthChangeEnd: () {
+                    _applyStyleToSelection(strokeWidth: _editWidth);
+                  },
+                ),
               ],
             ],
           );
@@ -182,193 +221,6 @@ class _NoteToolbarState extends State<NoteToolbar> {
           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
         );
       },
-    );
-  }
-
-  Widget _buildPrimaryColorButton(BuildContext context) {
-    final colors = [
-      Colors.black,
-      Colors.white,
-      Colors.redAccent,
-      Colors.blueAccent,
-      Colors.green,
-      Colors.blue,
-      Colors.red,
-      Colors.orangeAccent,
-      Colors.purpleAccent,
-    ];
-
-    return ValueListenableBuilder<Color>(
-      valueListenable: widget.colorNotifier,
-      builder: (context, selectedColor, _) {
-        return _buildColorSwatch(
-          context: context,
-          selectedColor: selectedColor,
-          palette: colors,
-          onPick: (color) {
-            widget.colorNotifier.value = color;
-            widget.toolNotifier.value = DrawingTool.pen;
-          },
-          buttonKey: _mainColorKey,
-        );
-      },
-    );
-  }
-
-  Widget _buildEditSelectControls(BuildContext context) {
-    final colors = [
-      Colors.black,
-      Colors.white,
-      Colors.redAccent,
-      Colors.blueAccent,
-      Colors.greenAccent,
-      Colors.orangeAccent,
-      Colors.purpleAccent,
-      Colors.tealAccent,
-    ];
-
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        margin: const EdgeInsets.only(left: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.12),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildColorSwatch(
-              context: context,
-              selectedColor: _editColor,
-              palette: colors,
-              onPick: (color) {
-                setState(() => _editColor = color);
-                _applyStyleToSelection(color: color);
-              },
-              buttonKey: _editColorKey,
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 140,
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 6,
-                  ),
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 14,
-                  ),
-                ),
-                child: Slider(
-                  value: _editWidth,
-                  min: 1,
-                  max: 20,
-                  onChanged: (value) {
-                    setState(() => _editWidth = value);
-                  },
-                  onChangeEnd: (value) {
-                    _applyStyleToSelection(strokeWidth: value);
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildColorSwatch({
-    required BuildContext context,
-    required Color selectedColor,
-    required List<Color> palette,
-    required ValueChanged<Color> onPick,
-    GlobalKey? buttonKey,
-  }) {
-    return GestureDetector(
-      key: buttonKey,
-      onTap: () {
-        final RenderBox box =
-            (buttonKey?.currentContext?.findRenderObject() ??
-                    context.findRenderObject())
-                as RenderBox;
-        final Offset position = box.localToGlobal(Offset.zero);
-
-        showMenu(
-          context: context,
-          position: RelativeRect.fromLTRB(
-            position.dx,
-            position.dy - 120,
-            position.dx + 50,
-            position.dy,
-          ),
-          color: Theme.of(context).cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          items: [
-            PopupMenuItem(
-              enabled: false,
-              child: SizedBox(
-                width: 160,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: palette.map((color) {
-                    final isSelected = color.value == selectedColor.value;
-                    return GestureDetector(
-                      onTap: () {
-                        onPick(color);
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isSelected
-                                ? Theme.of(context).colorScheme.secondary
-                                : Colors.grey.withOpacity(0.3),
-                            width: isSelected ? 2 : 1,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-      child: Container(
-        width: 28,
-        height: 28,
-        decoration: BoxDecoration(
-          color: selectedColor,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

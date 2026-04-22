@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
 import '../models/grid_type.dart';
-import '../models/note_settings.dart';
 import '../controllers/note_settings_controller.dart';
 import '../utils/app_config.dart';
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:uuid/uuid.dart';
@@ -29,7 +28,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   late PdfController _pdfController;
   bool _isEditingMode = false;
   Rect? _selectionRect;
-  int _currentPageIndex = 0;
   double _scrollOffset = 0;
   final GlobalKey _pdfViewKey = GlobalKey();
   final GlobalKey _repaintBoundaryKey = GlobalKey();
@@ -143,11 +141,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                       controller: _pdfController,
                       scrollDirection: Axis.vertical,
                       pageSnapping: false,
-                      onPageChanged: (page) {
-                        setState(() {
-                          _currentPageIndex = page - 1;
-                        });
-                      },
+                      onPageChanged: (page) {},
                       physics: _isEditingMode
                           ? const NeverScrollableScrollPhysics()
                           : const BouncingScrollPhysics(),
@@ -207,13 +201,6 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                   onTapUp: (details) {
                     if (_isEditingMode) return;
                     if (_pageWidths.isEmpty) return;
-
-                    final mapper = PdfCoordinateMapper(
-                      pageWidths: _pageWidths,
-                      pageHeights: _pageHeights,
-                      viewSize: viewSize,
-                      scrollOffset: _scrollOffset,
-                    );
 
                     final selection = LinkOverlayPainter.findSelectionAt(
                       position: details.localPosition,

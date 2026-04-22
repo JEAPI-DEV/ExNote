@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:scribble/scribble.dart';
-import '../models/drawing_tool.dart';
-import '../models/undo_action.dart';
 import 'color_swatch_button.dart';
 
 class EditSelectionControls extends StatelessWidget {
