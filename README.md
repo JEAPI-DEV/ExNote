@@ -10,7 +10,7 @@ The app also allows the user to export their notes as PDFs or export the whole l
 Download the source code, compile it and run it. You need flutter :D.
 
 ## Folder Structure
-
+```
 lib
 ├── controllers
 │   └── drawing_canvas_controller.dart
@@ -85,3 +85,4 @@ lib
     ├── selection_overlay.dart
     ├── settings_drawer.dart
     └── zoomable_canvas_wrapper.dart
+```
