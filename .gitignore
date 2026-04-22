@@ -8,6 +8,8 @@
 .build/
 .buildlog/
 .kilo/
+.idea/
+.dart_tool/
 .history
 .svn/
 .swiftpm/
