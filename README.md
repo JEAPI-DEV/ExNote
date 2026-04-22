@@ -12,8 +12,17 @@ Download the source code, compile it and run it. You need flutter :D.
 ## Folder Structure
 ```
 lib
+
 ├── controllers
-│   └── drawing_canvas_controller.dart
+│   ├── ai_chat_controller.dart
+│   ├── drawing
+│   │   ├── eraser_handler.dart
+│   │   ├── pen_handler.dart
+│   │   ├── resize_handler.dart
+│   │   ├── selection_handler.dart
+│   │   └── shape_snap_handler.dart
+│   ├── drawing_canvas_controller.dart
+│   └── note_settings_controller.dart
 ├── main.dart
 ├── models
 │   ├── chat_message.dart
@@ -34,7 +43,9 @@ lib
 │   ├── folder_provider.dart
 │   └── theme_provider.dart
 ├── screens
+│   ├── exercise_folder_screen.dart
 │   ├── folder_screen.dart
+│   ├── note_folder_screen.dart
 │   ├── note_screen.dart
 │   ├── page_selection_screen.dart
 │   ├── pdf_viewer_screen.dart
@@ -42,14 +53,20 @@ lib
 ├── services
 │   ├── ai_service.dart
 │   ├── backup_service.dart
-│   ├── export_service.dart
+│   ├── export
+│   │   ├── canvas_capture_service.dart
+│   │   ├── export_service.dart
+│   │   ├── png_export_service.dart
+│   │   └── zip_backup_service.dart
 │   ├── llm_parser
 │   │   ├── latex_block_syntax.dart
 │   │   ├── latex_element_builder.dart
 │   │   └── latex_inline_syntax.dart
 │   ├── note_manager.dart
-│   ├── pdf_export_service.dart
-│   ├── pdf_processing_service.dart
+│   ├── pdf
+│   │   ├── pdf_note_export_service.dart
+│   │   ├── pdf_page_extractor.dart
+│   │   └── pdf_screenshot_service.dart
 │   ├── settings_service.dart
 │   ├── sketch_renderer.dart
 │   ├── storage_service.dart
@@ -59,8 +76,13 @@ lib
 ├── utils
 │   ├── app_config.dart
 │   ├── clipboard_manager.dart
+│   ├── context_extensions.dart
+│   ├── export_directory.dart
 │   ├── folder_colors.dart
+│   ├── line_hit_test.dart
 │   ├── page_layout.dart
+│   ├── pdf_coordinate_mapper.dart
+│   ├── pdf_split_calculator.dart
 │   ├── shape_recognizer.dart
 │   ├── sketch_bounds.dart
 │   ├── sketch_serializer.dart
@@ -68,12 +90,21 @@ lib
 │   └── undo_redo_manager.dart
 └── widgets
     ├── ai_chat_drawer.dart
+    ├── chat
+    │   ├── chat_bubble.dart
+    │   ├── chat_header.dart
+    │   ├── chat_input_area.dart
+    │   └── chat_markdown_style.dart
+    ├── color_swatch_button.dart
     ├── dialogs
     │   ├── app_dialogs.dart
-    │   └── create_folder_dialog.dart
+    │   ├── create_folder_dialog.dart
+    │   └── move_item_dialog.dart
+    ├── edit_selection_controls.dart
     ├── fast_drawing_canvas.dart
     ├── fast_sketch_painter.dart
     ├── folder_color_picker.dart
+    ├── folder_grid.dart
     ├── grid_painter.dart
     ├── link_overlay_painter.dart
     ├── modals
@@ -85,4 +116,6 @@ lib
     ├── selection_overlay.dart
     ├── settings_drawer.dart
     └── zoomable_canvas_wrapper.dart
+
+16 directories, 88 files
 ```
