@@ -6,6 +6,7 @@ import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
 import '../utils/shape_recognizer.dart';
+import '../utils/sketch_bounds.dart';
 
 enum _ResizeHandle {
   topLeft,
@@ -303,18 +304,20 @@ class DrawingCanvasController extends ChangeNotifier {
   void _triggerShapeSnap() {
     final points = currentLineNotifier.value;
     if (points == null || points.length < 5) {
-      print(
+      debugPrint(
         "[DrawingCanvasController] Triggered snap but too few points: ${points?.length}",
       );
       return;
     }
 
-    print(
+    debugPrint(
       "[DrawingCanvasController] Triggering shape snap for ${points.length} points",
     );
     final recognized = ShapeRecognizer.recognize(points);
     if (recognized != null) {
-      debugPrint("[DrawingCanvasController] Shape recognized: ${recognized.type}");
+      debugPrint(
+        "[DrawingCanvasController] Shape recognized: ${recognized.type}",
+      );
       currentLineNotifier.value = recognized.points;
       notifyListeners();
     } else {
@@ -391,24 +394,8 @@ class DrawingCanvasController extends ChangeNotifier {
     }
   }
 
-  Rect? _computeSelectionBounds(List<SketchLine> lines) {
-    if (lines.isEmpty) return null;
-
-    double minX = double.infinity, maxX = double.negativeInfinity;
-    double minY = double.infinity, maxY = double.negativeInfinity;
-
-    for (final line in lines) {
-      for (final p in line.points) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      }
-    }
-
-    if (minX == double.infinity) return null;
-    return Rect.fromLTRB(minX, minY, maxX, maxY);
-  }
+  Rect? _computeSelectionBounds(List<SketchLine> lines) =>
+      lines.isEmpty ? null : computeLineBounds(lines);
 
   Rect? get selectionBounds =>
       _resizePreviewRect ??

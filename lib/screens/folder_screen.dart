@@ -4,9 +4,9 @@ import '../models/folder.dart';
 import '../providers/folder_provider.dart';
 import '../services/backup_service.dart';
 import '../services/export_service.dart';
-import '../widgets/folder_color_picker.dart';
 import '../widgets/modals/folder_selection_tree.dart';
 import '../widgets/dialogs/app_dialogs.dart';
+import '../widgets/dialogs/create_folder_dialog.dart';
 import 'subject_screen.dart';
 
 class FolderScreen extends ConsumerWidget {
@@ -58,71 +58,20 @@ class FolderScreen extends ConsumerWidget {
           builder: (context) => FloatingActionButton.extended(
             onPressed: () {
               final tabIndex = DefaultTabController.of(context).index;
-              _showAddFolderDialog(context, ref, isNoteFolder: tabIndex == 1);
+              showCreateFolderDialog(
+                context: context,
+                ref: ref,
+                title: tabIndex == 1 ? 'New Note Folder' : 'New Subject',
+                hintText: tabIndex == 1
+                    ? 'Enter folder name'
+                    : 'Enter subject name',
+                isNoteFolder: tabIndex == 1,
+              );
             },
             label: const Text('New Folder'),
             icon: const Icon(Icons.add),
           ),
         ),
-      ),
-    );
-  }
-
-  void _showAddFolderDialog(
-    BuildContext context,
-    WidgetRef ref, {
-    bool isNoteFolder = false,
-  }) {
-    final controller = TextEditingController();
-    String? selectedColorHex;
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: Text(isNoteFolder ? 'New Note Folder' : 'New Subject'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controller,
-                  decoration: InputDecoration(
-                    hintText: isNoteFolder
-                        ? 'Enter folder name'
-                        : 'Enter subject name',
-                  ),
-                  autofocus: true,
-                ),
-                FolderColorPicker(
-                  selectedColorHex: selectedColorHex,
-                  onColorSelected: (hex) =>
-                      setState(() => selectedColorHex = hex),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (controller.text.isNotEmpty) {
-                    ref
-                        .read(folderProvider.notifier)
-                        .addFolder(
-                          controller.text,
-                          isNoteFolder: isNoteFolder,
-                          colorHex: selectedColorHex,
-                        );
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('Create'),
-              ),
-            ],
-          );
-        },
       ),
     );
   }
@@ -352,13 +301,12 @@ class FolderGrid extends ConsumerWidget {
       confirmText: 'Delete',
     );
     if (confirmed && context.mounted) {
-      final deletedCount =
-          await ref.read(folderProvider.notifier).deleteFolder(folder.id);
+      final deletedCount = await ref
+          .read(folderProvider.notifier)
+          .deleteFolder(folder.id);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Deleted folder and $deletedCount items.'),
-          ),
+          SnackBar(content: Text('Deleted folder and $deletedCount items.')),
         );
       }
     }

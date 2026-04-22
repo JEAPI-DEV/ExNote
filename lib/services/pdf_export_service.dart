@@ -8,10 +8,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:scribble/scribble.dart';
 import '../models/exercise_list.dart';
-import '../models/grid_type.dart';
 import '../services/sketch_renderer.dart';
 import '../services/storage_service.dart';
 import '../services/settings_service.dart';
+import '../utils/sketch_bounds.dart';
 
 class PdfExportService {
   final StorageService _storage = StorageService();
@@ -27,11 +27,8 @@ class PdfExportService {
 
     // Load settings for grid and theme
     final settings = await SettingsService.loadSettings();
-    final bool gridEnabled = settings['gridEnabled'] ?? false;
-    final GridType gridType = settings['gridType'] ?? GridType.grid;
-    final double gridSpacing = settings['gridSpacing'] ?? 40.0;
     // We'll use light mode for PDF export usually, but we can follow settings
-    final bool isDark = false; // Usually PDFs are light
+    const bool isDark = false; // Usually PDFs are light
 
     // Open original PDF
     final pdfDocument = await pdfx.PdfDocument.openFile(pdfFile.path);
@@ -160,7 +157,7 @@ class PdfExportService {
       }
 
       // Calculate content bounds to fit everything
-      Rect sketchBounds = _getSketchBounds(sketch);
+      Rect sketchBounds = sketch.bounds;
       // Scale sketch bounds by 2.0 to match the rendering scale used for alignment
       sketchBounds = Rect.fromLTRB(
         sketchBounds.left * 2,
@@ -228,9 +225,9 @@ class PdfExportService {
         scale: fitScale,
         sketchScale:
             2.0, // Keep the 2x scale for sketch-to-screenshot alignment
-        gridEnabled: gridEnabled,
-        gridType: gridType,
-        gridSpacing: gridSpacing * 2,
+        gridEnabled: settings.gridEnabled,
+        gridType: settings.gridType,
+        gridSpacing: settings.gridSpacing * 2,
         isDark: isDark,
       );
 
@@ -261,21 +258,5 @@ class PdfExportService {
     await outputFile.writeAsBytes(await doc.save());
 
     return outputFile;
-  }
-
-  Rect _getSketchBounds(Sketch sketch) {
-    if (sketch.lines.isEmpty) return Rect.zero;
-    double minX = double.infinity, maxX = double.negativeInfinity;
-    double minY = double.infinity, maxY = double.negativeInfinity;
-    for (final line in sketch.lines) {
-      for (final p in line.points) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      }
-    }
-    if (minX == double.infinity) return Rect.zero;
-    return Rect.fromLTRB(minX, minY, maxX, maxY);
   }
 }

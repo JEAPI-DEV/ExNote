@@ -39,7 +39,9 @@ class ShapeRecognizer {
     if (circularity > 0.8) {
       // For circles/ellipses, we also want to ensure it's somewhat closed
       if (!_isClosed(points, rect, threshold: 0.4)) {
-        debugPrint("[ShapeRecognizer] Circle/Ellipse rejected: Not closed enough");
+        debugPrint(
+          "[ShapeRecognizer] Circle/Ellipse rejected: Not closed enough",
+        );
       } else {
         if ((width - height).abs() / math.max(width, height) < 0.2) {
           debugPrint("[ShapeRecognizer] Detected Circle");
@@ -63,7 +65,9 @@ class ShapeRecognizer {
 
     // 2. Corner Detection for Polygons
     final corners = _detectCorners(points, rect);
-    debugPrint("[ShapeRecognizer] Detected ${corners.length} corners: $corners");
+    debugPrint(
+      "[ShapeRecognizer] Detected ${corners.length} corners: $corners",
+    );
 
     if (corners.length == 2) {
       debugPrint("[ShapeRecognizer] Detected Line");
@@ -89,7 +93,7 @@ class ShapeRecognizer {
       final minSideIdx = sides.indexOf(sides.reduce(math.min));
 
       if (sides[minSideIdx] < maxSide * 0.15) {
-        print(
+        debugPrint(
           "[ShapeRecognizer] One side is very short (${sides[minSideIdx]}), merging corners.",
         );
         refinedCorners = List.from(refinedCorners)
@@ -130,7 +134,7 @@ class ShapeRecognizer {
           4;
       final ratio = side1 / (side2 == 0 ? 0.001 : side2);
 
-      print(
+      debugPrint(
         "[ShapeRecognizer] 4 corners, avgSide: $avgSide, variance: $sideVariance, ratio: $ratio",
       );
 
@@ -235,7 +239,9 @@ class ShapeRecognizer {
         }
       }
     }
-    debugPrint("[ShapeRecognizer] Merged by distance to ${merged.length} corners");
+    debugPrint(
+      "[ShapeRecognizer] Merged by distance to ${merged.length} corners",
+    );
 
     // Post-process: merge nearly collinear points
     if (merged.length > 2) {
@@ -257,14 +263,16 @@ class ShapeRecognizer {
           // Roughly 18 degrees
           collinearMerged.add(p2);
         } else {
-          debugPrint("[ShapeRecognizer] Merging nearly collinear points at $p2");
+          debugPrint(
+            "[ShapeRecognizer] Merging nearly collinear points at $p2",
+          );
         }
       }
       collinearMerged.add(merged.last);
       merged.clear();
       merged.addAll(collinearMerged);
     }
-    print(
+    debugPrint(
       "[ShapeRecognizer] Merged by collinearity to ${merged.length} corners",
     );
 

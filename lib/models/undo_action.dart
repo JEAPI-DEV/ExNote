@@ -58,12 +58,14 @@ class _IndexedLine {
   _IndexedLine(this.index, this.line);
 }
 
-class MoveLinesAction extends UndoAction {
+/// Replaces lines at specific indices in the sketch.
+/// Used for move, transform, and style-change operations.
+class ReplaceLinesAction extends UndoAction {
   final List<SketchLine> oldLines;
   final List<SketchLine> newLines;
   final List<int> indices;
 
-  MoveLinesAction(this.oldLines, this.newLines, this.indices);
+  ReplaceLinesAction(this.oldLines, this.newLines, this.indices);
 
   @override
   void undo(List<SketchLine> lines) {
@@ -80,24 +82,6 @@ class MoveLinesAction extends UndoAction {
   }
 }
 
-class TransformLinesAction extends UndoAction {
-  final List<SketchLine> oldLines;
-  final List<SketchLine> newLines;
-  final List<int> indices;
-
-  TransformLinesAction(this.oldLines, this.newLines, this.indices);
-
-  @override
-  void undo(List<SketchLine> lines) {
-    for (int i = 0; i < indices.length; i++) {
-      lines[indices[i]] = oldLines[i];
-    }
-  }
-
-  @override
-  void redo(List<SketchLine> lines) {
-    for (int i = 0; i < indices.length; i++) {
-      lines[indices[i]] = newLines[i];
-    }
-  }
-}
+// Aliases for backwards compatibility
+typedef MoveLinesAction = ReplaceLinesAction;
+typedef TransformLinesAction = ReplaceLinesAction;

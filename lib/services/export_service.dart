@@ -13,6 +13,7 @@ import 'package:pdf/pdf.dart';
 import 'package:scribble/scribble.dart';
 import '../models/grid_type.dart';
 import '../services/sketch_renderer.dart';
+import '../utils/sketch_bounds.dart';
 
 class ExportService {
   static Future<File> exportToZip() async {
@@ -79,7 +80,7 @@ class ExportService {
     final SketchRenderer renderer = SketchRenderer();
 
     // 1. Calculate Bounds
-    Rect sketchBounds = _getSketchBounds(sketch);
+    Rect sketchBounds = sketch.bounds;
     debugPrint("[ExportService] Sketch bounds: $sketchBounds");
     if (sketchBounds == Rect.zero) {
       // Default to A4 if empty
@@ -115,7 +116,7 @@ class ExportService {
       final top = splitPoints[i];
       final bottom = splitPoints[i + 1];
       final segmentHeight = bottom - top;
-      print(
+      debugPrint(
         "[ExportService] Rendering page ${i + 1} (height: $segmentHeight)...",
       );
 
@@ -197,22 +198,6 @@ class ExportService {
 
     final file = File(filePath);
     await file.writeAsBytes(await doc.save());
-  }
-
-  static Rect _getSketchBounds(Sketch sketch) {
-    if (sketch.lines.isEmpty) return Rect.zero;
-    double minX = double.infinity, maxX = double.negativeInfinity;
-    double minY = double.infinity, maxY = double.negativeInfinity;
-    for (final line in sketch.lines) {
-      for (final p in line.points) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      }
-    }
-    if (minX == double.infinity) return Rect.zero;
-    return Rect.fromLTRB(minX, minY, maxX, maxY);
   }
 
   static List<double> _findSplitPoints(

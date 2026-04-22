@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/selection.dart';
+import '../utils/page_layout.dart';
 
 class LinkOverlayPainter extends CustomPainter {
   final List<Selection> selections;
@@ -15,6 +16,25 @@ class LinkOverlayPainter extends CustomPainter {
     required this.scrollOffset,
     required this.viewSize,
   });
+
+  /// Converts a [Selection] to its screen-space center position.
+  Offset? _selectionCenter(Selection s, PageLayout layout) {
+    if (s.pageIndex >= pageWidths.length) return null;
+
+    final screenLeft =
+        layout.horizontalOffsets[s.pageIndex] +
+        (s.left / pageWidths[s.pageIndex]) * layout.widths[s.pageIndex];
+    final screenTop =
+        layout.tops[s.pageIndex] +
+        (s.top / pageHeights[s.pageIndex]) * layout.heights[s.pageIndex] -
+        scrollOffset;
+    final screenWidth =
+        (s.width / pageWidths[s.pageIndex]) * layout.widths[s.pageIndex];
+
+    // Icon is 24x24 positioned at (screenLeft + screenWidth - 24, screenTop)
+    // Center of the icon is offset by +12 from top-left
+    return Offset(screenLeft + screenWidth - 12, screenTop + 12);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -33,71 +53,22 @@ class LinkOverlayPainter extends CustomPainter {
       textAlign: TextAlign.center,
     );
 
-    final viewAspectRatio = viewSize.width / viewSize.height;
-    final pageOffsets = <double>[0];
-    double currentOffset = 0;
-
-    final pageActualHeights = <double>[];
-    final pageActualWidths = <double>[];
-    final pageHorizontalOffsets = <double>[];
-
-    for (int i = 0; i < pageWidths.length; i++) {
-      final w = pageWidths[i];
-      final h = pageHeights[i];
-      final aspectRatio = w / h;
-
-      double actualW, actualH, offX;
-
-      if (aspectRatio > viewAspectRatio) {
-        actualW = viewSize.width;
-        actualH = viewSize.width / aspectRatio;
-        offX = 0;
-      } else {
-        actualH = viewSize.height;
-        actualW = viewSize.height * aspectRatio;
-        offX = (viewSize.width - actualW) / 2;
-      }
-
-      pageActualWidths.add(actualW);
-      pageActualHeights.add(actualH);
-      pageHorizontalOffsets.add(offX);
-
-      currentOffset += actualH;
-      pageOffsets.add(currentOffset);
-    }
+    final layout = PageLayout.calculate(
+      pageWidths: pageWidths,
+      pageHeights: pageHeights,
+      viewSize: viewSize,
+    );
 
     for (final s in selections) {
-      if (s.pageIndex >= pageWidths.length) continue;
-
-      final pageTop = pageOffsets[s.pageIndex];
-      final actualW = pageActualWidths[s.pageIndex];
-      final actualH = pageActualHeights[s.pageIndex];
-      final offX = pageHorizontalOffsets[s.pageIndex];
-
-      final screenLeft = offX + (s.left / pageWidths[s.pageIndex]) * actualW;
-      final screenTop =
-          pageTop + (s.top / pageHeights[s.pageIndex]) * actualH - scrollOffset;
-      final screenWidth = (s.width / pageWidths[s.pageIndex]) * actualW;
-
-      // Position logic from original code:
-      // left: screenLeft + screenWidth - 24
-      // top: screenTop
-      // Container size is approx 24x24 (padding 4 + icon 16)
-      // Center is at (left + 12, top + 12)
-
-      final centerX = screenLeft + screenWidth - 24 + 12;
-      final centerY = screenTop + 12;
-      final center = Offset(centerX, centerY);
+      final center = _selectionCenter(s, layout);
+      if (center == null) continue;
 
       // Culling: Don't draw if outside view
-      if (centerY + 12 < 0 || centerY - 12 > viewSize.height) continue;
+      if (center.dy + 12 < 0 || center.dy - 12 > viewSize.height) continue;
 
-      // Draw shadow
       canvas.drawCircle(center, 12, shadowPaint);
-      // Draw circle
       canvas.drawCircle(center, 12, paint);
 
-      // Draw icon
       textPainter.text = TextSpan(
         text: String.fromCharCode(Icons.link.codePoint),
         style: TextStyle(
@@ -112,27 +83,24 @@ class LinkOverlayPainter extends CustomPainter {
   }
 
   @override
-  bool? hitTest(Offset position) {
-    return findSelectionAt(
-          position: position,
-          selections: selections,
-          pageWidths: pageWidths,
-          pageHeights: pageHeights,
-          scrollOffset: scrollOffset,
-          viewSize: viewSize,
-        ) !=
-        null;
-  }
+  bool? hitTest(Offset position) =>
+      findSelectionAt(
+        position: position,
+        selections: selections,
+        pageWidths: pageWidths,
+        pageHeights: pageHeights,
+        scrollOffset: scrollOffset,
+        viewSize: viewSize,
+      ) !=
+      null;
 
   @override
-  bool shouldRepaint(covariant LinkOverlayPainter oldDelegate) {
-    return oldDelegate.scrollOffset != scrollOffset ||
-        oldDelegate.selections != selections ||
-        oldDelegate.viewSize != viewSize ||
-        oldDelegate.pageWidths != pageWidths;
-  }
+  bool shouldRepaint(covariant LinkOverlayPainter oldDelegate) =>
+      oldDelegate.scrollOffset != scrollOffset ||
+      oldDelegate.selections != selections ||
+      oldDelegate.viewSize != viewSize ||
+      oldDelegate.pageWidths != pageWidths;
 
-  // Helper for hit testing
   static Selection? findSelectionAt({
     required Offset position,
     required List<Selection> selections,
@@ -143,60 +111,28 @@ class LinkOverlayPainter extends CustomPainter {
   }) {
     if (pageWidths.isEmpty || pageHeights.isEmpty) return null;
 
-    final viewAspectRatio = viewSize.width / viewSize.height;
-    final pageOffsets = <double>[0];
-    double currentOffset = 0;
-
-    final pageActualHeights = <double>[];
-    final pageActualWidths = <double>[];
-    final pageHorizontalOffsets = <double>[];
-
-    for (int i = 0; i < pageWidths.length; i++) {
-      final w = pageWidths[i];
-      final h = pageHeights[i];
-      final aspectRatio = w / h;
-
-      double actualW, actualH, offX;
-
-      if (aspectRatio > viewAspectRatio) {
-        actualW = viewSize.width;
-        actualH = viewSize.width / aspectRatio;
-        offX = 0;
-      } else {
-        actualH = viewSize.height;
-        actualW = viewSize.height * aspectRatio;
-        offX = (viewSize.width - actualW) / 2;
-      }
-
-      pageActualWidths.add(actualW);
-      pageActualHeights.add(actualH);
-      pageHorizontalOffsets.add(offX);
-
-      currentOffset += actualH;
-      pageOffsets.add(currentOffset);
-    }
+    final layout = PageLayout.calculate(
+      pageWidths: pageWidths,
+      pageHeights: pageHeights,
+      viewSize: viewSize,
+    );
 
     for (final s in selections) {
       if (s.pageIndex >= pageWidths.length) continue;
 
-      final pageTop = pageOffsets[s.pageIndex];
-      final actualW = pageActualWidths[s.pageIndex];
-      final actualH = pageActualHeights[s.pageIndex];
-      final offX = pageHorizontalOffsets[s.pageIndex];
-
-      final screenLeft = offX + (s.left / pageWidths[s.pageIndex]) * actualW;
+      final screenLeft =
+          layout.horizontalOffsets[s.pageIndex] +
+          (s.left / pageWidths[s.pageIndex]) * layout.widths[s.pageIndex];
       final screenTop =
-          pageTop + (s.top / pageHeights[s.pageIndex]) * actualH - scrollOffset;
-      final screenWidth = (s.width / pageWidths[s.pageIndex]) * actualW;
+          layout.tops[s.pageIndex] +
+          (s.top / pageHeights[s.pageIndex]) * layout.heights[s.pageIndex] -
+          scrollOffset;
+      final screenWidth =
+          (s.width / pageWidths[s.pageIndex]) * layout.widths[s.pageIndex];
 
-      final centerX = screenLeft + screenWidth - 12;
-      final centerY = screenTop + 12;
-      final center = Offset(centerX, centerY);
+      final center = Offset(screenLeft + screenWidth - 12, screenTop + 12);
 
-      if ((position - center).distance <= 20) {
-        // 20 hit radius for easier tapping
-        return s;
-      }
+      if ((position - center).distance <= 20) return s;
     }
     return null;
   }

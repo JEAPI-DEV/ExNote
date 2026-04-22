@@ -14,10 +14,10 @@ import 'pdf_viewer_screen.dart';
 import 'page_selection_screen.dart';
 import 'note_screen.dart';
 import 'folder_screen.dart';
-import '../widgets/folder_color_picker.dart';
 import '../widgets/note_card.dart';
 import '../widgets/modals/folder_selection_tree.dart';
 import '../widgets/dialogs/app_dialogs.dart';
+import '../widgets/dialogs/create_folder_dialog.dart';
 
 class SubjectScreen extends ConsumerWidget {
   final String folderId;
@@ -88,14 +88,22 @@ class SubjectScreen extends ConsumerWidget {
                             ),
                             IconButton(
                               icon: const Icon(Icons.edit),
-                              onPressed: () =>
-                                  _showRenameExerciseList(context, ref, folder, list),
+                              onPressed: () => _showRenameExerciseList(
+                                context,
+                                ref,
+                                folder,
+                                list,
+                              ),
                               tooltip: 'Rename',
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete_outline),
-                              onPressed: () =>
-                                  _showDeleteExerciseList(context, ref, folder, list),
+                              onPressed: () => _showDeleteExerciseList(
+                                context,
+                                ref,
+                                folder,
+                                list,
+                              ),
                             ),
                           ],
                         ),
@@ -198,7 +206,11 @@ class SubjectScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _renameNote(BuildContext context, WidgetRef ref, Note note) async {
+  Future<void> _renameNote(
+    BuildContext context,
+    WidgetRef ref,
+    Note note,
+  ) async {
     final name = await AppDialogs.textInput(
       context: context,
       title: 'Rename Note',
@@ -211,7 +223,11 @@ class SubjectScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _deleteNote(BuildContext context, WidgetRef ref, Note note) async {
+  Future<void> _deleteNote(
+    BuildContext context,
+    WidgetRef ref,
+    Note note,
+  ) async {
     final confirmed = await AppDialogs.confirm(
       context: context,
       title: 'Delete Note',
@@ -262,8 +278,9 @@ class SubjectScreen extends ConsumerWidget {
       confirmText: 'Delete',
     );
     if (confirmed && context.mounted) {
-      final updatedLists =
-          folder.exerciseLists.where((l) => l.id != list.id).toList();
+      final updatedLists = folder.exerciseLists
+          .where((l) => l.id != list.id)
+          .toList();
       ref
           .read(folderProvider.notifier)
           .updateFolder(folder.copyWith(exerciseLists: updatedLists));
@@ -277,56 +294,13 @@ class SubjectScreen extends ConsumerWidget {
     WidgetRef ref,
     bool isNoteFolder,
   ) {
-    final controller = TextEditingController();
-    String? selectedColorHex;
-    showDialog(
+    showCreateFolderDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('New Subfolder'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    hintText: 'Enter folder name',
-                  ),
-                  autofocus: true,
-                ),
-                FolderColorPicker(
-                  selectedColorHex: selectedColorHex,
-                  onColorSelected: (hex) =>
-                      setState(() => selectedColorHex = hex),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (controller.text.isNotEmpty) {
-                    ref
-                        .read(folderProvider.notifier)
-                        .addFolder(
-                          controller.text,
-                          isNoteFolder: isNoteFolder,
-                          parentId: folderId,
-                          colorHex: selectedColorHex,
-                        );
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('Create'),
-              ),
-            ],
-          );
-        },
-      ),
+      ref: ref,
+      title: 'New Subfolder',
+      hintText: 'Enter folder name',
+      isNoteFolder: isNoteFolder,
+      parentId: folderId,
     );
   }
 
@@ -452,9 +426,7 @@ class SubjectScreen extends ConsumerWidget {
       if (!context.mounted) return;
       final selectedPages = await Navigator.push<List<int>>(
         context,
-        MaterialPageRoute(
-          builder: (_) => PageSelectionScreen(filePath: path),
-        ),
+        MaterialPageRoute(builder: (_) => PageSelectionScreen(filePath: path)),
       );
 
       if (selectedPages == null) return;
@@ -487,9 +459,9 @@ class SubjectScreen extends ConsumerWidget {
       } catch (e) {
         if (context.mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to process PDF: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to process PDF: $e')));
         }
         return;
       }

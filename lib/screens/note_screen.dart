@@ -11,9 +11,8 @@ import '../widgets/ai_chat_drawer.dart';
 import '../widgets/settings_drawer.dart';
 import '../widgets/note_canvas.dart';
 import '../models/chat_message.dart';
-import '../models/grid_type.dart';
+import '../models/note_settings.dart';
 import '../models/right_drawer_content.dart';
-import '../utils/app_config.dart';
 import '../utils/undo_redo_manager.dart';
 import '../utils/clipboard_manager.dart';
 import '../services/note_manager.dart';
@@ -49,25 +48,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   final TransformationController _transformationController =
       TransformationController();
 
-  // GlobalKey to fix Scaffold.of context issue
+  // Global key and drawer state
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  bool gridEnabled = false;
-  GridType gridType = GridType.grid;
-  double gridSpacing = AppConfig.defaultGridSpacing;
   RightDrawerContent _rightDrawerContent = RightDrawerContent.settings;
 
   Timer? _autoSaveTimer;
   Size? _screenshotSize;
   final GlobalKey _exportKey = GlobalKey();
 
-  // AI Settings
-  String openRouterToken = '';
-  String aiModel = AppConfig.defaultAiModel;
-  bool tutorEnabled = AppConfig.defaultTutorEnabled;
-  bool submitLastImageOnly = AppConfig.defaultSubmitLastImageOnly;
-  double aiDrawerWidth = AppConfig.defaultAiDrawerWidth;
-  bool shapeSnappingEnabled = AppConfig.defaultShapeSnappingEnabled;
+  // Typed settings (replaces 10 individual fields)
+  NoteSettings _settings = const NoteSettings.defaults();
   final TextEditingController _tokenController = TextEditingController();
 
   // Logic Managers
@@ -248,12 +238,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
               ),
               endDrawer: _rightDrawerContent == RightDrawerContent.aiChat
                   ? SizedBox(
-                      width: aiDrawerWidth,
+                      width: _settings.aiDrawerWidth,
                       child: AiChatDrawer(
-                        apiKey: openRouterToken,
-                        model: aiModel,
-                        isTutorMode: tutorEnabled,
-                        submitLastImageOnly: submitLastImageOnly,
+                        apiKey: _settings.openRouterToken,
+                        model: _settings.aiModel,
+                        isTutorMode: _settings.tutorEnabled,
+                        submitLastImageOnly: _settings.submitLastImageOnly,
                         history: _aiChatHistory,
                         controller: _aiChatController,
                         onCaptureContext: _captureCanvas,
@@ -262,7 +252,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                             _aiChatHistory.clear();
                             _aiChatHistory.add(
                               ChatMessage(
-                                text: tutorEnabled
+                                text: _settings.tutorEnabled
                                     ? "Hello! I'm your tutor. How can I help you with your notes today?"
                                     : "Hello! How can I help you today?",
                                 isAi: true,
@@ -272,9 +262,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         },
                         onWidthChanged: (delta) {
                           setState(() {
-                            aiDrawerWidth = (aiDrawerWidth + delta).clamp(
-                              320.0,
-                              800.0,
+                            _settings = _settings.copyWith(
+                              aiDrawerWidth: (_settings.aiDrawerWidth + delta)
+                                  .clamp(320.0, 800.0),
                             );
                           });
                           _saveSettings();
@@ -282,57 +272,65 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                       ),
                     )
                   : SettingsDrawer(
-                      gridEnabled: gridEnabled,
-                      gridType: gridType,
-                      gridSpacing: gridSpacing,
-                      aiModel: aiModel,
-                      tutorEnabled: tutorEnabled,
-                      submitLastImageOnly: submitLastImageOnly,
-                      shapeSnappingEnabled: shapeSnappingEnabled,
+                      gridEnabled: _settings.gridEnabled,
+                      gridType: _settings.gridType,
+                      gridSpacing: _settings.gridSpacing,
+                      aiModel: _settings.aiModel,
+                      tutorEnabled: _settings.tutorEnabled,
+                      submitLastImageOnly: _settings.submitLastImageOnly,
+                      shapeSnappingEnabled: _settings.shapeSnappingEnabled,
                       tokenController: _tokenController,
                       onGridEnabledChanged: (value) {
                         setState(() {
-                          gridEnabled = value;
+                          _settings = _settings.copyWith(gridEnabled: value);
                         });
                         _saveSettings();
                       },
                       onGridTypeChanged: (value) {
                         setState(() {
-                          gridType = value;
+                          _settings = _settings.copyWith(gridType: value);
                         });
                         _saveSettings();
                       },
                       onGridSpacingChanged: (value) {
                         setState(() {
-                          gridSpacing = value;
+                          _settings = _settings.copyWith(gridSpacing: value);
                         });
                         _saveSettings();
                       },
                       onTokenChanged: (value) {
-                        openRouterToken = value;
+                        setState(() {
+                          _settings = _settings.copyWith(
+                            openRouterToken: value,
+                          );
+                        });
                         _saveSettings();
                       },
                       onAiModelChanged: (value) {
                         setState(() {
-                          aiModel = value;
+                          _settings = _settings.copyWith(aiModel: value);
                         });
                         _saveSettings();
                       },
                       onTutorEnabledChanged: (value) {
                         setState(() {
-                          tutorEnabled = value;
+                          _settings = _settings.copyWith(tutorEnabled: value);
                         });
                         _saveSettings();
                       },
                       onSubmitLastImageOnlyChanged: (value) {
                         setState(() {
-                          submitLastImageOnly = value;
+                          _settings = _settings.copyWith(
+                            submitLastImageOnly: value,
+                          );
                         });
                         _saveSettings();
                       },
                       onShapeSnappingEnabledChanged: (value) {
                         setState(() {
-                          shapeSnappingEnabled = value;
+                          _settings = _settings.copyWith(
+                            shapeSnappingEnabled: value,
+                          );
                         });
                         _saveSettings();
                       },
@@ -367,9 +365,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                     else
                       NoteCanvas(
                         transformationController: _transformationController,
-                        gridEnabled: gridEnabled,
-                        gridType: gridType,
-                        gridSpacing: gridSpacing,
+                        gridEnabled: _settings.gridEnabled,
+                        gridType: _settings.gridType,
+                        gridSpacing: _settings.gridSpacing,
                         selection: selection,
                         screenshotSize: _screenshotSize,
                         exportKey: _exportKey,
@@ -378,7 +376,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         toolNotifier: toolNotifier,
                         sketchNotifier: sketchNotifier,
                         selectionNotifier: selectionNotifier,
-                        shapeSnappingEnabled: shapeSnappingEnabled,
+                        shapeSnappingEnabled: _settings.shapeSnappingEnabled,
                         onAction: _undoRedoManager.applyAction,
                       ),
                     Positioned(
@@ -492,9 +490,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         sketch: sketchNotifier.value,
         context: context,
         filename: filename,
-        gridEnabled: gridEnabled,
-        gridType: gridType,
-        gridSpacing: gridSpacing,
+        gridEnabled: _settings.gridEnabled,
+        gridType: _settings.gridType,
+        gridSpacing: _settings.gridSpacing,
         isDark: Theme.of(context).brightness == Brightness.dark,
       );
       if (!mounted) return;
@@ -520,35 +518,15 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     final settings = await SettingsService.loadSettings();
     if (mounted) {
       setState(() {
-        widthNotifier.value = settings['strokeWidth'];
-        gridEnabled = settings['gridEnabled'];
-        gridType = settings['gridType'];
-        gridSpacing = settings['gridSpacing'];
-        openRouterToken = settings['openRouterToken'];
-        aiModel = settings['aiModel'];
-        _tokenController.text = openRouterToken;
-        tutorEnabled = settings['tutorEnabled'];
-        submitLastImageOnly = settings['submitLastImageOnly'];
-        aiDrawerWidth = settings['aiDrawerWidth'];
-        shapeSnappingEnabled = settings['shapeSnappingEnabled'];
+        _settings = settings;
+        widthNotifier.value = settings.strokeWidth;
+        _tokenController.text = settings.openRouterToken;
       });
-
     }
   }
 
   Future<void> _saveSettings() async {
-    await SettingsService.saveSettings(
-      strokeWidth: widthNotifier.value,
-      gridEnabled: gridEnabled,
-      gridType: gridType,
-      gridSpacing: gridSpacing,
-      openRouterToken: openRouterToken,
-      aiModel: aiModel,
-      tutorEnabled: tutorEnabled,
-      submitLastImageOnly: submitLastImageOnly,
-      aiDrawerWidth: aiDrawerWidth,
-      shapeSnappingEnabled: shapeSnappingEnabled,
-    );
+    await SettingsService.saveSettings(_settings);
   }
 
   void _scheduleAutoSave() {
