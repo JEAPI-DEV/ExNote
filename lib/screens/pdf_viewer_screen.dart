@@ -1,13 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:uuid/uuid.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:image/image.dart' as img;
 import '../providers/folder_provider.dart';
 import '../models/selection.dart';
+import '../utils/pdf_coordinate_mapper.dart';
+import '../services/pdf_screenshot_service.dart';
 import '../widgets/selection_overlay.dart';
 import '../widgets/link_overlay_painter.dart';
 import 'note_screen.dart';
@@ -202,12 +201,20 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                     },
                   ),
                 ),
-              // Hyperlinks
               IgnorePointer(
                 ignoring: _isEditingMode,
                 child: GestureDetector(
                   onTapUp: (details) {
                     if (_isEditingMode) return;
+                    if (_pageWidths.isEmpty) return;
+
+                    final mapper = PdfCoordinateMapper(
+                      pageWidths: _pageWidths,
+                      pageHeights: _pageHeights,
+                      viewSize: viewSize,
+                      scrollOffset: _scrollOffset,
+                    );
+
                     final selection = LinkOverlayPainter.findSelectionAt(
                       position: details.localPosition,
                       selections: list.selections,
@@ -294,148 +301,28 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     final id = const Uuid().v4();
     final noteId = const Uuid().v4();
 
-    // Capture screenshot
     String? screenshotPath;
     try {
-      final document = await _pdfController.document;
       final renderBox =
           _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
       if (renderBox == null) return;
-      final viewSize = renderBox.size;
-      final viewAspectRatio = viewSize.width / viewSize.height;
-      List<double> pageScreenTops = [];
-      List<double> pageScreenHeights = [];
-      double cumTop = 0;
-      for (int i = 0; i < _pageWidths.length; i++) {
-        pageScreenTops.add(cumTop - _scrollOffset);
-        final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
-        double actualPageHeight;
-        if (pageAspectRatio > viewAspectRatio) {
-          actualPageHeight = viewSize.width / pageAspectRatio;
-        } else {
-          actualPageHeight = viewSize.height;
-        }
-        pageScreenHeights.add(actualPageHeight);
-        cumTop += actualPageHeight;
-      }
 
-      int startPageIndex = -1;
-      int endPageIndex = -1;
+      final mapper = PdfCoordinateMapper(
+        pageWidths: _pageWidths,
+        pageHeights: _pageHeights,
+        viewSize: renderBox.size,
+        scrollOffset: _scrollOffset,
+      );
 
-      for (int i = 0; i < pageScreenTops.length; i++) {
-        final top = pageScreenTops[i];
-        final bottom = top + pageScreenHeights[i];
-
-        if (_selectionRect!.bottom > top && _selectionRect!.top < bottom) {
-          if (startPageIndex == -1) startPageIndex = i;
-          endPageIndex = i;
-        }
-      }
-
-      if (startPageIndex != -1 && endPageIndex != -1) {
-        const double scaleFactor = 4.0;
-        List<img.Image> renderedPages = [];
-        int totalWidth = 0;
-        int totalHeight = 0;
-
-        for (int i = startPageIndex; i <= endPageIndex; i++) {
-          final page = await document.getPage(i + 1);
-          final pageImage = await page.render(
-            width: page.width * scaleFactor,
-            height: page.height * scaleFactor,
-            format: PdfPageImageFormat.png,
-          );
-          final decoded = img.decodeImage(pageImage!.bytes);
-          if (decoded != null) {
-            renderedPages.add(decoded);
-            totalWidth = totalWidth > decoded.width
-                ? totalWidth
-                : decoded.width;
-            totalHeight += decoded.height;
-          }
-          await page.close();
-        }
-
-        if (renderedPages.isNotEmpty) {
-          final stitchedImage = img.Image(
-            width: totalWidth,
-            height: totalHeight,
-          );
-          img.fill(stitchedImage, color: img.ColorRgb8(255, 255, 255));
-
-          int currentY = 0;
-          for (var pageImg in renderedPages) {
-            img.compositeImage(stitchedImage, pageImg, dstY: currentY);
-            currentY += pageImg.height;
-          }
-
-          final firstPage = await document.getPage(startPageIndex + 1);
-          final firstPageAspectRatio = firstPage.width / firstPage.height;
-
-          double actualFirstPageWidth;
-          double offsetX = 0;
-
-          if (firstPageAspectRatio > viewAspectRatio) {
-            actualFirstPageWidth = viewSize.width;
-          } else {
-            actualFirstPageWidth = viewSize.height * firstPageAspectRatio;
-            offsetX = (viewSize.width - actualFirstPageWidth) / 2;
-          }
-
-          final relativeLeft =
-              (_selectionRect!.left - offsetX) / actualFirstPageWidth;
-          final relativeTop =
-              (_selectionRect!.top - pageScreenTops[startPageIndex]) /
-              pageScreenHeights[startPageIndex];
-          final relativeWidth = _selectionRect!.width / actualFirstPageWidth;
-
-          int cropX = (relativeLeft * firstPage.width * scaleFactor).toInt();
-          int cropY = (relativeTop * firstPage.height * scaleFactor).toInt();
-          int cropWidth = (relativeWidth * firstPage.width * scaleFactor)
-              .toInt();
-          // (Selection Height / Screen Height of Page) * PDF Height of Page * Scale
-          int cropHeight =
-              ((_selectionRect!.height / pageScreenHeights[startPageIndex]) *
-                      firstPage.height *
-                      scaleFactor)
-                  .toInt();
-
-          cropX = cropX.clamp(0, stitchedImage.width - 1);
-          cropY = cropY.clamp(0, stitchedImage.height - 1);
-          cropWidth = cropWidth.clamp(1, stitchedImage.width - cropX);
-          cropHeight = cropHeight.clamp(1, stitchedImage.height - cropY);
-
-          final croppedImage = img.copyCrop(
-            stitchedImage,
-            x: cropX,
-            y: cropY,
-            width: cropWidth,
-            height: cropHeight,
-          );
-
-          const int padding = 20;
-          final bgWidth = croppedImage.width + 2 * padding;
-          final bgHeight = croppedImage.height + 2 * padding;
-          final backgroundImage = img.Image(width: bgWidth, height: bgHeight);
-          img.fill(backgroundImage, color: img.ColorRgb8(255, 255, 255));
-          img.compositeImage(
-            backgroundImage,
-            croppedImage,
-            dstX: padding,
-            dstY: padding,
-          );
-
-          final directory = await getApplicationDocumentsDirectory();
-          final path = '${directory.path}/screenshot_$id.png';
-          final file = File(path);
-          await file.writeAsBytes(img.encodePng(backgroundImage));
-          screenshotPath = path;
-
-          await firstPage.close();
-        }
-      }
+      final document = await _pdfController.document;
+      screenshotPath = await PdfScreenshotService.captureSelectionScreenshot(
+        document: document,
+        selectionRect: _selectionRect!,
+        mapper: mapper,
+        id: id,
+      );
     } catch (e) {
-      debugPrint('Error capturing multi-page screenshot: $e');
+      debugPrint('Error capturing screenshot: $e');
       if (mounted) {
         setState(() {
           _isProcessing = false;
@@ -444,78 +331,37 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       return;
     }
 
-    final document2 = await _pdfController.document;
-    final renderBox =
+    final renderBox2 =
         _pdfViewKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-    final viewSize = renderBox.size;
-    final viewAspectRatio = viewSize.width / viewSize.height;
+    if (renderBox2 == null) return;
 
-    int actualPageIndex = 0;
-    double cumTop = 0;
-    for (int i = 0; i < _pageWidths.length; i++) {
-      final pageScreenTop = cumTop - _scrollOffset;
-      final pageAspectRatio = _pageWidths[i] / _pageHeights[i];
-      double actualPageHeight;
-      if (pageAspectRatio > viewAspectRatio) {
-        actualPageHeight = viewSize.width / pageAspectRatio;
-      } else {
-        actualPageHeight = viewSize.height;
-      }
-      if (_selectionRect!.top >= pageScreenTop &&
-          _selectionRect!.top < pageScreenTop + actualPageHeight) {
-        actualPageIndex = i;
-        break;
-      }
-      cumTop += actualPageHeight;
-    }
+    final mapper2 = PdfCoordinateMapper(
+      pageWidths: _pageWidths,
+      pageHeights: _pageHeights,
+      viewSize: renderBox2.size,
+      scrollOffset: _scrollOffset,
+    );
 
-    final page2 = await document2.getPage(actualPageIndex + 1);
-    final pageAspectRatio = page2.width / page2.height;
-
-    double actualPageWidth, actualPageHeight;
-    double offsetX = 0;
-
-    if (pageAspectRatio > viewAspectRatio) {
-      actualPageWidth = viewSize.width;
-      actualPageHeight = viewSize.width / pageAspectRatio;
-    } else {
-      actualPageHeight = viewSize.height;
-      actualPageWidth = viewSize.height * pageAspectRatio;
-      offsetX = (viewSize.width - actualPageWidth) / 2;
-    }
-
-    double cumulativeTop = 0;
-    for (int i = 0; i < actualPageIndex; i++) {
-      final prevPageAspectRatio = _pageWidths[i] / _pageHeights[i];
-      double prevActualPageHeight;
-      if (prevPageAspectRatio > viewAspectRatio) {
-        prevActualPageHeight = viewSize.width / prevPageAspectRatio;
-      } else {
-        prevActualPageHeight = viewSize.height;
-      }
-      cumulativeTop += prevActualPageHeight;
-    }
-
-    final relativeLeft = (_selectionRect!.left - offsetX) / actualPageWidth;
-    final relativeTop =
-        (_selectionRect!.top - cumulativeTop + _scrollOffset) /
-        actualPageHeight;
-    final relativeWidth = _selectionRect!.width / actualPageWidth;
-    final relativeHeight = _selectionRect!.height / actualPageHeight;
+    final actualPageIndex = mapper2.findPageIndexForY(_selectionRect!.top);
+    final document2 = await _pdfController.document;
+    final page = await document2.getPage(actualPageIndex + 1);
+    final coords = mapper2.screenToPageRelative(
+      _selectionRect!,
+      actualPageIndex,
+    );
 
     final newSelection = Selection(
       id: id,
-      left: relativeLeft * page2.width,
-      top: relativeTop * page2.height,
-      width: relativeWidth * page2.width,
-      height: relativeHeight * page2.height,
+      left: coords.left * page.width,
+      top: coords.top * page.height,
+      width: coords.width * page.width,
+      height: coords.height * page.height,
       pageIndex: actualPageIndex,
       noteId: noteId,
       screenshotPath: screenshotPath,
     );
 
-    await page2.close();
+    await page.close();
 
     final folder = ref
         .read(folderProvider)

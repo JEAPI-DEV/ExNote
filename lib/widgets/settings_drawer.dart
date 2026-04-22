@@ -2,46 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
 import '../models/grid_type.dart';
+import '../models/note_settings.dart';
+import '../controllers/note_settings_controller.dart';
 import '../utils/app_config.dart';
 
 class SettingsDrawer extends ConsumerWidget {
-  final bool gridEnabled;
-  final GridType gridType;
-  final String aiModel;
-  final bool tutorEnabled;
-  final bool submitLastImageOnly;
-  final bool shapeSnappingEnabled;
-  final double gridSpacing;
-  final TextEditingController tokenController;
-  final ValueChanged<bool> onGridEnabledChanged;
-  final ValueChanged<GridType> onGridTypeChanged;
-  final ValueChanged<double> onGridSpacingChanged;
-  final ValueChanged<String> onTokenChanged;
-  final ValueChanged<String> onAiModelChanged;
-  final ValueChanged<bool> onTutorEnabledChanged;
-  final ValueChanged<bool> onSubmitLastImageOnlyChanged;
-  final ValueChanged<bool> onShapeSnappingEnabledChanged;
+  final NoteSettingsController settingsController;
   final VoidCallback? onExportBackup;
   final VoidCallback? onImportBackup;
 
   const SettingsDrawer({
     super.key,
-    required this.gridEnabled,
-    required this.gridType,
-    required this.gridSpacing,
-    required this.aiModel,
-    required this.tutorEnabled,
-    required this.submitLastImageOnly,
-    required this.shapeSnappingEnabled,
-    required this.tokenController,
-    required this.onGridEnabledChanged,
-    required this.onGridTypeChanged,
-    required this.onGridSpacingChanged,
-    required this.onTokenChanged,
-    required this.onAiModelChanged,
-    required this.onTutorEnabledChanged,
-    required this.onSubmitLastImageOnlyChanged,
-    required this.onShapeSnappingEnabledChanged,
+    required this.settingsController,
     this.onExportBackup,
     this.onImportBackup,
   });
@@ -49,6 +21,7 @@ class SettingsDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
+    final settings = settingsController.settings;
 
     return Drawer(
       child: ListView(
@@ -67,7 +40,6 @@ class SettingsDrawer extends ConsumerWidget {
             ),
           ),
 
-          // Theme Selection
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -107,17 +79,20 @@ class SettingsDrawer extends ConsumerWidget {
 
           SwitchListTile(
             title: const Text('Grid Enabled'),
-            value: gridEnabled,
-            onChanged: onGridEnabledChanged,
+            value: settings.gridEnabled,
+            onChanged: (v) =>
+                settingsController.update((s) => s.copyWith(gridEnabled: v)),
           ),
-          if (gridEnabled) ...[
+          if (settings.gridEnabled) ...[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: DropdownButton<GridType>(
-                value: gridType,
+                value: settings.gridType,
                 onChanged: (GridType? newValue) {
                   if (newValue != null) {
-                    onGridTypeChanged(newValue);
+                    settingsController.update(
+                      (s) => s.copyWith(gridType: newValue),
+                    );
                   }
                 },
                 items: GridType.values.map((GridType type) {
@@ -130,7 +105,7 @@ class SettingsDrawer extends ConsumerWidget {
                 }).toList(),
               ),
             ),
-            if (gridType == GridType.grid)
+            if (settings.gridType == GridType.grid)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Column(
@@ -138,16 +113,18 @@ class SettingsDrawer extends ConsumerWidget {
                   children: [
                     const SizedBox(height: 8),
                     Text(
-                      'Grid Spacing: ${gridSpacing.toInt()}',
+                      'Grid Spacing: ${settings.gridSpacing.toInt()}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     Slider(
-                      value: gridSpacing,
+                      value: settings.gridSpacing,
                       min: 20.0,
                       max: 100.0,
                       divisions: 16,
-                      label: gridSpacing.round().toString(),
-                      onChanged: onGridSpacingChanged,
+                      label: settings.gridSpacing.round().toString(),
+                      onChanged: (v) => settingsController.update(
+                        (s) => s.copyWith(gridSpacing: v),
+                      ),
                     ),
                   ],
                 ),
@@ -159,12 +136,13 @@ class SettingsDrawer extends ConsumerWidget {
             subtitle: const Text(
               'Hold at the end of a stroke to snap to shape',
             ),
-            value: shapeSnappingEnabled,
-            onChanged: onShapeSnappingEnabledChanged,
+            value: settings.shapeSnappingEnabled,
+            onChanged: (v) => settingsController.update(
+              (s) => s.copyWith(shapeSnappingEnabled: v),
+            ),
           ),
           const Divider(),
 
-          // AI Settings
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -176,20 +154,22 @@ class SettingsDrawer extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 TextField(
-                  controller: tokenController,
+                  controller: settingsController.tokenController,
                   decoration: const InputDecoration(
                     labelText: 'OpenRouter API Token',
                     border: OutlineInputBorder(),
                     hintText: 'sk-or-v1-...',
                   ),
                   obscureText: true,
-                  onChanged: onTokenChanged,
+                  onChanged: (v) => settingsController.update(
+                    (s) => s.copyWith(openRouterToken: v),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text('AI Model', style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: aiModel,
+                  value: settings.aiModel,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     contentPadding: EdgeInsets.symmetric(
@@ -205,7 +185,9 @@ class SettingsDrawer extends ConsumerWidget {
                   }).toList(),
                   onChanged: (value) {
                     if (value != null) {
-                      onAiModelChanged(value);
+                      settingsController.update(
+                        (s) => s.copyWith(aiModel: value),
+                      );
                     }
                   },
                 ),
@@ -214,8 +196,10 @@ class SettingsDrawer extends ConsumerWidget {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Tutor Mode'),
                   subtitle: const Text('AI will act as a helpful tutor'),
-                  value: tutorEnabled,
-                  onChanged: onTutorEnabledChanged,
+                  value: settings.tutorEnabled,
+                  onChanged: (v) => settingsController.update(
+                    (s) => s.copyWith(tutorEnabled: v),
+                  ),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -223,8 +207,10 @@ class SettingsDrawer extends ConsumerWidget {
                   subtitle: const Text(
                     'AI will only receive the last captured image',
                   ),
-                  value: submitLastImageOnly,
-                  onChanged: onSubmitLastImageOnlyChanged,
+                  value: settings.submitLastImageOnly,
+                  onChanged: (v) => settingsController.update(
+                    (s) => s.copyWith(submitLastImageOnly: v),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 const Divider(),

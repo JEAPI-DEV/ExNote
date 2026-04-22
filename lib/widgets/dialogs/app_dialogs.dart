@@ -74,14 +74,40 @@ class AppDialogs {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              confirmText,
-              style: TextStyle(color: confirmColor),
-            ),
+            child: Text(confirmText, style: TextStyle(color: confirmColor)),
           ),
         ],
       ),
     );
     return result == true;
+  }
+
+  static void showProgressDialog(
+    BuildContext context, {
+    String message = 'Loading...',
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(message),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static void hideProgressDialog(BuildContext context) {
+    Navigator.pop(context);
   }
 }

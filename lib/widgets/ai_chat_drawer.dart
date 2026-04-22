@@ -1,22 +1,22 @@
-import 'dart:convert';
 import 'package:exnote/services/llm_parser/latex_block_syntax.dart';
 import 'package:exnote/services/llm_parser/latex_element_builder.dart';
 import 'package:exnote/services/llm_parser/latex_inline_syntax.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../services/ai_service.dart';
 import '../models/chat_message.dart';
+import '../controllers/ai_chat_controller.dart';
+import 'chat/chat_header.dart';
+import 'chat/chat_input_area.dart';
+import 'chat/chat_bubble.dart';
 
 class AiChatDrawer extends StatefulWidget {
   final String apiKey;
   final String model;
   final bool isTutorMode;
   final bool submitLastImageOnly;
-  final List<ChatMessage> history;
-  final TextEditingController controller;
+  final AiChatController chatController;
   final Future<String?> Function() onCaptureContext;
-  final VoidCallback onClearHistory;
   final Function(double) onWidthChanged;
 
   const AiChatDrawer({
@@ -25,10 +25,8 @@ class AiChatDrawer extends StatefulWidget {
     required this.model,
     required this.isTutorMode,
     required this.submitLastImageOnly,
-    required this.history,
-    required this.controller,
+    required this.chatController,
     required this.onCaptureContext,
-    required this.onClearHistory,
     required this.onWidthChanged,
   });
 
@@ -38,11 +36,6 @@ class AiChatDrawer extends StatefulWidget {
 
 class _AiChatDrawerState extends State<AiChatDrawer> {
   final ScrollController _scrollController = ScrollController();
-  bool _isLoading = false;
-  String? _pendingBase64Image;
-  bool _isListening = false;
-  String _lastWords = '';
-
   late final AiService _aiService;
 
   @override
@@ -53,8 +46,8 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
       model: widget.model,
       isTutorMode: widget.isTutorMode,
     );
-    if (widget.history.isEmpty) {
-      widget.history.add(
+    if (widget.chatController.history.isEmpty) {
+      widget.chatController.history.add(
         ChatMessage(
           text: widget.isTutorMode
               ? "Hello! I'm your tutor. How can I help you with your notes today?"
@@ -66,31 +59,27 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
   }
 
   void _handleSend() async {
-    final text = widget.controller.text.trim();
-    if (text.isEmpty && _pendingBase64Image == null) return;
+    final text = widget.chatController.textController.text.trim();
+    final pendingImage = widget.chatController.pendingBase64Image;
+    if (text.isEmpty && pendingImage == null) return;
 
-    setState(() {
-      widget.history.add(
-        ChatMessage(text: text, isAi: false, base64Image: _pendingBase64Image),
-      );
-      _isLoading = true;
-    });
+    widget.chatController.addMessage(
+      ChatMessage(text: text, isAi: false, base64Image: pendingImage),
+    );
+    widget.chatController.setLoading(true);
 
-    widget.controller.clear();
-    _pendingBase64Image = null;
+    widget.chatController.textController.clear();
+    widget.chatController.setPendingImage(null);
     _scrollToBottom();
 
     final response = await _aiService.sendMessage(
-      widget.history,
+      widget.chatController.history,
       submitLastImageOnly: widget.submitLastImageOnly,
     );
 
     if (mounted) {
-      //debugPrint('AI Response: $response');
-      setState(() {
-        widget.history.add(ChatMessage(text: response, isAi: true));
-        _isLoading = false;
-      });
+      widget.chatController.addMessage(ChatMessage(text: response, isAi: true));
+      widget.chatController.setLoading(false);
       _scrollToBottom();
     }
   }
@@ -98,9 +87,7 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
   void _captureContext() async {
     final base64 = await widget.onCaptureContext();
     if (base64 != null) {
-      setState(() {
-        _pendingBase64Image = base64;
-      });
+      widget.chatController.setPendingImage(base64);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Screenshot added as context')),
       );
@@ -137,211 +124,59 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
             ),
             child: Column(
               children: [
-                // Header
-                GestureDetector(
-                  onTap: () => FocusScope.of(context).unfocus(),
-                  behavior: HitTestBehavior.translucent,
-                  child: Container(
-                    height: 48,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: const BoxDecoration(
-                      border: Border(bottom: BorderSide(color: borderColor)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.psychology_outlined,
-                          size: 18,
-                          color: Colors.white70,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'AI ASSISTANT',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () {
-                            widget.onClearHistory();
-                            setState(() {});
-                          },
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text(
-                            'CLEAR',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.close,
-                            size: 18,
-                            color: Colors.white54,
-                          ),
-                          onPressed: () => Navigator.of(context).pop(),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
-                  ),
+                ChatHeader(
+                  onClear: () {
+                    final greeting = widget.isTutorMode
+                        ? "Hello! I'm your tutor. How can I help you with your notes today?"
+                        : "Hello! How can I help you today?";
+                    widget.chatController.clearHistory(greeting);
+                  },
+                  onClose: () => Navigator.of(context).pop(),
                 ),
-
-                // Messages
                 Expanded(
                   child: GestureDetector(
                     onTap: () => FocusScope.of(context).unfocus(),
                     behavior: HitTestBehavior.translucent,
-                    child: ListView.builder(
-                      reverse: true,
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      itemCount: widget.history.length,
-                      itemBuilder: (context, index) {
-                        final reversedIndex = widget.history.length - 1 - index;
-                        return _ChatBubble(
-                          message: widget.history[reversedIndex],
+                    child: ListenableBuilder(
+                      listenable: widget.chatController,
+                      builder: (context, _) {
+                        return ListView.builder(
+                          reverse: true,
+                          controller: _scrollController,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          itemCount: widget.chatController.history.length,
+                          itemBuilder: (context, index) {
+                            final reversedIndex =
+                                widget.chatController.history.length -
+                                1 -
+                                index;
+                            return ChatBubble(
+                              message:
+                                  widget.chatController.history[reversedIndex],
+                            );
+                          },
                         );
                       },
                     ),
                   ),
                 ),
-
-                if (_isLoading)
+                if (widget.chatController.isLoading)
                   const LinearProgressIndicator(
                     backgroundColor: Colors.transparent,
                     valueColor: AlwaysStoppedAnimation<Color>(accentColor),
                     minHeight: 1,
                   ),
-
-                // Input Area
-                Padding(
-                  padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).viewInsets.bottom,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: const BoxDecoration(
-                      border: Border(top: BorderSide(color: borderColor)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_pendingBase64Image != null)
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: accentColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: accentColor.withOpacity(0.3),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.image_outlined,
-                                  size: 14,
-                                  color: accentColor,
-                                ),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  'CONTEXT ATTACHED',
-                                  style: TextStyle(
-                                    color: accentColor,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                GestureDetector(
-                                  onTap: () => setState(
-                                    () => _pendingBase64Image = null,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    size: 14,
-                                    color: accentColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            IconButton(
-                              icon: const Icon(
-                                Icons.add_a_photo_outlined,
-                                size: 20,
-                                color: Colors.white54,
-                              ),
-                              onPressed: _captureContext,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            const SizedBox(width: 12),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                controller: widget.controller,
-                                maxLines: 5,
-                                minLines: 1,
-                                keyboardType: TextInputType.multiline,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                ),
-                                decoration: const InputDecoration(
-                                  hintText: 'Type a message...',
-                                  hintStyle: TextStyle(
-                                    color: Colors.white24,
-                                    fontSize: 13,
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.send_rounded,
-                                size: 20,
-                                color: accentColor,
-                              ),
-                              onPressed: _handleSend,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                ChatInputArea(
+                  textController: widget.chatController.textController,
+                  pendingBase64Image: widget.chatController.pendingBase64Image,
+                  onSend: _handleSend,
+                  onCaptureContext: _captureContext,
+                  onRemoveImage: () =>
+                      widget.chatController.setPendingImage(null),
                 ),
               ],
             ),
           ),
-          // Resize handle on the left edge
           Positioned(
             left: 0,
             top: 0,
@@ -349,8 +184,6 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
               onHorizontalDragUpdate: (details) {
-                // Dragging left (negative delta) increases width
-                // Dragging right (positive delta) decreases width
                 widget.onWidthChanged(-details.delta.dx);
               },
               child: MouseRegion(
@@ -368,127 +201,6 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
                       ),
                     ),
                   ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChatBubble extends StatelessWidget {
-  final ChatMessage message;
-
-  const _ChatBubble({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final isAi = message.isAi;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                isAi ? 'AI' : 'YOU',
-                style: TextStyle(
-                  color: isAi ? const Color(0xFF007AFF) : Colors.white54,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          if (message.base64Image != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: Image.memory(
-                  base64Decode(message.base64Image!),
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          MarkdownBody(
-            data: message.text,
-            selectable: true,
-            builders: {
-              'latex': LatexElementBuilder(
-                textStyle: const TextStyle(color: Colors.white),
-              ),
-            },
-            extensionSet: md.ExtensionSet(
-              [LatexBlockSyntax()],
-              [LatexInlineSyntax(), md.InlineHtmlSyntax()],
-            ),
-            styleSheet: MarkdownStyleSheet(
-              p: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                height: 1.4,
-              ),
-              h1: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              h2: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-              h3: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
-              h4: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-              h5: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-              h6: const TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-              strong: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-              em: const TextStyle(
-                color: Colors.white,
-                fontStyle: FontStyle.italic,
-              ),
-              listBullet: const TextStyle(color: Colors.white70),
-              code: TextStyle(
-                color: Colors.white,
-                backgroundColor: Colors.white.withOpacity(0.1),
-                fontFamily: 'monospace',
-              ),
-              codeblockDecoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              blockquote: const TextStyle(
-                color: Colors.white70,
-                decorationColor: Colors.white24,
-              ),
-              blockquoteDecoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(color: Colors.white24, width: 4),
                 ),
               ),
             ),

@@ -4,20 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scribble/scribble.dart';
 import '../providers/folder_provider.dart';
 import '../models/drawing_tool.dart';
+import '../models/right_drawer_content.dart';
 import '../models/selection.dart';
+import '../models/undo_action.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_toolbar.dart';
 import '../widgets/ai_chat_drawer.dart';
 import '../widgets/settings_drawer.dart';
 import '../widgets/note_canvas.dart';
-import '../models/chat_message.dart';
-import '../models/note_settings.dart';
-import '../models/right_drawer_content.dart';
+import '../controllers/note_settings_controller.dart';
+import '../controllers/ai_chat_controller.dart';
 import '../utils/undo_redo_manager.dart';
 import '../utils/clipboard_manager.dart';
 import '../services/note_manager.dart';
 import '../services/export_service.dart';
-import '../services/settings_service.dart';
 import '../services/stylus_shortcut_manager.dart';
 import '../services/backup_service.dart';
 
@@ -48,7 +48,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   final TransformationController _transformationController =
       TransformationController();
 
-  // Global key and drawer state
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   RightDrawerContent _rightDrawerContent = RightDrawerContent.settings;
 
@@ -56,18 +55,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Size? _screenshotSize;
   final GlobalKey _exportKey = GlobalKey();
 
-  // Typed settings (replaces 10 individual fields)
-  NoteSettings _settings = const NoteSettings.defaults();
-  final TextEditingController _tokenController = TextEditingController();
+  final NoteSettingsController _settingsController = NoteSettingsController();
+  final AiChatController _aiChatController = AiChatController();
 
-  // Logic Managers
   late UndoRedoManager _undoRedoManager;
   late ClipboardManager _clipboardManager;
   late NoteManager _noteManager;
 
-  bool _isLoading = true; // AI Chat History
-  final List<ChatMessage> _aiChatHistory = [];
-  final TextEditingController _aiChatController = TextEditingController();
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -92,7 +87,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       undoRedoManager: _undoRedoManager,
       onCopy: () {
         if (mounted) {
-          setState(() {}); // Update UI to enable Paste button
+          setState(() {});
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Copied to clipboard'),
@@ -113,7 +108,11 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       undoRedoManager: _undoRedoManager,
     );
 
-    _loadSettings();
+    _settingsController.load().then((_) {
+      if (mounted) {
+        widthNotifier.value = _settingsController.settings.strokeWidth;
+      }
+    });
     _loadNote();
 
     selectionNotifier.addListener(() {
@@ -141,7 +140,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
-    _saveSettings();
+    _saveNote();
     StylusShortcutManager.instance.detach(toolNotifier);
     sketchNotifier.dispose();
     selectionNotifier.dispose();
@@ -149,7 +148,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     widthNotifier.dispose();
     toolNotifier.dispose();
     _transformationController.dispose();
-    _tokenController.dispose();
+    _settingsController.dispose();
     _aiChatController.dispose();
     super.dispose();
   }
@@ -159,6 +158,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     final folder = ref
         .watch(folderProvider)
         .firstWhere((f) => f.id == widget.folderId);
+    final settings = _settingsController.settings;
 
     String title = 'Note';
     Selection? selection;
@@ -180,224 +180,142 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       }
     }
 
-    return Builder(
-      builder: (context) {
-        return PopScope(
-          canPop: true,
-          onPopInvoked: (didPop) async {
-            if (didPop) {
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) async {
+        if (didPop) {
+          await _saveNote();
+        }
+      },
+      child: Listener(
+        onPointerDown: (event) {
+          if (FocusScope.of(context).hasFocus) {
+            FocusScope.of(context).unfocus();
+          }
+        },
+        behavior: HitTestBehavior.translucent,
+        child: Scaffold(
+          key: _scaffoldKey,
+          appBar: NoteAppBar(
+            title: title,
+            onUndo: _undoRedoManager.undo,
+            onRedo: _undoRedoManager.redo,
+            onCopy: _clipboardManager.copy,
+            onPaste: _clipboardManager.paste,
+            onExportPng: _exportPng,
+            onExportPdf: _exportPdf,
+            onSave: () {
+              _autoSaveTimer?.cancel();
+              _saveNote();
+            },
+            onSettings: () {
+              setState(() => _rightDrawerContent = RightDrawerContent.settings);
+              _scaffoldKey.currentState?.openEndDrawer();
+            },
+            onBack: () async {
               await _saveNote();
-            }
-          },
-          child: Listener(
-            onPointerDown: (event) {
-              if (FocusScope.of(context).hasFocus) {
-                FocusScope.of(context).unfocus();
+              if (mounted) {
+                Navigator.of(context).pop();
               }
             },
-            behavior: HitTestBehavior.translucent,
-            child: Scaffold(
-              key: _scaffoldKey,
-              appBar: NoteAppBar(
-                title: title,
-                onUndo: _undoRedoManager.undo,
-                onRedo: _undoRedoManager.redo,
-                onCopy: _clipboardManager.copy,
-                onPaste: _clipboardManager.paste,
-                onExportPng: _exportPng,
-                onExportPdf: _exportPdf,
-                onSave: () {
-                  _autoSaveTimer?.cancel();
-                  _saveNote();
-                },
-                onSettings: () {
-                  setState(
-                    () => _rightDrawerContent = RightDrawerContent.settings,
-                  );
-                  _scaffoldKey.currentState?.openEndDrawer();
-                },
-                onBack: () async {
-                  await _saveNote();
-                  if (mounted) {
-                    Navigator.of(context).pop();
-                  }
-                },
-                onDelete: selectionNotifier.value.isNotEmpty
-                    ? _clipboardManager.deleteSelection
-                    : null,
-                onChat: () {
-                  setState(
-                    () => _rightDrawerContent = RightDrawerContent.aiChat,
-                  );
-                  _scaffoldKey.currentState?.openEndDrawer();
-                },
-                canUndo: _undoRedoManager.canUndo,
-                canRedo: _undoRedoManager.canRedo,
-                canCopy: selectionNotifier.value.isNotEmpty,
-                canPaste: _clipboardManager.canPaste,
-              ),
-              endDrawer: _rightDrawerContent == RightDrawerContent.aiChat
-                  ? SizedBox(
-                      width: _settings.aiDrawerWidth,
-                      child: AiChatDrawer(
-                        apiKey: _settings.openRouterToken,
-                        model: _settings.aiModel,
-                        isTutorMode: _settings.tutorEnabled,
-                        submitLastImageOnly: _settings.submitLastImageOnly,
-                        history: _aiChatHistory,
-                        controller: _aiChatController,
-                        onCaptureContext: _captureCanvas,
-                        onClearHistory: () {
-                          setState(() {
-                            _aiChatHistory.clear();
-                            _aiChatHistory.add(
-                              ChatMessage(
-                                text: _settings.tutorEnabled
-                                    ? "Hello! I'm your tutor. How can I help you with your notes today?"
-                                    : "Hello! How can I help you today?",
-                                isAi: true,
-                              ),
-                            );
-                          });
-                        },
-                        onWidthChanged: (delta) {
-                          setState(() {
-                            _settings = _settings.copyWith(
-                              aiDrawerWidth: (_settings.aiDrawerWidth + delta)
-                                  .clamp(320.0, 800.0),
-                            );
-                          });
-                          _saveSettings();
-                        },
-                      ),
-                    )
-                  : SettingsDrawer(
-                      gridEnabled: _settings.gridEnabled,
-                      gridType: _settings.gridType,
-                      gridSpacing: _settings.gridSpacing,
-                      aiModel: _settings.aiModel,
-                      tutorEnabled: _settings.tutorEnabled,
-                      submitLastImageOnly: _settings.submitLastImageOnly,
-                      shapeSnappingEnabled: _settings.shapeSnappingEnabled,
-                      tokenController: _tokenController,
-                      onGridEnabledChanged: (value) {
-                        setState(() {
-                          _settings = _settings.copyWith(gridEnabled: value);
-                        });
-                        _saveSettings();
-                      },
-                      onGridTypeChanged: (value) {
-                        setState(() {
-                          _settings = _settings.copyWith(gridType: value);
-                        });
-                        _saveSettings();
-                      },
-                      onGridSpacingChanged: (value) {
-                        setState(() {
-                          _settings = _settings.copyWith(gridSpacing: value);
-                        });
-                        _saveSettings();
-                      },
-                      onTokenChanged: (value) {
-                        setState(() {
-                          _settings = _settings.copyWith(
-                            openRouterToken: value,
-                          );
-                        });
-                        _saveSettings();
-                      },
-                      onAiModelChanged: (value) {
-                        setState(() {
-                          _settings = _settings.copyWith(aiModel: value);
-                        });
-                        _saveSettings();
-                      },
-                      onTutorEnabledChanged: (value) {
-                        setState(() {
-                          _settings = _settings.copyWith(tutorEnabled: value);
-                        });
-                        _saveSettings();
-                      },
-                      onSubmitLastImageOnlyChanged: (value) {
-                        setState(() {
-                          _settings = _settings.copyWith(
-                            submitLastImageOnly: value,
-                          );
-                        });
-                        _saveSettings();
-                      },
-                      onShapeSnappingEnabledChanged: (value) {
-                        setState(() {
-                          _settings = _settings.copyWith(
-                            shapeSnappingEnabled: value,
-                          );
-                        });
-                        _saveSettings();
-                      },
-                      onExportBackup: () async {
-                        try {
-                          final file = await ExportService.exportToZip();
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Backup saved to ${file.path}'),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Export failed: $e')),
-                            );
-                          }
-                        }
-                      },
-                      onImportBackup: () =>
-                          BackupService.importFromBackup(context, ref),
-                    ),
-              body: GestureDetector(
-                onTap: () => FocusScope.of(context).unfocus(),
-                behavior: HitTestBehavior.translucent,
-                child: Stack(
-                  children: [
-                    if (_isLoading)
-                      const Center(child: CircularProgressIndicator())
-                    else
-                      NoteCanvas(
-                        transformationController: _transformationController,
-                        gridEnabled: _settings.gridEnabled,
-                        gridType: _settings.gridType,
-                        gridSpacing: _settings.gridSpacing,
-                        selection: selection,
-                        screenshotSize: _screenshotSize,
-                        exportKey: _exportKey,
-                        colorNotifier: colorNotifier,
-                        widthNotifier: widthNotifier,
-                        toolNotifier: toolNotifier,
-                        sketchNotifier: sketchNotifier,
-                        selectionNotifier: selectionNotifier,
-                        shapeSnappingEnabled: _settings.shapeSnappingEnabled,
-                        onAction: _undoRedoManager.applyAction,
-                      ),
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      child: NoteToolbar(
-                        colorNotifier: colorNotifier,
-                        widthNotifier: widthNotifier,
-                        toolNotifier: toolNotifier,
-                        sketchNotifier: sketchNotifier,
-                        selectionNotifier: selectionNotifier,
-                        onAction: _undoRedoManager.applyAction,
-                      ),
-                    ),
-                  ],
+            onDelete: selectionNotifier.value.isNotEmpty
+                ? _clipboardManager.deleteSelection
+                : null,
+            onChat: () {
+              setState(() => _rightDrawerContent = RightDrawerContent.aiChat);
+              _scaffoldKey.currentState?.openEndDrawer();
+            },
+            canUndo: _undoRedoManager.canUndo,
+            canRedo: _undoRedoManager.canRedo,
+            canCopy: selectionNotifier.value.isNotEmpty,
+            canPaste: _clipboardManager.canPaste,
+          ),
+          endDrawer: _rightDrawerContent == RightDrawerContent.aiChat
+              ? SizedBox(
+                  width: settings.aiDrawerWidth,
+                  child: AiChatDrawer(
+                    apiKey: settings.openRouterToken,
+                    model: settings.aiModel,
+                    isTutorMode: settings.tutorEnabled,
+                    submitLastImageOnly: settings.submitLastImageOnly,
+                    chatController: _aiChatController,
+                    onCaptureContext: _captureCanvas,
+                    onWidthChanged: (delta) {
+                      _settingsController.update(
+                        (s) => s.copyWith(
+                          aiDrawerWidth: (s.aiDrawerWidth + delta).clamp(
+                            320.0,
+                            800.0,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                )
+              : SettingsDrawer(
+                  settingsController: _settingsController,
+                  onExportBackup: () async {
+                    try {
+                      final file = await ExportService.exportToZip();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Backup saved to ${file.path}'),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Export failed: $e')),
+                        );
+                      }
+                    }
+                  },
+                  onImportBackup: () =>
+                      BackupService.importFromBackup(context, ref),
                 ),
-              ),
+          body: GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            behavior: HitTestBehavior.translucent,
+            child: Stack(
+              children: [
+                if (_isLoading)
+                  const Center(child: CircularProgressIndicator())
+                else
+                  NoteCanvas(
+                    transformationController: _transformationController,
+                    gridEnabled: settings.gridEnabled,
+                    gridType: settings.gridType,
+                    gridSpacing: settings.gridSpacing,
+                    selection: selection,
+                    screenshotSize: _screenshotSize,
+                    exportKey: _exportKey,
+                    colorNotifier: colorNotifier,
+                    widthNotifier: widthNotifier,
+                    toolNotifier: toolNotifier,
+                    sketchNotifier: sketchNotifier,
+                    selectionNotifier: selectionNotifier,
+                    shapeSnappingEnabled: settings.shapeSnappingEnabled,
+                    onAction: _undoRedoManager.applyAction,
+                  ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  child: NoteToolbar(
+                    colorNotifier: colorNotifier,
+                    widthNotifier: widthNotifier,
+                    toolNotifier: toolNotifier,
+                    sketchNotifier: sketchNotifier,
+                    selectionNotifier: selectionNotifier,
+                    onAction: _undoRedoManager.applyAction,
+                  ),
+                ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -490,20 +408,20 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         sketch: sketchNotifier.value,
         context: context,
         filename: filename,
-        gridEnabled: _settings.gridEnabled,
-        gridType: _settings.gridType,
-        gridSpacing: _settings.gridSpacing,
+        gridEnabled: _settingsController.settings.gridEnabled,
+        gridType: _settingsController.settings.gridType,
+        gridSpacing: _settingsController.settings.gridSpacing,
         isDark: Theme.of(context).brightness == Brightness.dark,
       );
       if (!mounted) return;
-      Navigator.pop(context); // Close progress dialog
+      Navigator.pop(context);
 
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Exported PDF to ${file.path}')));
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // Close progress dialog
+      Navigator.pop(context);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('PDF export failed: $e')));
@@ -512,21 +430,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Future<String?> _captureCanvas() async {
     return await ExportService.captureCanvas(_exportKey);
-  }
-
-  Future<void> _loadSettings() async {
-    final settings = await SettingsService.loadSettings();
-    if (mounted) {
-      setState(() {
-        _settings = settings;
-        widthNotifier.value = settings.strokeWidth;
-        _tokenController.text = settings.openRouterToken;
-      });
-    }
-  }
-
-  Future<void> _saveSettings() async {
-    await SettingsService.saveSettings(_settings);
   }
 
   void _scheduleAutoSave() {
