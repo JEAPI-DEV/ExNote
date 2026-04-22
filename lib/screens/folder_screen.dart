@@ -230,7 +230,7 @@ class FolderGrid extends ConsumerWidget {
   void _showFolderOptions(BuildContext context, WidgetRef ref, Folder folder) {
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
+      builder: (sheetContext) => SafeArea(
         child: Wrap(
           children: [
             const ListTile(
@@ -243,7 +243,7 @@ class FolderGrid extends ConsumerWidget {
               leading: const Icon(Icons.edit),
               title: const Text('Rename'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(sheetContext);
                 _renameFolder(context, ref, folder);
               },
             ),
@@ -251,7 +251,7 @@ class FolderGrid extends ConsumerWidget {
               leading: const Icon(Icons.drive_file_move),
               title: const Text('Move'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(sheetContext);
                 _showMoveFolderDialog(context, ref, folder);
               },
             ),
@@ -259,7 +259,7 @@ class FolderGrid extends ConsumerWidget {
               leading: const Icon(Icons.delete, color: Colors.red),
               title: const Text('Delete', style: TextStyle(color: Colors.red)),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(sheetContext);
                 _deleteFolder(context, ref, folder);
               },
             ),

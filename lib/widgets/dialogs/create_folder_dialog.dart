@@ -18,39 +18,44 @@ Future<void> showCreateFolderDialog({
 
   await showDialog(
     context: context,
-    builder: (context) => StatefulBuilder(
+    builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
         title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              decoration: InputDecoration(hintText: hintText),
-              autofocus: true,
-            ),
-            FolderColorPicker(
-              selectedColorHex: selectedColorHex,
-              onColorSelected: (hex) =>
-                  setState(() => selectedColorHex = hex),
-            ),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                decoration: InputDecoration(hintText: hintText),
+                autofocus: true,
+              ),
+              const SizedBox(height: 12),
+              FolderColorPicker(
+                selectedColorHex: selectedColorHex,
+                onColorSelected: (hex) =>
+                    setState(() => selectedColorHex = hex),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () {
               if (controller.text.isNotEmpty) {
-                ref.read(folderProvider.notifier).addFolder(
+                ref
+                    .read(folderProvider.notifier)
+                    .addFolder(
                       controller.text,
                       isNoteFolder: isNoteFolder,
                       parentId: parentId,
                       colorHex: selectedColorHex,
                     );
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
               }
             },
             child: const Text('Create'),

@@ -26,72 +26,65 @@ class FolderColorPicker extends StatelessWidget {
         ),
         SizedBox(
           height: 50,
-          child: ListView.builder(
+          child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            itemCount: FolderColors.palette.length + 1, // +1 for "no color"
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                // Default / No Color
-                final isSelected = selectedColorHex == null;
-                return GestureDetector(
-                  onTap: () => onColorSelected(null),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    margin: const EdgeInsets.only(right: 12),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Theme.of(context).disabledColor.withOpacity(0.1),
-                      border: isSelected
-                          ? Border.all(
-                              color: Theme.of(context).primaryColor,
-                              width: 3,
-                            )
-                          : Border.all(color: Colors.grey.withOpacity(0.5)),
-                    ),
-                    child: const Icon(
-                      Icons.block,
-                      size: 20,
-                      color: Colors.grey,
-                    ),
-                  ),
-                );
-              }
-
-              final color = FolderColors.palette[index - 1];
-              // Convert color to hex string precisely like "FF696FC7"
-              final hexString = color.value.toRadixString(16).toUpperCase();
-              final isSelected = selectedColorHex == hexString;
-
-              return GestureDetector(
-                onTap: () => onColorSelected(hexString),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  margin: const EdgeInsets.only(right: 12),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: color,
-                    border: isSelected
-                        ? Border.all(
-                            color: Theme.of(context).primaryColor,
-                            width: 3,
-                          )
-                        : null,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
+            child: Row(
+              children: [
+                _buildColorOption(
+                  context: context,
+                  color: null,
+                  isSelected: selectedColorHex == null,
+                  onSelect: () => onColorSelected(null),
                 ),
-              );
-            },
+                ...FolderColors.palette.map((color) {
+                  final hexString = color.value.toRadixString(16).toUpperCase();
+                  return _buildColorOption(
+                    context: context,
+                    color: color,
+                    isSelected: selectedColorHex == hexString,
+                    onSelect: () => onColorSelected(hexString),
+                  );
+                }),
+              ],
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildColorOption({
+    required BuildContext context,
+    required Color? color,
+    required bool isSelected,
+    required VoidCallback onSelect,
+  }) {
+    return GestureDetector(
+      onTap: onSelect,
+      child: Container(
+        width: 40,
+        height: 40,
+        margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color ?? Theme.of(context).disabledColor.withOpacity(0.1),
+          border: isSelected
+              ? Border.all(color: Theme.of(context).primaryColor, width: 3)
+              : Border.all(color: Colors.grey.withOpacity(0.5)),
+          boxShadow: color != null
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: color == null
+            ? const Icon(Icons.block, size: 20, color: Colors.grey)
+            : null,
+      ),
     );
   }
 }
