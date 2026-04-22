@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import '../providers/folder_provider.dart';
 import '../services/backup_service.dart';
 import '../services/export/export_service.dart';
@@ -101,14 +102,11 @@ class FolderScreen extends ConsumerWidget {
               onTap: () async {
                 Navigator.pop(context);
                 try {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Generating backup...')),
-                  );
                   final file = await ExportService.exportToZip();
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Backup saved to ${file.path}')),
-                    );
+                    await Share.shareXFiles([
+                      XFile(file.path),
+                    ], text: 'ExNote backup');
                   }
                 } catch (e) {
                   if (context.mounted) {

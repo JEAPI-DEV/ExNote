@@ -7,8 +7,8 @@ import 'dart:io';
 import '../models/exercise_list.dart';
 import '../models/folder.dart';
 import '../providers/folder_provider.dart';
-import '../services/pdf_export_service.dart';
-import '../services/pdf_processing_service.dart';
+import '../services/pdf/pdf_note_export_service.dart';
+import '../services/pdf/pdf_page_extractor.dart';
 import '../widgets/dialogs/app_dialogs.dart';
 import '../widgets/dialogs/create_folder_dialog.dart';
 import '../widgets/folder_grid.dart';
@@ -183,7 +183,7 @@ class ExerciseFolderScreen extends ConsumerWidget {
     );
 
     try {
-      final exportService = PdfExportService();
+      final exportService = PdfNoteExportService();
       final outputFile = await exportService.exportExerciseListToPdf(list);
 
       if (context.mounted) {
@@ -260,7 +260,7 @@ class ExerciseFolderScreen extends ConsumerWidget {
         final newPath =
             '${pdfDir.path}/${DateTime.now().millisecondsSinceEpoch}_filtered.pdf';
 
-        await PdfProcessingService().extractPages(
+        await PdfPageExtractor().extractPages(
           sourcePath: path,
           destinationPath: newPath,
           pageIndices: selectedPages,

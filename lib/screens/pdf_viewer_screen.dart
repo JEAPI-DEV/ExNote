@@ -5,7 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../providers/folder_provider.dart';
 import '../models/selection.dart';
 import '../utils/pdf_coordinate_mapper.dart';
-import '../services/pdf_screenshot_service.dart';
+import '../services/pdf/pdf_screenshot_service.dart';
 import '../widgets/selection_overlay.dart';
 import '../widgets/link_overlay_painter.dart';
 import 'note_screen.dart';

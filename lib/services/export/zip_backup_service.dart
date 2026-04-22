@@ -4,8 +4,8 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import '../../utils/export_directory.dart';
 
-class ZipExportService {
-  static Future<File> exportToZip() async {
+class ZipBackupService {
+  static Future<File> createBackup() async {
     final appDir = await getApplicationDocumentsDirectory();
     final exportDir = await ExportDirectory.get();
     final zipPath =

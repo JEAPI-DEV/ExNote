@@ -7,13 +7,13 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:scribble/scribble.dart';
-import '../models/exercise_list.dart';
-import '../services/sketch_renderer.dart';
-import '../services/storage_service.dart';
-import '../services/settings_service.dart';
-import '../utils/sketch_bounds.dart';
+import '../../models/exercise_list.dart';
+import '../storage_service.dart';
+import '../settings_service.dart';
+import '../sketch_renderer.dart';
+import '../../utils/sketch_bounds.dart';
 
-class PdfExportService {
+class PdfNoteExportService {
   final StorageService _storage = StorageService();
   final SketchRenderer _renderer = SketchRenderer();
 
@@ -25,16 +25,12 @@ class PdfExportService {
       throw Exception('Original PDF file not found at ${list.pdfPath}');
     }
 
-    // Load settings for grid and theme
     final settings = await SettingsService.loadSettings();
-    // We'll use light mode for PDF export usually, but we can follow settings
-    const bool isDark = false; // Usually PDFs are light
+    const bool isDark = false;
 
-    // Open original PDF
     final pdfDocument = await pdfx.PdfDocument.openFile(pdfFile.path);
     PdfPageFormat? firstPageFormat;
 
-    // 1. Render original pages and add links
     for (int i = 1; i <= pdfDocument.pagesCount; i++) {
       final page = await pdfDocument.getPage(i);
       if (i == 1) {
@@ -128,7 +124,6 @@ class PdfExportService {
 
     final notePageFormat = firstPageFormat ?? PdfPageFormat.a4;
 
-    // 2. Add note pages
     for (final s in list.selections) {
       final noteData = await _storage.loadNote(s.noteId);
       if (noteData == null) continue;
@@ -141,8 +136,6 @@ class PdfExportService {
         continue;
       }
 
-      // Determine canvas size for the note page
-      // We use the same format as the PDF pages to make it look like a notebook
       final Size canvasSize = Size(
         notePageFormat.width * 2,
         notePageFormat.height * 2,
@@ -156,9 +149,7 @@ class PdfExportService {
         bgImage = frame.image;
       }
 
-      // Calculate content bounds to fit everything
       Rect sketchBounds = sketch.bounds;
-      // Scale sketch bounds by 2.0 to match the rendering scale used for alignment
       sketchBounds = Rect.fromLTRB(
         sketchBounds.left * 2,
         sketchBounds.top * 2,
@@ -188,7 +179,6 @@ class PdfExportService {
         );
       }
 
-      // Add padding (5% of the larger dimension)
       final padding = contentBounds.longestSide * 0.05;
       contentBounds = Rect.fromLTRB(
         contentBounds.left - padding,
@@ -197,7 +187,6 @@ class PdfExportService {
         contentBounds.bottom + padding,
       );
 
-      // Calculate scale and offset to fit contentBounds into canvasSize
       final double scaleX = canvasSize.width / contentBounds.width;
       final double scaleY = canvasSize.height / contentBounds.height;
       final double fitScale = scaleX < scaleY ? scaleX : scaleY;
@@ -223,8 +212,7 @@ class PdfExportService {
             : null,
         offset: Offset(offsetX, offsetY),
         scale: fitScale,
-        sketchScale:
-            2.0, // Keep the 2x scale for sketch-to-screenshot alignment
+        sketchScale: 2.0,
         gridEnabled: settings.gridEnabled,
         gridType: settings.gridType,
         gridSpacing: settings.gridSpacing * 2,

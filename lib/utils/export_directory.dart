@@ -4,6 +4,9 @@ import 'package:path_provider/path_provider.dart';
 class ExportDirectory {
   static Future<Directory> get() async {
     if (Platform.isAndroid) {
+      final externalDir = await getExternalStorageDirectory();
+      if (externalDir != null) return externalDir;
+
       final downloadDir = Directory('/storage/emulated/0/Download');
       if (await downloadDir.exists()) {
         return downloadDir;
@@ -13,9 +16,6 @@ class ExportDirectory {
       if (await documentsDir.exists()) {
         return documentsDir;
       }
-
-      final externalDir = await getExternalStorageDirectory();
-      if (externalDir != null) return externalDir;
     }
     return await getApplicationDocumentsDirectory();
   }

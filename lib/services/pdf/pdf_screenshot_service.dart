@@ -1,9 +1,9 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
-import '../utils/pdf_coordinate_mapper.dart';
+import '../../utils/pdf_coordinate_mapper.dart';
 
 class PdfScreenshotService {
   static Future<String?> captureSelectionScreenshot({

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:scribble/scribble.dart';
 import '../providers/folder_provider.dart';
 import '../models/drawing_tool.dart';
@@ -19,6 +20,7 @@ import '../services/note_manager.dart';
 import '../services/export/export_service.dart';
 import '../services/stylus_shortcut_manager.dart';
 import '../services/backup_service.dart';
+import '../widgets/dialogs/app_dialogs.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -257,11 +259,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                     try {
                       final file = await ExportService.exportToZip();
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Backup saved to ${file.path}'),
-                          ),
-                        );
+                        await Share.shareXFiles([
+                          XFile(file.path),
+                        ], text: 'ExNote backup');
                       }
                     } catch (e) {
                       if (mounted) {
@@ -338,9 +338,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     try {
       final file = await ExportService.exportToPng(_exportKey, context);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Exported PNG to ${file.path}')));
+      await Share.shareXFiles([XFile(file.path)], text: 'Exported note as PNG');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -351,7 +349,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Future<void> _exportPdf() async {
     final TextEditingController controller = TextEditingController(
-      text: 'exnote_export_${DateTime.now()}',
+      text: 'exnote_export_${DateTime.now().millisecondsSinceEpoch}',
     );
 
     final String? filename = await showDialog<String>(
@@ -382,25 +380,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     if (filename == null || filename.isEmpty) return;
 
     if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: Card(
-          child: Padding(
-            padding: EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Generating PDF...'),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    AppDialogs.showProgressDialog(context, message: 'Generating PDF...');
 
     try {
       final file = await ExportService.exportToPdf(
@@ -413,14 +393,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         isDark: Theme.of(context).brightness == Brightness.dark,
       );
       if (!mounted) return;
-      Navigator.pop(context);
+      AppDialogs.hideProgressDialog(context);
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Exported PDF to ${file.path}')));
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: 'Exported $filename.pdf');
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context);
+      AppDialogs.hideProgressDialog(context);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('PDF export failed: $e')));

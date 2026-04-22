@@ -12,14 +12,14 @@ import '../../utils/export_directory.dart';
 import '../../utils/pdf_split_calculator.dart';
 import 'canvas_capture_service.dart';
 import 'png_export_service.dart';
-import 'zip_export_service.dart';
+import 'zip_backup_service.dart';
 
 export 'canvas_capture_service.dart';
 export 'png_export_service.dart';
-export 'zip_export_service.dart';
+export 'zip_backup_service.dart';
 
 class ExportService {
-  static Future<File> exportToZip() => ZipExportService.exportToZip();
+  static Future<File> exportToZip() => ZipBackupService.createBackup();
 
   static Future<File> exportToPng(GlobalKey exportKey, BuildContext context) =>
       PngExportService.exportToPng(exportKey, context);
