@@ -23,16 +23,6 @@ class SettingsService {
           AppConfig.defaultSubmitLastImageOnly,
       'aiDrawerWidth':
           prefs.getDouble('aiDrawerWidth') ?? AppConfig.defaultAiDrawerWidth,
-      'waifuFetcherEnabled':
-          prefs.getBool('waifuFetcherEnabled') ??
-          AppConfig.defaultWaifuFetcherEnabled,
-      'waifuProvider':
-          prefs.getString('waifuProvider') ?? AppConfig.defaultWaifuProvider,
-      'waifuImageWidth':
-          prefs.getDouble('waifuImageWidth') ??
-          AppConfig.defaultWaifuImageWidth,
-      'waifuTag': prefs.getString('waifuTag') ?? AppConfig.defaultWaifuTag,
-      'waifuNsfw': prefs.getBool('waifuNsfw') ?? AppConfig.defaultWaifuNsfw,
       'shapeSnappingEnabled':
           prefs.getBool('shapeSnappingEnabled') ??
           AppConfig.defaultShapeSnappingEnabled,
@@ -49,11 +39,6 @@ class SettingsService {
     required bool tutorEnabled,
     required bool submitLastImageOnly,
     required double aiDrawerWidth,
-    required bool waifuFetcherEnabled,
-    required String waifuProvider,
-    required double waifuImageWidth,
-    required String waifuTag,
-    required bool waifuNsfw,
     required bool shapeSnappingEnabled,
   }) async {
     final prefs = await SharedPreferences.getInstance();
@@ -66,11 +51,6 @@ class SettingsService {
     await prefs.setBool('tutorEnabled', tutorEnabled);
     await prefs.setBool('submitLastImageOnly', submitLastImageOnly);
     await prefs.setDouble('aiDrawerWidth', aiDrawerWidth);
-    await prefs.setBool('waifuFetcherEnabled', waifuFetcherEnabled);
-    await prefs.setString('waifuProvider', waifuProvider);
-    await prefs.setDouble('waifuImageWidth', waifuImageWidth);
-    await prefs.setString('waifuTag', waifuTag);
-    await prefs.setBool('waifuNsfw', waifuNsfw);
     await prefs.setBool('shapeSnappingEnabled', shapeSnappingEnabled);
   }
 }

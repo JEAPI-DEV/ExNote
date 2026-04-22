@@ -41,31 +41,8 @@ class SketchRenderer {
         currentWidth / 2,
         paint..style = PaintingStyle.fill,
       );
-    } else {
-      // if (scale < 0.5) {
-      //   paint.strokeWidth = width * 0.5;
-      //   final path = Path();
-      //   path.moveTo(points[0].x, points[0].y);
-      //   for (int i = 1; i < points.length; i++) {
-      //     path.lineTo(points[i].x, points[i].y);
-      //   }
-      //   canvas.drawPath(path, paint);
-      // if zoom is 80% or less
-      // } else if (scale < 0.8) {
-      //   paint.strokeWidth = width * 0.8;
-      //   final path = Path();
-      //   path.moveTo(points[0].x, points[0].y);
-      //   // Skip every other point to reduce drawing calls
-      //   for (int i = 1; i < points.length; i += 2) {
-      //     path.lineTo(points[i].x, points[i].y);
-      //   }
-      //   if (points.length > 1) {
-      //     path.lineTo(points.last.x, points.last.y);
-      //   }
-      //   canvas.drawPath(path, paint);
-      // } else {
+} else {
       _drawSmoothLine(canvas, points, paint, width);
-      // }
     }
   }
 

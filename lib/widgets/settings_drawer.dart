@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
 import '../models/grid_type.dart';
 import '../utils/app_config.dart';
-import '../services/waifu_provider_registry.dart';
 
 class SettingsDrawer extends ConsumerWidget {
   final bool gridEnabled;
@@ -11,13 +10,7 @@ class SettingsDrawer extends ConsumerWidget {
   final String aiModel;
   final bool tutorEnabled;
   final bool submitLastImageOnly;
-  // final bool waifuFetcherEnabled;
-  // final String waifuProvider;
-  // final double waifuImageWidth;
-  // final String waifuTag;
-  // final bool waifuNsfw;
   final bool shapeSnappingEnabled;
-  // final List<String> availableWaifuTags;
   final double gridSpacing;
   final TextEditingController tokenController;
   final ValueChanged<bool> onGridEnabledChanged;
@@ -27,11 +20,6 @@ class SettingsDrawer extends ConsumerWidget {
   final ValueChanged<String> onAiModelChanged;
   final ValueChanged<bool> onTutorEnabledChanged;
   final ValueChanged<bool> onSubmitLastImageOnlyChanged;
-  // final ValueChanged<bool> onWaifuFetcherEnabledChanged;
-  // final ValueChanged<String> onWaifuProviderChanged;
-  // final ValueChanged<double> onWaifuImageWidthChanged;
-  // final ValueChanged<String> onWaifuTagChanged;
-  // final ValueChanged<bool> onWaifuNsfwChanged;
   final ValueChanged<bool> onShapeSnappingEnabledChanged;
   final VoidCallback? onExportBackup;
   final VoidCallback? onImportBackup;
@@ -44,13 +32,7 @@ class SettingsDrawer extends ConsumerWidget {
     required this.aiModel,
     required this.tutorEnabled,
     required this.submitLastImageOnly,
-    // required this.waifuFetcherEnabled,
-    // required this.waifuProvider,
-    // required this.waifuImageWidth,
-    // required this.waifuTag,
-    // required this.waifuNsfw,
     required this.shapeSnappingEnabled,
-    // required this.availableWaifuTags,
     required this.tokenController,
     required this.onGridEnabledChanged,
     required this.onGridTypeChanged,
@@ -59,11 +41,6 @@ class SettingsDrawer extends ConsumerWidget {
     required this.onAiModelChanged,
     required this.onTutorEnabledChanged,
     required this.onSubmitLastImageOnlyChanged,
-    // required this.onWaifuFetcherEnabledChanged,
-    // required this.onWaifuProviderChanged,
-    // required this.onWaifuImageWidthChanged,
-    // required this.onWaifuTagChanged,
-    // required this.onWaifuNsfwChanged,
     required this.onShapeSnappingEnabledChanged,
     this.onExportBackup,
     this.onImportBackup,
@@ -249,97 +226,6 @@ class SettingsDrawer extends ConsumerWidget {
                   value: submitLastImageOnly,
                   onChanged: onSubmitLastImageOnlyChanged,
                 ),
-                // SwitchListTile(
-                //   contentPadding: EdgeInsets.zero,
-                //   title: const Text('Anime Background'),
-                //   subtitle: const Text('Fetch random anime image on open'),
-                //   value: waifuFetcherEnabled,
-                //   onChanged: onWaifuFetcherEnabledChanged,
-                // ),
-                if (false)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 8),
-                        Text(
-                          'Provider',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        // DropdownButtonFormField<String>(
-                        //   value: waifuProvider,
-                        //   items: WaifuProviderRegistry.providerNames
-                        //       .map(
-                        //         (provider) => DropdownMenuItem(
-                        //           value: provider,
-                        //           child: Text(provider),
-                        //         ),
-                        //       )
-                        //       .toList(),
-                        //   onChanged: (value) {
-                        //     if (value != null) {
-                        //       onWaifuProviderChanged(value);
-                        //     }
-                        //   },
-                        //   decoration: const InputDecoration(
-                        //     border: OutlineInputBorder(),
-                        //     contentPadding: EdgeInsets.symmetric(
-                        //       horizontal: 12,
-                        //       vertical: 8,
-                        //     ),
-                        //   ),
-                        // ),
-                        const SizedBox(height: 8),
-                        // Text(
-                        //   'Image Width: ${waifuImageWidth.toInt()}',
-                        //   style: Theme.of(context).textTheme.bodyMedium,
-                        // ),
-                        // Slider(
-                        //   value: waifuImageWidth,
-                        //   min: 200.0,
-                        //   max: 2000.0,
-                        //   divisions: 18,
-                        //   label: waifuImageWidth.round().toString(),
-                        //   onChanged: onWaifuImageWidthChanged,
-                        // ),
-                        // SwitchListTile(
-                        //   contentPadding: EdgeInsets.zero,
-                        //   title: const Text('NSFW'),
-                        //   value: waifuNsfw,
-                        //   onChanged: onWaifuNsfwChanged,
-                        // ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Tag',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        // DropdownButtonFormField<String>(
-                        //   value: availableWaifuTags.contains(waifuTag)
-                        //       ? waifuTag
-                        //       : availableWaifuTags.firstOrNull,
-                        //   decoration: const InputDecoration(
-                        //     border: OutlineInputBorder(),
-                        //     contentPadding: EdgeInsets.symmetric(
-                        //       horizontal: 12,
-                        //       vertical: 8,
-                        //     ),
-                        //   ),
-                        //   items: availableWaifuTags.map((tag) {
-                        //     return DropdownMenuItem(
-                        //       value: tag,
-                        //       child: Text(tag),
-                        //     );
-                        //   }).toList(),
-                        //   onChanged: (value) {
-                        //     if (value != null) {
-                        //       //onWaifuTagChanged(value);
-                        //     }
-                        //   },
-                        // ),
-                      ],
-                    ),
-                  ),
                 const SizedBox(height: 16),
                 const Divider(),
                 ListTile(

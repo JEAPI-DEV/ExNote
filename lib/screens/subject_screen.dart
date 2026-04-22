@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../models/exercise_list.dart';
 import '../models/note.dart';
+import '../models/folder.dart';
 import '../providers/folder_provider.dart';
 import '../services/pdf_export_service.dart';
 import '../services/pdf_processing_service.dart';
@@ -16,6 +17,7 @@ import 'folder_screen.dart';
 import '../widgets/folder_color_picker.dart';
 import '../widgets/note_card.dart';
 import '../widgets/modals/folder_selection_tree.dart';
+import '../widgets/dialogs/app_dialogs.dart';
 
 class SubjectScreen extends ConsumerWidget {
   final String folderId;
@@ -38,12 +40,7 @@ class SubjectScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.create_new_folder),
-            onPressed: () => _showAddSubfolderDialog(
-              context,
-              ref,
-              true,
-              false,
-            ), // true = in screen, false = not note
+            onPressed: () => _showAddSubfolderDialog(context, ref, false),
             tooltip: 'New Subfolder',
           ),
         ],
@@ -92,13 +89,13 @@ class SubjectScreen extends ConsumerWidget {
                             IconButton(
                               icon: const Icon(Icons.edit),
                               onPressed: () =>
-                                  _showRenameDialog(context, ref, folder, list),
+                                  _showRenameExerciseList(context, ref, folder, list),
                               tooltip: 'Rename',
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete_outline),
                               onPressed: () =>
-                                  _showDeleteDialog(context, ref, folder, list),
+                                  _showDeleteExerciseList(context, ref, folder, list),
                             ),
                           ],
                         ),
@@ -118,8 +115,8 @@ class SubjectScreen extends ConsumerWidget {
   Widget _buildNoteFolderView(
     BuildContext context,
     WidgetRef ref,
-    dynamic folder,
-    List<dynamic> subfolders,
+    Folder folder,
+    List<Folder> subfolders,
   ) {
     final notes = folder.notes.values.toList();
 
@@ -129,7 +126,7 @@ class SubjectScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.create_new_folder),
-            onPressed: () => _showAddSubfolderDialog(context, ref, true, true),
+            onPressed: () => _showAddSubfolderDialog(context, ref, true),
             tooltip: 'New Subfolder',
           ),
         ],
@@ -171,11 +168,9 @@ class SubjectScreen extends ConsumerWidget {
                               ),
                             ),
                           ),
-                          onRename: () =>
-                              _showRenameNoteDialog(context, ref, note),
+                          onRename: () => _renameNote(context, ref, note),
                           onMove: () => _showMoveNoteDialog(context, ref, note),
-                          onDelete: () =>
-                              _showDeleteNoteDialog(context, ref, note),
+                          onDelete: () => _deleteNote(context, ref, note),
                         );
                       }, childCount: notes.length),
                     ),
@@ -183,54 +178,103 @@ class SubjectScreen extends ConsumerWidget {
               ],
             ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddNoteDialog(context, ref),
+        onPressed: () => _addNote(context, ref),
         label: const Text('New Note'),
         icon: const Icon(Icons.add),
       ),
     );
   }
 
-  void _showMoveNoteDialog(BuildContext context, WidgetRef ref, Note note) {
-    showDialog(
+  // --- Note Actions ---
+
+  Future<void> _addNote(BuildContext context, WidgetRef ref) async {
+    final name = await AppDialogs.textInput(
       context: context,
-      builder: (context) {
-        final allFolders = ref.watch(folderProvider);
-        return AlertDialog(
-          title: const Text('Move Note'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 400,
-            child: FolderSelectionTree(
-              allFolders: allFolders,
-              isNoteFolder: true,
-              currentParentId: folderId,
-              excludeFolderId: folderId,
-              onSelected: (targetFolderId) {
-                // We are moving a note FROM folderId TO targetFolderId
-                if (targetFolderId != null && targetFolderId != folderId) {
-                  ref
-                      .read(folderProvider.notifier)
-                      .moveNote(folderId, targetFolderId, note.id);
-                  Navigator.pop(context);
-                }
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ],
-        );
-      },
+      title: 'New Note',
+      hintText: 'Enter note name',
     );
+    if (name != null && context.mounted) {
+      ref.read(folderProvider.notifier).addStandaloneNote(folderId, name);
+    }
   }
+
+  Future<void> _renameNote(BuildContext context, WidgetRef ref, Note note) async {
+    final name = await AppDialogs.textInput(
+      context: context,
+      title: 'Rename Note',
+      hintText: 'Enter new note name',
+      initialText: note.name ?? '',
+      confirmText: 'Rename',
+    );
+    if (name != null && context.mounted) {
+      ref.read(folderProvider.notifier).updateNoteName(folderId, note.id, name);
+    }
+  }
+
+  Future<void> _deleteNote(BuildContext context, WidgetRef ref, Note note) async {
+    final confirmed = await AppDialogs.confirm(
+      context: context,
+      title: 'Delete Note',
+      content: 'Are you sure you want to delete "${note.name}"?',
+      confirmText: 'Delete',
+    );
+    if (confirmed && context.mounted) {
+      ref.read(folderProvider.notifier).deleteNote(folderId, note.id);
+    }
+  }
+
+  // --- Exercise List Actions ---
+
+  Future<void> _showRenameExerciseList(
+    BuildContext context,
+    WidgetRef ref,
+    Folder folder,
+    ExerciseList list,
+  ) async {
+    final name = await AppDialogs.textInput(
+      context: context,
+      title: 'Rename Exercise List',
+      hintText: 'Enter new name',
+      initialText: list.name,
+      confirmText: 'Rename',
+    );
+    if (name != null && context.mounted) {
+      final updatedLists = folder.exerciseLists.map<ExerciseList>((l) {
+        if (l.id == list.id) return l.copyWith(name: name);
+        return l;
+      }).toList();
+      ref
+          .read(folderProvider.notifier)
+          .updateFolder(folder.copyWith(exerciseLists: updatedLists));
+    }
+  }
+
+  Future<void> _showDeleteExerciseList(
+    BuildContext context,
+    WidgetRef ref,
+    Folder folder,
+    ExerciseList list,
+  ) async {
+    final confirmed = await AppDialogs.confirm(
+      context: context,
+      title: 'Delete List',
+      content: 'Are you sure you want to delete "${list.name}"?',
+      confirmText: 'Delete',
+    );
+    if (confirmed && context.mounted) {
+      final updatedLists =
+          folder.exerciseLists.where((l) => l.id != list.id).toList();
+      ref
+          .read(folderProvider.notifier)
+          .updateFolder(folder.copyWith(exerciseLists: updatedLists));
+    }
+  }
+
+  // --- Folder Actions ---
 
   void _showAddSubfolderDialog(
     BuildContext context,
     WidgetRef ref,
-    bool inScreen,
     bool isNoteFolder,
   ) {
     final controller = TextEditingController();
@@ -286,92 +330,43 @@ class SubjectScreen extends ConsumerWidget {
     );
   }
 
-  void _showAddNoteDialog(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController();
+  void _showMoveNoteDialog(BuildContext context, WidgetRef ref, Note note) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New Note'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Enter note name'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      builder: (context) {
+        final allFolders = ref.watch(folderProvider);
+        return AlertDialog(
+          title: const Text('Move Note'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: FolderSelectionTree(
+              allFolders: allFolders,
+              isNoteFolder: true,
+              currentParentId: folderId,
+              excludeFolderId: folderId,
+              onSelected: (targetFolderId) {
+                if (targetFolderId != null && targetFolderId != folderId) {
+                  ref
+                      .read(folderProvider.notifier)
+                      .moveNote(folderId, targetFolderId, note.id);
+                  Navigator.pop(context);
+                }
+              },
+            ),
           ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                ref
-                    .read(folderProvider.notifier)
-                    .addStandaloneNote(folderId, controller.text);
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  void _showRenameNoteDialog(BuildContext context, WidgetRef ref, Note note) {
-    final controller = TextEditingController(text: note.name);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename Note'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Enter new note name'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                ref
-                    .read(folderProvider.notifier)
-                    .updateNoteName(folderId, note.id, controller.text);
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteNoteDialog(BuildContext context, WidgetRef ref, note) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Note'),
-        content: Text('Are you sure you want to delete "${note.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              ref.read(folderProvider.notifier).deleteNote(folderId, note.id);
-              Navigator.pop(context);
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
+  // --- PDF Import/Export ---
 
   Future<void> _exportPDF(
     BuildContext context,
@@ -403,14 +398,14 @@ class SubjectScreen extends ConsumerWidget {
       final outputFile = await exportService.exportExerciseListToPdf(list);
 
       if (context.mounted) {
-        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context);
         await Share.shareXFiles([
           XFile(outputFile.path),
         ], text: 'Exported ${list.name}');
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
@@ -424,195 +419,100 @@ class SubjectScreen extends ConsumerWidget {
       allowedExtensions: ['pdf'],
     );
 
-    if (result != null && result.files.single.path != null) {
-      String path = result.files.single.path!;
-      final name = result.files.single.name;
+    if (result == null || result.files.single.path == null) return;
 
-      if (!context.mounted) return;
+    String path = result.files.single.path!;
+    final name = result.files.single.name;
 
-      final selectionMode = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Import Options'),
-          content: const Text(
-            'Do you want to import the entire PDF or select specific pages?',
+    if (!context.mounted) return;
+
+    final selectionMode = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import Options'),
+        content: const Text(
+          'Do you want to import the entire PDF or select specific pages?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'all'),
+            child: const Text('Import All'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'all'),
-              child: const Text('Import All'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'select'),
-              child: const Text('Select Pages'),
-            ),
-          ],
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'select'),
+            child: const Text('Select Pages'),
+          ),
+        ],
+      ),
+    );
+
+    if (selectionMode == null) return;
+
+    if (selectionMode == 'select') {
+      if (!context.mounted) return;
+      final selectedPages = await Navigator.push<List<int>>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PageSelectionScreen(filePath: path),
         ),
       );
 
-      if (selectionMode == null) return;
+      if (selectedPages == null) return;
 
-      if (selectionMode == 'select') {
-        if (!context.mounted) return;
-        final selectedPages = await Navigator.push<List<int>>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PageSelectionScreen(filePath: path),
-          ),
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()),
         );
-
-        if (selectedPages == null) return;
-
-        if (context.mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => const Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        try {
-          final appDir = await getApplicationDocumentsDirectory();
-          // Ensure directory exists
-          final pdfDir = Directory('${appDir.path}/imported_pdfs');
-          if (!await pdfDir.exists()) {
-            await pdfDir.create(recursive: true);
-          }
-
-          final newPath =
-              '${pdfDir.path}/${DateTime.now().millisecondsSinceEpoch}_filtered.pdf';
-
-          await PdfProcessingService().extractPages(
-            sourcePath: path,
-            destinationPath: newPath,
-            pageIndices: selectedPages,
-          );
-
-          path = newPath;
-        } catch (e) {
-          if (context.mounted) {
-            Navigator.pop(context); // Close loading
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to process PDF: $e')),
-            );
-          }
-          return;
-        }
-
-        if (context.mounted) {
-          Navigator.pop(context); // Close loading
-        }
       }
 
-      final nameController = TextEditingController(
-        text: name.replaceAll('.pdf', ''),
-      );
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final pdfDir = Directory('${appDir.path}/imported_pdfs');
+        if (!await pdfDir.exists()) {
+          await pdfDir.create(recursive: true);
+        }
 
-      if (!context.mounted) return;
+        final newPath =
+            '${pdfDir.path}/${DateTime.now().millisecondsSinceEpoch}_filtered.pdf';
 
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Name Exercise List'),
-          content: TextField(
-            controller: nameController,
-            decoration: const InputDecoration(hintText: 'Enter name'),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (nameController.text.isNotEmpty) {
-                  ref
-                      .read(folderProvider.notifier)
-                      .addExerciseList(folderId, nameController.text, path);
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('Import'),
-            ),
-          ],
-        ),
-      );
+        await PdfProcessingService().extractPages(
+          sourcePath: path,
+          destinationPath: newPath,
+          pageIndices: selectedPages,
+        );
+
+        path = newPath;
+      } catch (e) {
+        if (context.mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to process PDF: $e')),
+          );
+        }
+        return;
+      }
+
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
     }
-  }
 
-  void _showRenameDialog(
-    BuildContext context,
-    WidgetRef ref,
-    folder,
-    ExerciseList list,
-  ) {
-    final controller = TextEditingController(text: list.name);
+    if (!context.mounted) return;
 
-    showDialog(
+    final listName = await AppDialogs.textInput(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename Exercise List'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Enter new name'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                final updatedLists = folder.exerciseLists.map<ExerciseList>((
-                  l,
-                ) {
-                  if (l.id == list.id) {
-                    return l.copyWith(name: controller.text);
-                  }
-                  return l;
-                }).toList();
-
-                ref
-                    .read(folderProvider.notifier)
-                    .updateFolder(folder.copyWith(exerciseLists: updatedLists));
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
+      title: 'Name Exercise List',
+      hintText: 'Enter name',
+      initialText: name.replaceAll('.pdf', ''),
+      confirmText: 'Import',
     );
-  }
 
-  void _showDeleteDialog(BuildContext context, WidgetRef ref, folder, list) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete List'),
-        content: Text('Are you sure you want to delete "${list.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final updatedLists = folder.exerciseLists
-                  .where((l) => l.id != list.id)
-                  .toList();
-              ref
-                  .read(folderProvider.notifier)
-                  .updateFolder(folder.copyWith(exerciseLists: updatedLists));
-              Navigator.pop(context);
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+    if (listName != null && context.mounted) {
+      ref
+          .read(folderProvider.notifier)
+          .addExerciseList(folderId, listName, path);
+    }
   }
 }

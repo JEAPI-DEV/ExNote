@@ -20,8 +20,6 @@ import '../services/note_manager.dart';
 import '../services/export_service.dart';
 import '../services/settings_service.dart';
 import '../services/stylus_shortcut_manager.dart';
-import '../services/waifu_service.dart';
-import '../services/waifu_provider_registry.dart';
 import '../services/backup_service.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
@@ -69,15 +67,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   bool tutorEnabled = AppConfig.defaultTutorEnabled;
   bool submitLastImageOnly = AppConfig.defaultSubmitLastImageOnly;
   double aiDrawerWidth = AppConfig.defaultAiDrawerWidth;
-  bool waifuFetcherEnabled = AppConfig.defaultWaifuFetcherEnabled;
-  String waifuProvider = AppConfig.defaultWaifuProvider;
-  double waifuImageWidth = AppConfig.defaultWaifuImageWidth;
-  String waifuTag = AppConfig.defaultWaifuTag;
-  bool waifuNsfw = AppConfig.defaultWaifuNsfw;
   bool shapeSnappingEnabled = AppConfig.defaultShapeSnappingEnabled;
-  String? waifuImageUrl;
   final TextEditingController _tokenController = TextEditingController();
-  //WaifuService? _lastWaifuService;
 
   // Logic Managers
   late UndoRedoManager _undoRedoManager;
@@ -156,25 +147,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       });
     }
   }
-
-  // Future<void> _fetchWaifuImage() async {
-  //   if (!waifuFetcherEnabled) return;
-
-  //   final WaifuService service = _getWaifuService();
-  //   final url = await service.fetchWaifuImage(waifuTag, isNsfw: waifuNsfw);
-  //   if (mounted && url != null) {
-  //     setState(() {
-  //       waifuImageUrl = url;
-  //     });
-  //   }
-  // }
-
-  // WaifuService _getWaifuService() {
-  //   if (_lastWaifuService == null || _lastWaifuService!.name != waifuProvider) {
-  //     _lastWaifuService = WaifuProviderRegistry.getProvider(waifuProvider);
-  //   }
-  //   return _lastWaifuService!;
-  // }
 
   @override
   void dispose() {
@@ -316,15 +288,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                       aiModel: aiModel,
                       tutorEnabled: tutorEnabled,
                       submitLastImageOnly: submitLastImageOnly,
-                      // waifuFetcherEnabled: waifuFetcherEnabled,
-                      // waifuProvider: waifuProvider,
-                      // waifuImageWidth: waifuImageWidth,
-                      // waifuTag: waifuTag,
-                      // waifuNsfw: waifuNsfw,
                       shapeSnappingEnabled: shapeSnappingEnabled,
-                      // availableWaifuTags: waifuNsfw
-                      //     ? _getWaifuService().getNsfwTags()
-                      //     : _getWaifuService().getSfwTags(),
                       tokenController: _tokenController,
                       onGridEnabledChanged: (value) {
                         setState(() {
@@ -366,56 +330,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         });
                         _saveSettings();
                       },
-                      // onWaifuFetcherEnabledChanged: (value) {
-                      //   setState(() {
-                      //     waifuFetcherEnabled = value;
-                      //     if (!value) {
-                      //       waifuImageUrl = null;
-                      //     } else {
-                      //       _fetchWaifuImage();
-                      //     }
-                      //   });
-                      //   _saveSettings();
-                      // },
-                      // onWaifuProviderChanged: (value) {
-                      //   setState(() {
-                      //     waifuProvider = value;
-                      //     _lastWaifuService = WaifuProviderRegistry.getProvider(
-                      //       value,
-                      //     );
-                      //     waifuTag = waifuNsfw
-                      //         ? _getWaifuService().getNsfwTags().first
-                      //         : _getWaifuService().getSfwTags().first;
-                      //   });
-                      //   _saveSettings();
-                      // },
-                      // onWaifuImageWidthChanged: (value) {
-                      //   setState(() {
-                      //     waifuImageWidth = value;
-                      //   });
-                      //   _saveSettings();
-                      // },
-                      // onWaifuTagChanged: (value) {
-                      //   setState(() {
-                      //     waifuTag = value;
-                      //   });
-                      //   _saveSettings();
-                      // },
-                      // onWaifuNsfwChanged: (value) {
-                      //   setState(() {
-                      //     waifuNsfw = value;
-                      //     // Reset tag if current tag is not in new list
-                      //     final validTags = value
-                      //         ? _getWaifuService().getNsfwTags()
-                      //         : _getWaifuService().getSfwTags();
-                      //     if (!validTags.contains(waifuTag)) {
-                      //       waifuTag = validTags.isNotEmpty
-                      //           ? validTags.first
-                      //           : '';
-                      //     }
-                      //   });
-                      //   _saveSettings();
-                      // },
                       onShapeSnappingEnabledChanged: (value) {
                         setState(() {
                           shapeSnappingEnabled = value;
@@ -457,8 +371,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         gridType: gridType,
                         gridSpacing: gridSpacing,
                         selection: selection,
-                        waifuImageUrl: waifuImageUrl,
-                        waifuImageWidth: waifuImageWidth,
                         screenshotSize: _screenshotSize,
                         exportKey: _exportKey,
                         colorNotifier: colorNotifier,
@@ -618,19 +530,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         tutorEnabled = settings['tutorEnabled'];
         submitLastImageOnly = settings['submitLastImageOnly'];
         aiDrawerWidth = settings['aiDrawerWidth'];
-        waifuFetcherEnabled = settings['waifuFetcherEnabled'];
-        waifuProvider = settings['waifuProvider'];
-        waifuImageWidth = settings['waifuImageWidth'];
-        waifuTag = settings['waifuTag'];
-        waifuNsfw = settings['waifuNsfw'];
         shapeSnappingEnabled = settings['shapeSnappingEnabled'];
-
-        // Ensure service is initialized with correct provider before fetch
-        //_lastWaifuService = WaifuProviderRegistry.getProvider(waifuProvider);
       });
-      // if (waifuFetcherEnabled) {
-      //   _fetchWaifuImage();
-      // }
+
     }
   }
 
@@ -645,11 +547,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       tutorEnabled: tutorEnabled,
       submitLastImageOnly: submitLastImageOnly,
       aiDrawerWidth: aiDrawerWidth,
-      waifuFetcherEnabled: waifuFetcherEnabled,
-      waifuProvider: waifuProvider,
-      waifuImageWidth: waifuImageWidth,
-      waifuTag: waifuTag,
-      waifuNsfw: waifuNsfw,
       shapeSnappingEnabled: shapeSnappingEnabled,
     );
   }

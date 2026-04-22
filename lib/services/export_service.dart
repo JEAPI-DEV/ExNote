@@ -75,12 +75,12 @@ class ExportService {
     ui.Image? backgroundImage,
     Rect? backgroundRect,
   }) async {
-    print("[ExportService] Starting PDF export...");
+    debugPrint("[ExportService] Starting PDF export...");
     final SketchRenderer renderer = SketchRenderer();
 
     // 1. Calculate Bounds
     Rect sketchBounds = _getSketchBounds(sketch);
-    print("[ExportService] Sketch bounds: $sketchBounds");
+    debugPrint("[ExportService] Sketch bounds: $sketchBounds");
     if (sketchBounds == Rect.zero) {
       // Default to A4 if empty
       sketchBounds = const Rect.fromLTWH(0, 0, 595, 842);
@@ -99,13 +99,13 @@ class ExportService {
     const double targetPageHeight = 842.0; // A4 height in points
 
     // 2. Find Split Points
-    print("[ExportService] Finding split points...");
+    debugPrint("[ExportService] Finding split points...");
     final List<double> splitPoints = _findSplitPoints(
       sketch,
       contentRect,
       targetPageHeight,
     );
-    print("[ExportService] Found ${splitPoints.length - 1} pages.");
+    debugPrint("[ExportService] Found ${splitPoints.length - 1} pages.");
 
     final List<Uint8List> pageImages = [];
     final List<double> segmentHeights = [];
@@ -145,7 +145,7 @@ class ExportService {
       segmentHeights.add(segmentHeight);
     }
 
-    print("[ExportService] Offloading PDF generation to background...");
+    debugPrint("[ExportService] Offloading PDF generation to background...");
     final dir = await _getExportDirectory();
     final String finalFilename =
         filename ?? 'exnote_export_${DateTime.now().millisecondsSinceEpoch}';
@@ -159,7 +159,7 @@ class ExportService {
       'filePath': filePath,
     });
 
-    print("[ExportService] PDF saved to $filePath");
+    debugPrint("[ExportService] PDF saved to $filePath");
     return File(filePath);
   }
 

@@ -1,10 +1,36 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:spen_remote/spen_remote.dart';
 import 'screens/folder_screen.dart';
 import 'providers/theme_provider.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Check if it's an Android Samsung device to enable S Pen features
+  if (Platform.isAndroid) {
+    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+    AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+
+    if (androidInfo.manufacturer.toLowerCase() == 'samsung') {
+      try {
+        await SpenRemote.connect();
+        SpenRemote.events.listen((event) {
+          if (event.type == 'button') {
+            debugPrint('Button action: ${event.action}');
+          } else if (event.type == 'motion') {
+            debugPrint('Air motion dx=${event.dx}, dy=${event.dy}');
+          }
+        });
+      } catch (e) {
+        debugPrint('Failed to connect to S Pen: $e');
+      }
+    }
+  }
+
   runApp(const ProviderScope(child: MyApp()));
 }
 

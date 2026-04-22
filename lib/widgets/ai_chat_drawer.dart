@@ -7,7 +7,6 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../services/ai_service.dart';
 import '../models/chat_message.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 class AiChatDrawer extends StatefulWidget {
   final String apiKey;

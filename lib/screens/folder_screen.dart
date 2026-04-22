@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/folder.dart';
 import '../providers/folder_provider.dart';
 import '../services/backup_service.dart';
 import '../services/export_service.dart';
 import '../widgets/folder_color_picker.dart';
 import '../widgets/modals/folder_selection_tree.dart';
+import '../widgets/dialogs/app_dialogs.dart';
 import 'subject_screen.dart';
 
 class FolderScreen extends ConsumerWidget {
@@ -26,7 +28,7 @@ class FolderScreen extends ConsumerWidget {
           actions: [
             IconButton(
               icon: const Icon(Icons.settings),
-              onPressed: () => _showSettingsDialog(context, ref),
+              onPressed: () => _showSettingsSheet(context, ref),
             ),
           ],
           bottom: const TabBar(
@@ -125,7 +127,7 @@ class FolderScreen extends ConsumerWidget {
     );
   }
 
-  void _showSettingsDialog(BuildContext context, WidgetRef ref) {
+  void _showSettingsSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
@@ -152,13 +154,10 @@ class FolderScreen extends ConsumerWidget {
               subtitle: const Text('Export all data to ZIP'),
               onTap: () async {
                 Navigator.pop(context);
-                // Implementation of export from main screen
                 try {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Generating backup...')),
                   );
-                  // We can reuse ExportService.exportToZip() but it's currently
-                  // static in NoteScreen context locally? No, it's a service.
                   final file = await ExportService.exportToZip();
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -183,7 +182,7 @@ class FolderScreen extends ConsumerWidget {
 }
 
 class FolderGrid extends ConsumerWidget {
-  final List<dynamic> folders;
+  final List<Folder> folders;
   final bool isNoteTab;
   final bool shrinkWrap;
   final ScrollPhysics? physics;
@@ -235,7 +234,7 @@ class FolderGrid extends ConsumerWidget {
 
         return Card(
           color: bgColor,
-          elevation: baseColor != null ? 0 : 1, // Flatter look if tinted
+          elevation: baseColor != null ? 0 : 1,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: baseColor != null && !isDark
@@ -279,7 +278,7 @@ class FolderGrid extends ConsumerWidget {
     );
   }
 
-  void _showFolderOptions(BuildContext context, WidgetRef ref, dynamic folder) {
+  void _showFolderOptions(BuildContext context, WidgetRef ref, Folder folder) {
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
@@ -296,7 +295,7 @@ class FolderGrid extends ConsumerWidget {
               title: const Text('Rename'),
               onTap: () {
                 Navigator.pop(context);
-                _showRenameFolderDialog(context, ref, folder);
+                _renameFolder(context, ref, folder);
               },
             ),
             ListTile(
@@ -312,7 +311,7 @@ class FolderGrid extends ConsumerWidget {
               title: const Text('Delete', style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(context);
-                _showDeleteDialog(context, ref, folder);
+                _deleteFolder(context, ref, folder);
               },
             ),
           ],
@@ -321,68 +320,54 @@ class FolderGrid extends ConsumerWidget {
     );
   }
 
-  void _showRenameFolderDialog(
+  Future<void> _renameFolder(
     BuildContext context,
     WidgetRef ref,
-    dynamic folder,
-  ) {
-    final controller = TextEditingController(text: folder.name);
-    String? selectedColorHex = folder.colorHex;
-    showDialog(
+    Folder folder,
+  ) async {
+    final name = await AppDialogs.textInput(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('Edit Folder'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    hintText: 'Enter new folder name',
-                  ),
-                  autofocus: true,
-                ),
-                FolderColorPicker(
-                  selectedColorHex: selectedColorHex,
-                  onColorSelected: (hex) =>
-                      setState(() => selectedColorHex = hex),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (controller.text.isNotEmpty) {
-                    ref
-                        .read(folderProvider.notifier)
-                        .updateFolder(
-                          folder.copyWith(
-                            name: controller.text,
-                            colorHex: selectedColorHex,
-                          ),
-                        );
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
-      ),
+      title: 'Rename Folder',
+      hintText: 'Enter new folder name',
+      initialText: folder.name,
+      confirmText: 'Save',
     );
+    if (name != null && context.mounted) {
+      ref
+          .read(folderProvider.notifier)
+          .updateFolder(folder.copyWith(name: name));
+    }
+  }
+
+  Future<void> _deleteFolder(
+    BuildContext context,
+    WidgetRef ref,
+    Folder folder,
+  ) async {
+    final confirmed = await AppDialogs.confirm(
+      context: context,
+      title: 'Delete Folder',
+      content:
+          'Are you sure you want to delete "${folder.name}" and all its contents?',
+      confirmText: 'Delete',
+    );
+    if (confirmed && context.mounted) {
+      final deletedCount =
+          await ref.read(folderProvider.notifier).deleteFolder(folder.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Deleted folder and $deletedCount items.'),
+          ),
+        );
+      }
+    }
   }
 
   void _showMoveFolderDialog(
     BuildContext context,
     WidgetRef ref,
-    dynamic folder,
+    Folder folder,
   ) {
     showDialog(
       context: context,
@@ -399,7 +384,6 @@ class FolderGrid extends ConsumerWidget {
               currentParentId: folder.parentId,
               excludeFolderId: folder.id,
               onSelected: (targetFolderId) {
-                // Only allow moving if target is different from current parent
                 if (targetFolderId != folder.parentId) {
                   ref
                       .read(folderProvider.notifier)
@@ -417,40 +401,6 @@ class FolderGrid extends ConsumerWidget {
           ],
         );
       },
-    );
-  }
-
-  void _showDeleteDialog(BuildContext context, WidgetRef ref, dynamic folder) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Folder'),
-        content: Text(
-          'Are you sure you want to delete "${folder.name}" and all its contents?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              int deletedCount = await ref
-                  .read(folderProvider.notifier)
-                  .deleteFolder(folder.id);
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Deleted folder and $deletedCount items.'),
-                  ),
-                );
-              }
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
   }
 }

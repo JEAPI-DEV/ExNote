@@ -16,8 +16,6 @@ class NoteCanvas extends StatefulWidget {
   final GridType gridType;
   final double gridSpacing;
   final Selection? selection;
-  final String? waifuImageUrl;
-  final double? waifuImageWidth;
   final Size? screenshotSize;
   final GlobalKey exportKey;
   final ValueNotifier<Color> colorNotifier;
@@ -35,8 +33,6 @@ class NoteCanvas extends StatefulWidget {
     required this.gridType,
     required this.gridSpacing,
     this.selection,
-    this.waifuImageUrl,
-    this.waifuImageWidth,
     this.screenshotSize,
     required this.exportKey,
     required this.colorNotifier,
@@ -120,22 +116,6 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                         widget.transformationController.value,
                                     gridType: widget.gridType,
                                     spacing: widget.gridSpacing,
-                                  ),
-                                ),
-                              ),
-                            if (widget.waifuImageUrl != null)
-                              Positioned(
-                                top: widget.screenshotSize?.height ?? 0,
-                                left: 0,
-                                child: Opacity(
-                                  opacity: 0.3,
-                                  child: Image.network(
-                                    widget.waifuImageUrl!,
-                                    width: widget.waifuImageWidth,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return const SizedBox.shrink();
-                                    },
                                   ),
                                 ),
                               ),
@@ -234,9 +214,6 @@ class _NoteCanvasState extends State<NoteCanvas> {
                     ValueListenableBuilder(
                       valueListenable: widget.transformationController,
                       builder: (context, Matrix4 value, _) {
-                        // Use entry(0,0) (the X scale) instead of getMaxScaleOnAxis()
-                        // because for 2D scaling, Z-scale often remains 1.0,
-                        // masking zoom-out levels (returns 1.0 as max when X/Y are < 1.0).
                         final scale = value.entry(0, 0);
                         return Text(
                           '${(scale * 100).toInt()}%',

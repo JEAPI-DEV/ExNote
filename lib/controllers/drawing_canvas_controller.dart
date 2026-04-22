@@ -314,11 +314,11 @@ class DrawingCanvasController extends ChangeNotifier {
     );
     final recognized = ShapeRecognizer.recognize(points);
     if (recognized != null) {
-      print("[DrawingCanvasController] Shape recognized: ${recognized.type}");
+      debugPrint("[DrawingCanvasController] Shape recognized: ${recognized.type}");
       currentLineNotifier.value = recognized.points;
       notifyListeners();
     } else {
-      print("[DrawingCanvasController] No shape recognized");
+      debugPrint("[DrawingCanvasController] No shape recognized");
     }
   }
 

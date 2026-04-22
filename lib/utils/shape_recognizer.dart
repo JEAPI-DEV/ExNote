@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:scribble/scribble.dart';
@@ -23,7 +24,7 @@ class RecognizedShape {
 class ShapeRecognizer {
   static RecognizedShape? recognize(List<Point> points) {
     if (points.length < 5) {
-      print("[ShapeRecognizer] Too few points: ${points.length}");
+      debugPrint("[ShapeRecognizer] Too few points: ${points.length}");
       return null;
     }
 
@@ -34,14 +35,14 @@ class ShapeRecognizer {
 
     // 1. Check for Circle/Ellipse
     final circularity = _calculateCircularity(points, rect);
-    print("[ShapeRecognizer] Circularity: $circularity, Rect: $rect");
+    debugPrint("[ShapeRecognizer] Circularity: $circularity, Rect: $rect");
     if (circularity > 0.8) {
       // For circles/ellipses, we also want to ensure it's somewhat closed
       if (!_isClosed(points, rect, threshold: 0.4)) {
-        print("[ShapeRecognizer] Circle/Ellipse rejected: Not closed enough");
+        debugPrint("[ShapeRecognizer] Circle/Ellipse rejected: Not closed enough");
       } else {
         if ((width - height).abs() / math.max(width, height) < 0.2) {
-          print("[ShapeRecognizer] Detected Circle");
+          debugPrint("[ShapeRecognizer] Detected Circle");
           return RecognizedShape(
             type: ShapeType.circle,
             points: _generateEllipsePoints(
@@ -51,7 +52,7 @@ class ShapeRecognizer {
             ),
           );
         } else {
-          print("[ShapeRecognizer] Detected Ellipse");
+          debugPrint("[ShapeRecognizer] Detected Ellipse");
           return RecognizedShape(
             type: ShapeType.ellipse,
             points: _generateEllipsePoints(center, width / 2, height / 2),
@@ -62,10 +63,10 @@ class ShapeRecognizer {
 
     // 2. Corner Detection for Polygons
     final corners = _detectCorners(points, rect);
-    print("[ShapeRecognizer] Detected ${corners.length} corners: $corners");
+    debugPrint("[ShapeRecognizer] Detected ${corners.length} corners: $corners");
 
     if (corners.length == 2) {
-      print("[ShapeRecognizer] Detected Line");
+      debugPrint("[ShapeRecognizer] Detected Line");
       return RecognizedShape(
         type: ShapeType.line,
         points: _generatePolygonPoints(corners),
@@ -99,17 +100,17 @@ class ShapeRecognizer {
 
     if (cornerCount == 3) {
       if (!_isClosed(points, rect)) {
-        print("[ShapeRecognizer] Triangle rejected: Not closed");
+        debugPrint("[ShapeRecognizer] Triangle rejected: Not closed");
         return null;
       }
-      print("[ShapeRecognizer] Detected Triangle");
+      debugPrint("[ShapeRecognizer] Detected Triangle");
       return RecognizedShape(
         type: ShapeType.triangle,
         points: _generatePolygonPoints(refinedCorners),
       );
     } else if (cornerCount == 4) {
       if (!_isClosed(points, rect)) {
-        print("[ShapeRecognizer] Rectangle/Square rejected: Not closed");
+        debugPrint("[ShapeRecognizer] Rectangle/Square rejected: Not closed");
         return null;
       }
       // Check if it's a square or rectangle
@@ -135,13 +136,13 @@ class ShapeRecognizer {
 
       // Tightened threshold from 0.25 to 0.12 for square detection
       if (sideVariance / avgSide < 0.12 && (ratio - 1.0).abs() < 0.15) {
-        print("[ShapeRecognizer] Detected Square");
+        debugPrint("[ShapeRecognizer] Detected Square");
         return RecognizedShape(
           type: ShapeType.square,
           points: _generateRectanglePoints(rect, isSquare: true),
         );
       } else {
-        print("[ShapeRecognizer] Detected Rectangle");
+        debugPrint("[ShapeRecognizer] Detected Rectangle");
         return RecognizedShape(
           type: ShapeType.rectangle,
           points: _generateRectanglePoints(rect),
@@ -149,27 +150,27 @@ class ShapeRecognizer {
       }
     } else if (cornerCount == 5) {
       if (!_isClosed(points, rect)) {
-        print("[ShapeRecognizer] Pentagon rejected: Not closed");
+        debugPrint("[ShapeRecognizer] Pentagon rejected: Not closed");
         return null;
       }
-      print("[ShapeRecognizer] Detected Pentagon");
+      debugPrint("[ShapeRecognizer] Detected Pentagon");
       return RecognizedShape(
         type: ShapeType.pentagon,
         points: _generatePolygonPoints(refinedCorners),
       );
     } else if (cornerCount == 6) {
       if (!_isClosed(points, rect)) {
-        print("[ShapeRecognizer] Hexagon rejected: Not closed");
+        debugPrint("[ShapeRecognizer] Hexagon rejected: Not closed");
         return null;
       }
-      print("[ShapeRecognizer] Detected Hexagon");
+      debugPrint("[ShapeRecognizer] Detected Hexagon");
       return RecognizedShape(
         type: ShapeType.hexagon,
         points: _generatePolygonPoints(refinedCorners),
       );
     }
 
-    print("[ShapeRecognizer] No shape recognized");
+    debugPrint("[ShapeRecognizer] No shape recognized");
     return null;
   }
 
@@ -206,7 +207,7 @@ class ShapeRecognizer {
 
     // For a circle, avgError should be very low (< 0.1)
     // and maxError should also be relatively low (< 0.2)
-    print("[ShapeRecognizer] avgError: $avgError, maxError: $maxError");
+    debugPrint("[ShapeRecognizer] avgError: $avgError, maxError: $maxError");
     if (avgError < 0.12 && maxError < 0.3) {
       return 1.0 - avgError;
     }
@@ -218,10 +219,10 @@ class ShapeRecognizer {
 
     // Use a relative epsilon for RDP
     final epsilon = math.max(rect.width, rect.height) * 0.08;
-    print("[ShapeRecognizer] Using epsilon: $epsilon for RDP");
+    debugPrint("[ShapeRecognizer] Using epsilon: $epsilon for RDP");
 
     final simplified = _simplifyPoints(points, epsilon);
-    print("[ShapeRecognizer] Simplified to ${simplified.length} points");
+    debugPrint("[ShapeRecognizer] Simplified to ${simplified.length} points");
 
     // Post-process: merge points that are too close
     final merged = <Offset>[];
@@ -234,7 +235,7 @@ class ShapeRecognizer {
         }
       }
     }
-    print("[ShapeRecognizer] Merged by distance to ${merged.length} corners");
+    debugPrint("[ShapeRecognizer] Merged by distance to ${merged.length} corners");
 
     // Post-process: merge nearly collinear points
     if (merged.length > 2) {
@@ -256,7 +257,7 @@ class ShapeRecognizer {
           // Roughly 18 degrees
           collinearMerged.add(p2);
         } else {
-          print("[ShapeRecognizer] Merging nearly collinear points at $p2");
+          debugPrint("[ShapeRecognizer] Merging nearly collinear points at $p2");
         }
       }
       collinearMerged.add(merged.last);
@@ -272,7 +273,7 @@ class ShapeRecognizer {
       final dist = (merged.first - merged.last).distance;
       // Tightened closure threshold for corner detection to avoid accidental closure
       if (dist < math.max(rect.width, rect.height) * 0.25) {
-        print("[ShapeRecognizer] Closing shape (dist: $dist)");
+        debugPrint("[ShapeRecognizer] Closing shape (dist: $dist)");
         merged.removeLast();
       }
     }

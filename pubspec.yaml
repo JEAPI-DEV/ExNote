@@ -44,16 +44,14 @@ dependencies:
   json_annotation: ^4.8.1
   shared_preferences: ^2.2.2
   pdf: ^3.10.1
-  openrouter_api: ^1.0.0
   http: ^1.1.0
   flutter_markdown: ^0.7.3
   flutter_math_fork: ^0.7.2
   markdown: ">=7.0.0 <8.0.0"
   archive: ^4.0.7
   share_plus: ^12.0.1
-  waifuim_dart: ^1.0.1
-  permission_handler: ^11.3.1
-  spen_remote: ^0.0.1
+  spen_remote: ^0.0.4
+  device_info_plus: ^12.4.0
 
 dev_dependencies:
   flutter_test:
