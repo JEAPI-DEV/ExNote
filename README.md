@@ -1,16 +1,87 @@
-# excerciser
+# ExNote
 
-A new Flutter project.
+A note-taking app with a nice way to link exercises with notes, by allowing the user to select a section in a PDF, screenshotting that section automatically and opening a page with the screenshot in the top left corner of the notes page.
+Some other features also followed, like folders. A seperate Notes section, allows users to create their own notes without linking them to a PDF file. An AI review functionality was added as well, to allow users to let an AI review their work inside the app, though it requires your own OpenRouter key. Chats are deleted upon exiting the notes page.
+There are also a lot of other features including shape snapping, though that feature is still a little bit buggy, grid support, light and dark themes.
+The app also allows the user to export their notes as PDFs or export the whole library of notes and exercises, or import notes.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+Download the source code, compile it and run it. You need flutter :D.
 
-A few resources to get you started if this is your first Flutter project:
+## Folder Structure
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+lib
+├── controllers
+│   └── drawing_canvas_controller.dart
+├── main.dart
+├── models
+│   ├── chat_message.dart
+│   ├── drawing_tool.dart
+│   ├── exercise_list.dart
+│   ├── exercise_list.g.dart
+│   ├── folder.dart
+│   ├── folder.g.dart
+│   ├── grid_type.dart
+│   ├── note.dart
+│   ├── note.g.dart
+│   ├── note_settings.dart
+│   ├── right_drawer_content.dart
+│   ├── selection.dart
+│   ├── selection.g.dart
+│   └── undo_action.dart
+├── providers
+│   ├── folder_provider.dart
+│   └── theme_provider.dart
+├── screens
+│   ├── folder_screen.dart
+│   ├── note_screen.dart
+│   ├── page_selection_screen.dart
+│   ├── pdf_viewer_screen.dart
+│   └── subject_screen.dart
+├── services
+│   ├── ai_service.dart
+│   ├── backup_service.dart
+│   ├── export_service.dart
+│   ├── llm_parser
+│   │   ├── latex_block_syntax.dart
+│   │   ├── latex_element_builder.dart
+│   │   └── latex_inline_syntax.dart
+│   ├── note_manager.dart
+│   ├── pdf_export_service.dart
+│   ├── pdf_processing_service.dart
+│   ├── settings_service.dart
+│   ├── sketch_renderer.dart
+│   ├── storage_service.dart
+│   └── stylus_shortcut_manager.dart
+├── theme
+│   └── app_theme.dart
+├── utils
+│   ├── app_config.dart
+│   ├── clipboard_manager.dart
+│   ├── folder_colors.dart
+│   ├── page_layout.dart
+│   ├── shape_recognizer.dart
+│   ├── sketch_bounds.dart
+│   ├── sketch_serializer.dart
+│   ├── theme_extensions.dart
+│   └── undo_redo_manager.dart
+└── widgets
+    ├── ai_chat_drawer.dart
+    ├── dialogs
+    │   ├── app_dialogs.dart
+    │   └── create_folder_dialog.dart
+    ├── fast_drawing_canvas.dart
+    ├── fast_sketch_painter.dart
+    ├── folder_color_picker.dart
+    ├── grid_painter.dart
+    ├── link_overlay_painter.dart
+    ├── modals
+    │   └── folder_selection_tree.dart
+    ├── note_app_bar.dart
+    ├── note_canvas.dart
+    ├── note_card.dart
+    ├── note_toolbar.dart
+    ├── selection_overlay.dart
+    ├── settings_drawer.dart
+    └── zoomable_canvas_wrapper.dart
