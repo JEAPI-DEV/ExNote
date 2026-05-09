@@ -12,7 +12,6 @@ Download the source code, compile it and run it. You need flutter :D.
 ## Folder Structure
 ```
 lib
-
 ├── controllers
 │   ├── ai_chat_controller.dart
 │   ├── drawing
@@ -25,6 +24,7 @@ lib
 │   └── note_settings_controller.dart
 ├── main.dart
 ├── models
+│   ├── canvas_image.dart
 │   ├── chat_message.dart
 │   ├── drawing_tool.dart
 │   ├── exercise_list.dart
@@ -64,6 +64,7 @@ lib
 │   │   └── latex_inline_syntax.dart
 │   ├── note_manager.dart
 │   ├── pdf
+│   │   ├── a4_note_pdf_renderer.dart
 │   │   ├── pdf_note_export_service.dart
 │   │   ├── pdf_page_extractor.dart
 │   │   └── pdf_screenshot_service.dart
@@ -117,5 +118,5 @@ lib
     ├── settings_drawer.dart
     └── zoomable_canvas_wrapper.dart
 
-16 directories, 88 files
+16 directories, 90 files
 ```
