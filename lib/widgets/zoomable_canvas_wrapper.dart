@@ -57,9 +57,6 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
       return;
     }
 
-    debugPrint(
-      'ZoomableCanvas: Pointer Down ${event.pointer} at ${event.position}',
-    );
     _pointers[event.pointer] = event.position;
     _checkGestureStart();
   }
@@ -84,20 +81,15 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
       return;
     }
 
-    debugPrint('ZoomableCanvas: Pointer Up/Cancel ${event.pointer}');
     _pointers.remove(event.pointer);
 
     // Reset state if we drop below 2 fingers
     if (_pointers.length < 2) {
-      debugPrint('ZoomableCanvas: Gesture Ended (Pointers < 2)');
       _startMatrix = null;
       _startFocalPoint = null;
       _startScaleDistance = null;
       _zoomActive = false;
     } else {
-      debugPrint(
-        'ZoomableCanvas: Gesture Continuing (Pointers remaining: ${_pointers.length})',
-      );
       // If we still have 2+ fingers (e.g. went from 3 to 2), re-snapshot to avoid jumps
       _checkGestureStart();
     }
@@ -105,9 +97,6 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
 
   void _checkGestureStart() {
     if (_pointers.length >= 2 && _startMatrix == null) {
-      debugPrint(
-        'ZoomableCanvas: Gesture STARTING. Pointers: ${_pointers.keys}',
-      );
       // Initialize Gesture State
       _startMatrix = widget.transformationController.value.clone();
       _startFocalPoint = _calculateFocalPoint();
@@ -115,11 +104,7 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
       _baseScaleOnStart = widget.transformationController.value
           .getMaxScaleOnAxis();
       _zoomActive = false; // Reset lock
-      debugPrint(
-        'ZoomableCanvas: Init StartFocal: $_startFocalPoint, StartScaleDist: $_startScaleDistance, BaseScale: $_baseScaleOnStart',
-      );
     } else if (_pointers.length >= 2 && _startMatrix != null) {
-      debugPrint('ZoomableCanvas: Gesture RESYNC. Re-snapshotting.');
       // If pointers changed (e.g. 3rd finger added), re-sync to prevent jumps
       // But keep zoom active state if it was already active
       _startMatrix = widget.transformationController.value.clone();
@@ -149,9 +134,6 @@ class _ZoomableCanvasWrapperState extends State<ZoomableCanvasWrapper> {
       final double distDiff = (currentScaleDistance - _startScaleDistance!)
           .abs();
       if (distDiff > _zoomThreshold) {
-        debugPrint(
-          'ZoomableCanvas: Zoom UNLOCKED (Diff: $distDiff > $_zoomThreshold)',
-        );
         _zoomActive = true;
         // Optionally re-sync start distance here to prevent "pop" when unlocking?
         // For now, let's just unlock. The sudden scale might be tiny if threshold is small.

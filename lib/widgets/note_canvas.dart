@@ -55,12 +55,15 @@ class _NoteCanvasState extends State<NoteCanvas> {
   bool _isZoomLocked = false;
 
   void _showZoomPopupAction() {
-    setState(() {
-      _showZoomPopup = true;
-    });
+    if (!_showZoomPopup) {
+      setState(() {
+        _showZoomPopup = true;
+      });
+    }
+
     _zoomPopupTimer?.cancel();
     _zoomPopupTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) {
+      if (mounted && _showZoomPopup) {
         setState(() {
           _showZoomPopup = false;
         });
