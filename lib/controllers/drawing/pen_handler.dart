@@ -69,7 +69,7 @@ class PenHandler {
     final distance = math.sqrt(dx * dx + dy * dy);
 
     final screenDistance = distance * scale;
-    const double kThreshold = 2.0;
+    const double kThreshold = 3.0;
 
     if (screenDistance > kThreshold) {
       final int steps = (screenDistance / kThreshold).floor();

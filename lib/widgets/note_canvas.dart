@@ -164,6 +164,7 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                           child: Image.file(
                                             File(image.path),
                                             fit: BoxFit.fill,
+                                            filterQuality: FilterQuality.high,
                                             errorBuilder: (_, __, ___) =>
                                                 Container(
                                                   color: Colors.grey.withValues(

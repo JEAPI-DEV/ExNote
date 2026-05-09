@@ -100,7 +100,10 @@ class DrawingCanvasController extends ChangeNotifier {
     );
     _eraserHandler = EraserHandler(
       sketchNotifier: sketchNotifier,
+      canvasImagesNotifier: canvasImagesNotifier,
+      selectedImageIdNotifier: selectedImageIdNotifier,
       onAction: onAction,
+      onContentChanged: onContentChanged,
     );
   }
 
