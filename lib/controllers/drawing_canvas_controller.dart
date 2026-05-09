@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
+import '../models/canvas_image.dart';
 import 'drawing/pen_handler.dart';
 import 'drawing/selection_handler.dart';
 import 'drawing/resize_handler.dart';
@@ -12,7 +13,10 @@ import 'drawing/shape_snap_handler.dart';
 class DrawingCanvasController extends ChangeNotifier {
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
+  final ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  final ValueNotifier<String?> selectedImageIdNotifier;
   final Function(UndoAction) onAction;
+  final VoidCallback onContentChanged;
 
   Color currentColor = Colors.black;
   double currentWidth = 2.0;
@@ -51,12 +55,22 @@ class DrawingCanvasController extends ChangeNotifier {
 
   ui.Picture? cachedSketchPicture;
 
+  bool _isDraggingImage = false;
+  bool _isResizingImage = false;
+  Offset? _imageDragStart;
+  CanvasImage? _imageStart;
+
   DrawingCanvasController({
     required this.sketchNotifier,
     required this.selectionNotifier,
+    required this.canvasImagesNotifier,
+    required this.selectedImageIdNotifier,
     required this.onAction,
+    required this.onContentChanged,
   }) {
     sketchNotifier.addListener(_onSketchChanged);
+    canvasImagesNotifier.addListener(notifyListeners);
+    selectedImageIdNotifier.addListener(notifyListeners);
 
     _shapeSnapHandler = ShapeSnapHandler(
       currentLineNotifier: currentLineNotifier,
@@ -93,6 +107,8 @@ class DrawingCanvasController extends ChangeNotifier {
   @override
   void dispose() {
     sketchNotifier.removeListener(_onSketchChanged);
+    canvasImagesNotifier.removeListener(notifyListeners);
+    selectedImageIdNotifier.removeListener(notifyListeners);
     _shapeSnapHandler.dispose();
     currentLineNotifier.dispose();
     cachedSketchPicture?.dispose();
@@ -122,11 +138,117 @@ class DrawingCanvasController extends ChangeNotifier {
 
   List<SketchLine> get selectionForPainting =>
       _resizeHandler.selectionForPainting;
-  Rect? get selectionBounds => _resizeHandler.selectionBounds;
+  Rect? get selectionBounds =>
+      selectedImageRect ?? _resizeHandler.selectionBounds;
   bool get isDraggingSelection => _selectionHandler.isDraggingSelection;
   bool get isResizingSelection => _resizeHandler.isResizingSelection;
+  Rect? get selectedImageRect {
+    final id = selectedImageIdNotifier.value;
+    if (id == null) return null;
+    for (final image in canvasImagesNotifier.value) {
+      if (image.id == id) {
+        return Rect.fromLTWH(image.left, image.top, image.width, image.height);
+      }
+    }
+    return null;
+  }
+
   List<Offset>? get lassoPoints => _selectionHandler.lassoPoints;
   Offset get currentDragOffset => _selectionHandler.currentDragOffset;
+
+  bool _handleImagePointerDown(Offset position, {required bool isEditMode}) {
+    final selectedRect = selectedImageRect;
+    if (isEditMode &&
+        selectedRect != null &&
+        _isPointInResizeHandle(position, selectedRect)) {
+      _isResizingImage = true;
+      _imageDragStart = position;
+      _imageStart = _selectedImage;
+      selectionNotifier.value = [];
+      notifyListeners();
+      return true;
+    }
+
+    for (final image in canvasImagesNotifier.value.reversed) {
+      final rect = Rect.fromLTWH(
+        image.left,
+        image.top,
+        image.width,
+        image.height,
+      );
+      if (rect.contains(position)) {
+        selectedImageIdNotifier.value = image.id;
+        selectionNotifier.value = [];
+        _isDraggingImage = true;
+        _imageDragStart = position;
+        _imageStart = image;
+        notifyListeners();
+        return true;
+      }
+    }
+
+    selectedImageIdNotifier.value = null;
+    return false;
+  }
+
+  CanvasImage? get _selectedImage {
+    final id = selectedImageIdNotifier.value;
+    if (id == null) return null;
+    for (final image in canvasImagesNotifier.value) {
+      if (image.id == id) return image;
+    }
+    return null;
+  }
+
+  bool _isPointInResizeHandle(Offset point, Rect rect) {
+    const size = 24.0;
+    final handle = Rect.fromCenter(
+      center: rect.bottomRight,
+      width: size,
+      height: size,
+    );
+    return handle.contains(point);
+  }
+
+  void _updateSelectedImage(CanvasImage updated) {
+    canvasImagesNotifier.value = [
+      for (final image in canvasImagesNotifier.value)
+        if (image.id == updated.id) updated else image,
+    ];
+  }
+
+  void _handleImagePointerMove(Offset position) {
+    final start = _imageStart;
+    final dragStart = _imageDragStart;
+    if (start == null || dragStart == null) return;
+
+    final delta = position - dragStart;
+    if (_isDraggingImage) {
+      _updateSelectedImage(
+        start.copyWith(left: start.left + delta.dx, top: start.top + delta.dy),
+      );
+    } else if (_isResizingImage) {
+      const minSize = 32.0;
+      final newWidth = (start.width + delta.dx)
+          .clamp(minSize, 100000.0)
+          .toDouble();
+      final aspect = start.width == 0 ? 1.0 : start.height / start.width;
+      _updateSelectedImage(
+        start.copyWith(width: newWidth, height: newWidth * aspect),
+      );
+    }
+  }
+
+  void _finishImageInteraction() {
+    if (_isDraggingImage || _isResizingImage) {
+      onContentChanged();
+    }
+    _isDraggingImage = false;
+    _isResizingImage = false;
+    _imageDragStart = null;
+    _imageStart = null;
+    notifyListeners();
+  }
 
   void handlePointerDown(PointerDownEvent event) {
     if (event.kind != ui.PointerDeviceKind.stylus &&
@@ -141,6 +263,12 @@ class DrawingCanvasController extends ChangeNotifier {
 
     if (currentTool == DrawingTool.selection ||
         currentTool == DrawingTool.editSelection) {
+      if (_handleImagePointerDown(
+        event.localPosition,
+        isEditMode: currentTool == DrawingTool.editSelection,
+      )) {
+        return;
+      }
       _selectionHandler.handlePointerDown(
         event.localPosition,
         isEditMode: currentTool == DrawingTool.editSelection,
@@ -170,6 +298,10 @@ class DrawingCanvasController extends ChangeNotifier {
 
     if (currentTool == DrawingTool.selection ||
         currentTool == DrawingTool.editSelection) {
+      if (_isDraggingImage || _isResizingImage) {
+        _handleImagePointerMove(event.localPosition);
+        return;
+      }
       _selectionHandler.handlePointerMove(event.localPosition);
       return;
     }
@@ -189,6 +321,10 @@ class DrawingCanvasController extends ChangeNotifier {
 
     if (currentTool == DrawingTool.selection ||
         currentTool == DrawingTool.editSelection) {
+      if (_isDraggingImage || _isResizingImage) {
+        _finishImageInteraction();
+        return;
+      }
       _selectionHandler.handlePointerUp();
       return;
     }
@@ -203,6 +339,7 @@ class DrawingCanvasController extends ChangeNotifier {
   void handlePointerCancel(PointerCancelEvent event) {
     _penHandler.handlePointerCancel();
     _selectionHandler.reset();
+    _finishImageInteraction();
     _eraserHandler.reset();
     notifyListeners();
   }

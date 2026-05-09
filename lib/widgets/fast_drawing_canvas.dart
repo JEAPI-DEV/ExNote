@@ -2,29 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
+import '../models/canvas_image.dart';
 import '../controllers/drawing_canvas_controller.dart';
 import 'fast_sketch_painter.dart';
 
 class FastDrawingCanvas extends StatefulWidget {
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
+  final ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  final ValueNotifier<String?> selectedImageIdNotifier;
   final Color currentColor;
   final double currentWidth;
   final DrawingTool currentTool;
   final double scale;
   final bool shapeSnappingEnabled;
   final Function(UndoAction) onAction;
+  final VoidCallback onContentChanged;
 
   const FastDrawingCanvas({
     super.key,
     required this.sketchNotifier,
     required this.selectionNotifier,
+    required this.canvasImagesNotifier,
+    required this.selectedImageIdNotifier,
     this.currentColor = Colors.black,
     this.currentWidth = 2.0,
     this.currentTool = DrawingTool.pen,
     this.scale = 1.0,
     required this.shapeSnappingEnabled,
     required this.onAction,
+    required this.onContentChanged,
   });
 
   @override
@@ -40,7 +47,10 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
     _controller = DrawingCanvasController(
       sketchNotifier: widget.sketchNotifier,
       selectionNotifier: widget.selectionNotifier,
+      canvasImagesNotifier: widget.canvasImagesNotifier,
+      selectedImageIdNotifier: widget.selectedImageIdNotifier,
       onAction: widget.onAction,
+      onContentChanged: widget.onContentChanged,
     );
     _updateController();
   }
