@@ -2,29 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
+import '../models/canvas_image.dart';
 import '../controllers/drawing_canvas_controller.dart';
 import 'fast_sketch_painter.dart';
 
 class FastDrawingCanvas extends StatefulWidget {
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
+  final ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  final ValueNotifier<String?> selectedImageIdNotifier;
   final Color currentColor;
   final double currentWidth;
   final DrawingTool currentTool;
   final double scale;
   final bool shapeSnappingEnabled;
   final Function(UndoAction) onAction;
+  final VoidCallback onContentChanged;
 
   const FastDrawingCanvas({
     super.key,
     required this.sketchNotifier,
     required this.selectionNotifier,
+    required this.canvasImagesNotifier,
+    required this.selectedImageIdNotifier,
     this.currentColor = Colors.black,
     this.currentWidth = 2.0,
     this.currentTool = DrawingTool.pen,
     this.scale = 1.0,
     required this.shapeSnappingEnabled,
     required this.onAction,
+    required this.onContentChanged,
   });
 
   @override
@@ -40,7 +47,10 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
     _controller = DrawingCanvasController(
       sketchNotifier: widget.sketchNotifier,
       selectionNotifier: widget.selectionNotifier,
+      canvasImagesNotifier: widget.canvasImagesNotifier,
+      selectedImageIdNotifier: widget.selectedImageIdNotifier,
       onAction: widget.onAction,
+      onContentChanged: widget.onContentChanged,
     );
     _updateController();
   }
@@ -77,100 +87,72 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       onPointerUp: _controller.handlePointerUp,
       onPointerCancel: _controller.handlePointerCancel,
       behavior: HitTestBehavior.opaque,
-      child: Stack(
-        children: [
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) {
-              return ValueListenableBuilder<Sketch>(
-                valueListenable: widget.sketchNotifier,
-                builder: (context, sketch, _) {
-                  return ValueListenableBuilder<List<SketchLine>>(
-                    valueListenable: widget.selectionNotifier,
-                    builder: (context, selectedLines, _) {
-                      // Use the child parameter to prevent rebuilding the static layer
-                      // on every pointer move event.
-                      return ValueListenableBuilder<List<Point>?>(
-                        valueListenable: _controller.currentLineNotifier,
-                        child: RepaintBoundary(
-                          child: CustomPaint(
-                            painter: StaticSketchPainter(
-                              sketch: sketch,
-                              isDark: isDark,
-                              scale: widget.scale,
-                              selectedLines: _controller.selectionForPainting,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return ValueListenableBuilder<Sketch>(
+            valueListenable: widget.sketchNotifier,
+            builder: (context, sketch, _) {
+              return ValueListenableBuilder<List<SketchLine>>(
+                valueListenable: widget.selectionNotifier,
+                builder: (context, selectedLines, _) {
+                  // Use the child parameter to prevent rebuilding the static layer
+                  // on every pointer move event.
+                  return ValueListenableBuilder<List<Point>?>(
+                    valueListenable: _controller.currentLineNotifier,
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: StaticSketchPainter(
+                          sketch: sketch,
+                          isDark: isDark,
+                          scale: widget.scale,
+                          selectedLines: _controller.selectionForPainting,
+                          isDraggingSelection: _controller.isDraggingSelection,
+                          isResizingSelection: _controller.isResizingSelection,
+                          cachedPicture: _controller.cachedSketchPicture,
+                          onCacheUpdate: _controller.updateCache,
+                        ),
+                        child: Container(),
+                      ),
+                    ),
+                    builder: (context, currentLinePoints, child) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          child!, // The static layer (cached widget)
+                          CustomPaint(
+                            painter: ActiveSketchPainter(
+                              currentLinePoints: currentLinePoints,
+                              currentColor: widget.currentColor,
+                              currentWidth: widget.currentWidth,
+                              currentTool: widget.currentTool,
+                              selectedLines: selectedLines,
+                              previewLines: _controller.selectionForPainting,
+                              lassoPoints: _controller.lassoPoints,
+                              dragOffset: _controller.currentDragOffset,
                               isDraggingSelection:
                                   _controller.isDraggingSelection,
                               isResizingSelection:
                                   _controller.isResizingSelection,
+                              isDark: isDark,
+                              scale: widget.scale,
+                              selectionRect: _controller.selectionBounds,
+                              showHandles:
+                                  widget.currentTool ==
+                                  DrawingTool.editSelection,
                               cachedPicture: _controller.cachedSketchPicture,
-                              onCacheUpdate: _controller.updateCache,
                             ),
                             child: Container(),
                           ),
-                        ),
-                        builder: (context, currentLinePoints, child) {
-                          return Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              child!, // The static layer (cached widget)
-                              CustomPaint(
-                                painter: ActiveSketchPainter(
-                                  currentLinePoints: currentLinePoints,
-                                  currentColor: widget.currentColor,
-                                  currentWidth: widget.currentWidth,
-                                  currentTool: widget.currentTool,
-                                  selectedLines: selectedLines,
-                                  previewLines:
-                                      _controller.selectionForPainting,
-                                  lassoPoints: _controller.lassoPoints,
-                                  dragOffset: _controller.currentDragOffset,
-                                  isDraggingSelection:
-                                      _controller.isDraggingSelection,
-                                  isResizingSelection:
-                                      _controller.isResizingSelection,
-                                  isDark: isDark,
-                                  scale: widget.scale,
-                                  selectionRect: _controller.selectionBounds,
-                                  showHandles:
-                                      widget.currentTool ==
-                                      DrawingTool.editSelection,
-                                  cachedPicture:
-                                      _controller.cachedSketchPicture,
-                                ),
-                                child: Container(),
-                              ),
-                            ],
-                          );
-                        },
+                        ],
                       );
                     },
                   );
                 },
               );
             },
-          ),
-          Positioned(
-            top: 100, // Moved down to avoid app bar overlap
-            right: 20,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ValueListenableBuilder<Sketch>(
-                valueListenable: widget.sketchNotifier,
-                builder: (context, sketch, _) {
-                  return Text(
-                    'Lines: ${sketch.lines.length}\nPoints: ${sketch.lines.fold(0, (sum, line) => sum + line.points.length)}',
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

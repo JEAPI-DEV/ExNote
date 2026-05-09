@@ -1,19 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 import '../../models/undo_action.dart';
+import '../../models/canvas_image.dart';
 import '../../utils/line_hit_test.dart';
 
 class EraserHandler {
   final ValueNotifier<Sketch> sketchNotifier;
+  final ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  final ValueNotifier<String?> selectedImageIdNotifier;
   final void Function(UndoAction) onAction;
+  final VoidCallback onContentChanged;
 
   final Set<SketchLine> _erasedLinesInSession = {};
   final List<int> _erasedIndicesInSession = [];
+  final Set<String> _erasedImageIdsInSession = {};
   List<SketchLine>? _initialLinesInSession;
 
   final Map<SketchLine, Rect> _lineBoundsCache = {};
 
-  EraserHandler({required this.sketchNotifier, required this.onAction});
+  EraserHandler({
+    required this.sketchNotifier,
+    required this.canvasImagesNotifier,
+    required this.selectedImageIdNotifier,
+    required this.onAction,
+    required this.onContentChanged,
+  });
 
   void handlePointerDown(Offset localPosition, double currentWidth) {
     _initialLinesInSession = List.from(sketchNotifier.value.lines);
@@ -32,15 +43,20 @@ class EraserHandler {
           _erasedIndicesInSession.toList(),
         ),
       );
-      _erasedLinesInSession.clear();
-      _erasedIndicesInSession.clear();
-      _initialLinesInSession = null;
+    } else if (_erasedImageIdsInSession.isNotEmpty) {
+      onContentChanged();
     }
+
+    _erasedLinesInSession.clear();
+    _erasedIndicesInSession.clear();
+    _erasedImageIdsInSession.clear();
+    _initialLinesInSession = null;
   }
 
   void reset() {
     _erasedLinesInSession.clear();
     _erasedIndicesInSession.clear();
+    _erasedImageIdsInSession.clear();
     _initialLinesInSession = null;
   }
 
@@ -71,6 +87,31 @@ class EraserHandler {
           .where((l) => !linesToRemove.contains(l))
           .toList();
       sketchNotifier.value = Sketch(lines: newLines);
+    }
+
+    final imagesToRemove = canvasImagesNotifier.value.where((image) {
+      final rect = Rect.fromLTWH(
+        image.left,
+        image.top,
+        image.width,
+        image.height,
+      );
+      return rect.inflate(eraserRadius).contains(position);
+    }).toList();
+
+    if (imagesToRemove.isNotEmpty) {
+      for (final image in imagesToRemove) {
+        _erasedImageIdsInSession.add(image.id);
+      }
+
+      final removedIds = imagesToRemove.map((image) => image.id).toSet();
+      canvasImagesNotifier.value = canvasImagesNotifier.value
+          .where((image) => !removedIds.contains(image.id))
+          .toList();
+
+      if (removedIds.contains(selectedImageIdNotifier.value)) {
+        selectedImageIdNotifier.value = null;
+      }
     }
   }
 }

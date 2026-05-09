@@ -6,6 +6,7 @@ import '../models/drawing_tool.dart';
 import '../models/grid_type.dart';
 import '../models/selection.dart';
 import '../models/undo_action.dart';
+import '../models/canvas_image.dart';
 import 'fast_drawing_canvas.dart';
 import 'grid_painter.dart';
 import 'zoomable_canvas_wrapper.dart';
@@ -23,8 +24,11 @@ class NoteCanvas extends StatefulWidget {
   final ValueNotifier<DrawingTool> toolNotifier;
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
+  final ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  final ValueNotifier<String?> selectedImageIdNotifier;
   final bool shapeSnappingEnabled;
   final Function(UndoAction) onAction;
+  final VoidCallback onContentChanged;
 
   const NoteCanvas({
     super.key,
@@ -40,8 +44,11 @@ class NoteCanvas extends StatefulWidget {
     required this.toolNotifier,
     required this.sketchNotifier,
     required this.selectionNotifier,
+    required this.canvasImagesNotifier,
+    required this.selectedImageIdNotifier,
     required this.shapeSnappingEnabled,
     required this.onAction,
+    required this.onContentChanged,
   });
 
   @override
@@ -55,12 +62,15 @@ class _NoteCanvasState extends State<NoteCanvas> {
   bool _isZoomLocked = false;
 
   void _showZoomPopupAction() {
-    setState(() {
-      _showZoomPopup = true;
-    });
+    if (!_showZoomPopup) {
+      setState(() {
+        _showZoomPopup = true;
+      });
+    }
+
     _zoomPopupTimer?.cancel();
     _zoomPopupTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) {
+      if (mounted && _showZoomPopup) {
         setState(() {
           _showZoomPopup = false;
         });
@@ -139,6 +149,39 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                     )
                                   : const SizedBox.shrink(),
                             ),
+                            Positioned.fill(
+                              child: ValueListenableBuilder<List<CanvasImage>>(
+                                valueListenable: widget.canvasImagesNotifier,
+                                builder: (context, images, _) {
+                                  return Stack(
+                                    children: [
+                                      for (final image in images)
+                                        Positioned(
+                                          left: image.left,
+                                          top: image.top,
+                                          width: image.width,
+                                          height: image.height,
+                                          child: Image.file(
+                                            File(image.path),
+                                            fit: BoxFit.fill,
+                                            filterQuality: FilterQuality.high,
+                                            errorBuilder: (_, __, ___) =>
+                                                Container(
+                                                  color: Colors.grey.withValues(
+                                                    alpha: 0.2,
+                                                  ),
+                                                  alignment: Alignment.center,
+                                                  child: const Icon(
+                                                    Icons.broken_image,
+                                                  ),
+                                                ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
                             SizedBox.expand(
                               child: ValueListenableBuilder<Color>(
                                 valueListenable: widget.colorNotifier,
@@ -156,6 +199,10 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                                 widget.sketchNotifier,
                                             selectionNotifier:
                                                 widget.selectionNotifier,
+                                            canvasImagesNotifier:
+                                                widget.canvasImagesNotifier,
+                                            selectedImageIdNotifier:
+                                                widget.selectedImageIdNotifier,
                                             currentColor: color,
                                             currentWidth: width,
                                             currentTool: tool,
@@ -164,6 +211,8 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                                 .value
                                                 .getMaxScaleOnAxis(),
                                             onAction: widget.onAction,
+                                            onContentChanged:
+                                                widget.onContentChanged,
                                             shapeSnappingEnabled:
                                                 widget.shapeSnappingEnabled,
                                           );

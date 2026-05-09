@@ -7,6 +7,7 @@ import 'package:scribble/scribble.dart';
 import '../providers/folder_provider.dart';
 import '../utils/undo_redo_manager.dart';
 import '../utils/sketch_serializer.dart';
+import '../models/canvas_image.dart';
 
 class NoteManager {
   final WidgetRef ref;
@@ -16,6 +17,7 @@ class NoteManager {
   final String noteId;
 
   final ValueNotifier<Sketch> sketchNotifier;
+  final ValueNotifier<List<CanvasImage>> imagesNotifier;
   final UndoRedoManager undoRedoManager;
 
   NoteManager({
@@ -25,6 +27,7 @@ class NoteManager {
     this.selectionId,
     required this.noteId,
     required this.sketchNotifier,
+    required this.imagesNotifier,
     required this.undoRedoManager,
   });
 
@@ -56,10 +59,10 @@ class NoteManager {
 
       if (scribbleData != null && scribbleData.isNotEmpty) {
         try {
-          final sketchJson = jsonDecode(scribbleData) as Map<String, dynamic>;
-          final loadedSketch = Sketch.fromJson(sketchJson);
+          final content = deserializeNoteContent(scribbleData);
 
-          sketchNotifier.value = loadedSketch;
+          sketchNotifier.value = content.sketch;
+          imagesNotifier.value = content.images;
           undoRedoManager.clear();
         } catch (e) {
           debugPrint('Error loading note: $e');
@@ -98,7 +101,10 @@ class NoteManager {
   Future<void> saveNote({String? screenshotBase64}) async {
     try {
       final sketch = sketchNotifier.value;
-      final jsonSketch = await runSerialization(sketch);
+      final jsonSketch = await runSerialization(
+        sketch,
+        images: imagesNotifier.value,
+      );
 
       final folder = ref
           .read(folderProvider)

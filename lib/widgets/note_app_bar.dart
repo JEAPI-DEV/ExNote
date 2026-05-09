@@ -6,6 +6,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onRedo;
   final VoidCallback onCopy;
   final VoidCallback onPaste;
+  final VoidCallback onAddImage;
   final VoidCallback onExportPng;
   final VoidCallback onExportPdf;
   final VoidCallback onSave;
@@ -25,6 +26,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onRedo,
     required this.onCopy,
     required this.onPaste,
+    required this.onAddImage,
     required this.onExportPng,
     required this.onExportPdf,
     required this.onSave,
@@ -71,6 +73,12 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
             'Delete',
             Colors.red,
           ),
+        _buildIconButton(
+          Icons.add_photo_alternate_outlined,
+          onAddImage,
+          'Add Image',
+          iconColor,
+        ),
         if (canCopy) _buildIconButton(Icons.copy, onCopy, 'Copy', iconColor),
         _buildIconButton(
           Icons.paste,
@@ -108,6 +116,9 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'More',
           onSelected: (value) {
             switch (value) {
+              case 'image':
+                onAddImage();
+                break;
               case 'png':
                 onExportPng();
                 break;
@@ -126,6 +137,10 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
             const PopupMenuItem(
               value: 'save',
               child: _MenuRow(Icons.save, 'Save'),
+            ),
+            const PopupMenuItem(
+              value: 'image',
+              child: _MenuRow(Icons.add_photo_alternate, 'Add Image'),
             ),
             const PopupMenuItem(
               value: 'png',

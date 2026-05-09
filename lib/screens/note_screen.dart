@@ -4,11 +4,15 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import 'package:scribble/scribble.dart';
 import '../providers/folder_provider.dart';
 import '../models/drawing_tool.dart';
 import '../models/right_drawer_content.dart';
 import '../models/selection.dart';
+import '../models/canvas_image.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_toolbar.dart';
 import '../widgets/ai_chat_drawer.dart';
@@ -45,6 +49,8 @@ class NoteScreen extends ConsumerStatefulWidget {
 class _NoteScreenState extends ConsumerState<NoteScreen> {
   late ValueNotifier<Sketch> sketchNotifier;
   late ValueNotifier<List<SketchLine>> selectionNotifier;
+  late ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  late ValueNotifier<String?> selectedImageIdNotifier;
   late ValueNotifier<Color> colorNotifier;
   late ValueNotifier<double> widthNotifier;
   late ValueNotifier<DrawingTool> toolNotifier;
@@ -73,6 +79,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     super.initState();
     sketchNotifier = ValueNotifier(const Sketch(lines: []));
     selectionNotifier = ValueNotifier([]);
+    canvasImagesNotifier = ValueNotifier([]);
+    selectedImageIdNotifier = ValueNotifier(null);
     colorNotifier = ValueNotifier(Colors.black);
     widthNotifier = ValueNotifier(2.0);
     toolNotifier = ValueNotifier(DrawingTool.pen);
@@ -109,6 +117,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       selectionId: widget.selectionId,
       noteId: widget.noteId,
       sketchNotifier: sketchNotifier,
+      imagesNotifier: canvasImagesNotifier,
       undoRedoManager: _undoRedoManager,
     );
 
@@ -124,6 +133,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     widthNotifier.addListener(_saveStrokeWidthSetting);
 
     selectionNotifier.addListener(() {
+      if (mounted) setState(() {});
+    });
+    selectedImageIdNotifier.addListener(() {
       if (mounted) setState(() {});
     });
   }
@@ -153,6 +165,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     widthNotifier.removeListener(_saveStrokeWidthSetting);
     sketchNotifier.dispose();
     selectionNotifier.dispose();
+    canvasImagesNotifier.dispose();
+    selectedImageIdNotifier.dispose();
     colorNotifier.dispose();
     widthNotifier.dispose();
     toolNotifier.dispose();
@@ -211,6 +225,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             onRedo: _undoRedoManager.redo,
             onCopy: _clipboardManager.copy,
             onPaste: _clipboardManager.paste,
+            onAddImage: _addImageToCanvas,
             onExportPng: _exportPng,
             onExportPdf: _exportPdf,
             onSave: () {
@@ -229,6 +244,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             },
             onDelete: selectionNotifier.value.isNotEmpty
                 ? _clipboardManager.deleteSelection
+                : selectedImageIdNotifier.value != null
+                ? _deleteSelectedImage
                 : null,
             onChat: () {
               setState(() => _rightDrawerContent = RightDrawerContent.aiChat);
@@ -303,8 +320,11 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                     toolNotifier: toolNotifier,
                     sketchNotifier: sketchNotifier,
                     selectionNotifier: selectionNotifier,
+                    canvasImagesNotifier: canvasImagesNotifier,
+                    selectedImageIdNotifier: selectedImageIdNotifier,
                     shapeSnappingEnabled: settings.shapeSnappingEnabled,
                     onAction: _undoRedoManager.applyAction,
+                    onContentChanged: _scheduleAutoSave,
                   ),
                 Positioned(
                   bottom: 0,
@@ -324,6 +344,69 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _addImageToCanvas() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (result == null || result.files.single.path == null) return;
+
+    try {
+      final source = File(result.files.single.path!);
+      final appDir = await getApplicationDocumentsDirectory();
+      final originalName = result.files.single.name.replaceAll(
+        RegExp(r'[^A-Za-z0-9._-]'),
+        '_',
+      );
+      final id = const Uuid().v4();
+      final destination = File(
+        '${appDir.path}/canvas_image_${id}_$originalName',
+      );
+      await source.copy(destination.path);
+
+      final bytes = await destination.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final imageWidth = image.width.toDouble();
+      final imageHeight = image.height.toDouble();
+      final aspect = imageHeight / imageWidth;
+      image.dispose();
+
+      const maxInitialWidth = 320.0;
+      final initialWidth = imageWidth > maxInitialWidth
+          ? maxInitialWidth
+          : imageWidth;
+      final initialHeight = initialWidth * aspect;
+
+      final canvasImage = CanvasImage(
+        id: id,
+        path: destination.path,
+        left: 100,
+        top: 100,
+        width: initialWidth,
+        height: initialHeight,
+      );
+      canvasImagesNotifier.value = [...canvasImagesNotifier.value, canvasImage];
+      selectedImageIdNotifier.value = id;
+      selectionNotifier.value = [];
+      toolNotifier.value = DrawingTool.editSelection;
+      _scheduleAutoSave();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Image import failed: $e')));
+    }
+  }
+
+  void _deleteSelectedImage() {
+    final selectedId = selectedImageIdNotifier.value;
+    if (selectedId == null) return;
+    canvasImagesNotifier.value = canvasImagesNotifier.value
+        .where((image) => image.id != selectedId)
+        .toList();
+    selectedImageIdNotifier.value = null;
+    _scheduleAutoSave();
   }
 
   Future<void> _saveNote() async {
