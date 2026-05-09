@@ -10,12 +10,11 @@ import 'package:scribble/scribble.dart';
 import '../../models/exercise_list.dart';
 import '../storage_service.dart';
 import '../settings_service.dart';
-import '../sketch_renderer.dart';
-import '../../utils/sketch_bounds.dart';
+import 'a4_note_pdf_renderer.dart';
 
 class PdfNoteExportService {
   final StorageService _storage = StorageService();
-  final SketchRenderer _renderer = SketchRenderer();
+  final A4NotePdfRenderer _noteRenderer = A4NotePdfRenderer();
 
   Future<File> exportExerciseListToPdf(ExerciseList list) async {
     final doc = pw.Document();
@@ -29,13 +28,9 @@ class PdfNoteExportService {
     const bool isDark = false;
 
     final pdfDocument = await pdfx.PdfDocument.openFile(pdfFile.path);
-    PdfPageFormat? firstPageFormat;
 
     for (int i = 1; i <= pdfDocument.pagesCount; i++) {
       final page = await pdfDocument.getPage(i);
-      if (i == 1) {
-        firstPageFormat = PdfPageFormat(page.width, page.height);
-      }
       final pageImage = await page.render(
         width: page.width * 2,
         height: page.height * 2,
@@ -122,8 +117,6 @@ class PdfNoteExportService {
       await page.close();
     }
 
-    final notePageFormat = firstPageFormat ?? PdfPageFormat.a4;
-
     for (final s in list.selections) {
       final noteData = await _storage.loadNote(s.noteId);
       if (noteData == null) continue;
@@ -136,105 +129,62 @@ class PdfNoteExportService {
         continue;
       }
 
-      final Size canvasSize = Size(
-        notePageFormat.width * 2,
-        notePageFormat.height * 2,
-      );
       ui.Image? bgImage;
+      Rect? bgRect;
 
       if (s.screenshotPath != null && File(s.screenshotPath!).existsSync()) {
         final bgBytes = await File(s.screenshotPath!).readAsBytes();
         final codec = await ui.instantiateImageCodec(bgBytes);
         final frame = await codec.getNextFrame();
         bgImage = frame.image;
-      }
-
-      Rect sketchBounds = sketch.bounds;
-      sketchBounds = Rect.fromLTRB(
-        sketchBounds.left * 2,
-        sketchBounds.top * 2,
-        sketchBounds.right * 2,
-        sketchBounds.bottom * 2,
-      );
-
-      Rect contentBounds = sketchBounds;
-      if (bgImage != null) {
-        final bgRect = Rect.fromLTWH(
+        bgRect = Rect.fromLTWH(
           0,
           0,
-          bgImage.width.toDouble(),
-          bgImage.height.toDouble(),
-        );
-        contentBounds = contentBounds == Rect.zero
-            ? bgRect
-            : contentBounds.expandToInclude(bgRect);
-      }
-
-      if (contentBounds == Rect.zero) {
-        contentBounds = Rect.fromLTWH(
-          0,
-          0,
-          canvasSize.width,
-          canvasSize.height,
+          bgImage.width.toDouble() / 2,
+          bgImage.height.toDouble() / 2,
         );
       }
 
-      final padding = contentBounds.longestSide * 0.05;
-      contentBounds = Rect.fromLTRB(
-        contentBounds.left - padding,
-        contentBounds.top - padding,
-        contentBounds.right + padding,
-        contentBounds.bottom + padding,
-      );
+      List<A4RenderedNotePage> renderedPages;
+      try {
+        renderedPages = await _noteRenderer.renderPages(
+          sketch: sketch,
+          backgroundImage: bgImage,
+          backgroundRect: bgRect,
+          gridEnabled: settings.gridEnabled,
+          gridType: settings.gridType,
+          gridSpacing: settings.gridSpacing,
+          isDark: isDark,
+        );
+      } finally {
+        bgImage?.dispose();
+      }
 
-      final double scaleX = canvasSize.width / contentBounds.width;
-      final double scaleY = canvasSize.height / contentBounds.height;
-      final double fitScale = scaleX < scaleY ? scaleX : scaleY;
+      for (int i = 0; i < renderedPages.length; i++) {
+        final renderedPage = renderedPages[i];
+        final pwNoteImage = pw.MemoryImage(renderedPage.pngBytes);
 
-      final double offsetX =
-          (canvasSize.width - contentBounds.width * fitScale) / 2 -
-          contentBounds.left * fitScale;
-      final double offsetY =
-          (canvasSize.height - contentBounds.height * fitScale) / 2 -
-          contentBounds.top * fitScale;
+        doc.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat.a4,
+            margin: pw.EdgeInsets.zero,
+            build: (pw.Context context) {
+              final image = pw.Image(
+                pwNoteImage,
+                width: renderedPage.drawWidth,
+                height: renderedPage.drawHeight,
+                fit: pw.BoxFit.fill,
+              );
 
-      final noteUiImage = await _renderer.renderToImage(
-        sketch,
-        size: canvasSize,
-        backgroundImage: bgImage,
-        backgroundRect: bgImage != null
-            ? Rect.fromLTWH(
-                0,
-                0,
-                bgImage.width.toDouble(),
-                bgImage.height.toDouble(),
-              )
-            : null,
-        offset: Offset(offsetX, offsetY),
-        scale: fitScale,
-        sketchScale: 2.0,
-        gridEnabled: settings.gridEnabled,
-        gridType: settings.gridType,
-        gridSpacing: settings.gridSpacing * 2,
-        isDark: isDark,
-      );
+              if (i == 0) {
+                return pw.Anchor(name: s.id, child: image);
+              }
 
-      final byteData = await noteUiImage.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      if (byteData == null) continue;
-
-      final pwNoteImage = pw.MemoryImage(byteData.buffer.asUint8List());
-
-      doc.addPage(
-        pw.Page(
-          pageFormat: notePageFormat,
-          margin: pw.EdgeInsets.zero,
-          build: (pw.Context context) {
-            return pw.Anchor(name: s.id, child: pw.Image(pwNoteImage));
-          },
-        ),
-      );
+              return image;
+            },
+          ),
+        );
+      }
     }
 
     await pdfDocument.close();

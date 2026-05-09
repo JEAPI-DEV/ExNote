@@ -6,10 +6,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:scribble/scribble.dart';
 import '../../models/grid_type.dart';
-import '../../services/sketch_renderer.dart';
-import '../../utils/sketch_bounds.dart';
 import '../../utils/export_directory.dart';
-import '../../utils/pdf_split_calculator.dart';
+import '../pdf/a4_note_pdf_renderer.dart';
 import 'canvas_capture_service.dart';
 import 'png_export_service.dart';
 import 'zip_backup_service.dart';
@@ -39,68 +37,18 @@ class ExportService {
     Rect? backgroundRect,
   }) async {
     debugPrint("[ExportService] Starting PDF export...");
-    final SketchRenderer renderer = SketchRenderer();
-
-    Rect sketchBounds = sketch.bounds;
-    debugPrint("[ExportService] Sketch bounds: $sketchBounds");
-    if (sketchBounds == Rect.zero) {
-      sketchBounds = const Rect.fromLTWH(0, 0, 595, 842);
-    }
-
-    final padding = sketchBounds.width * 0.05;
-    final contentRect = Rect.fromLTRB(
-      sketchBounds.left - padding,
-      sketchBounds.top - padding,
-      sketchBounds.right + padding,
-      sketchBounds.bottom + padding,
+    final renderedPages = await A4NotePdfRenderer().renderPages(
+      sketch: sketch,
+      backgroundImage: backgroundImage,
+      backgroundRect: backgroundRect,
+      gridEnabled: gridEnabled,
+      gridType: gridType,
+      gridSpacing: gridSpacing,
+      isDark: isDark,
     );
 
-    final double pageWidth = contentRect.width;
-    const double targetPageHeight = 842.0;
-
-    debugPrint("[ExportService] Finding split points...");
-    final List<double> splitPoints = findPdfSplitPoints(
-      sketch,
-      contentRect,
-      targetPageHeight,
-    );
-    debugPrint("[ExportService] Found ${splitPoints.length - 1} pages.");
-
-    final List<Uint8List> pageImages = [];
-    final List<double> segmentHeights = [];
-
-    for (int i = 0; i < splitPoints.length - 1; i++) {
-      final top = splitPoints[i];
-      final bottom = splitPoints[i + 1];
-      final segmentHeight = bottom - top;
-      debugPrint(
-        "[ExportService] Rendering page ${i + 1} (height: $segmentHeight)...",
-      );
-
-      final Size canvasSize = Size(pageWidth * 2, segmentHeight * 2);
-
-      final ui.Image pageImage = await renderer.renderToImage(
-        sketch,
-        size: canvasSize,
-        backgroundImage: backgroundImage,
-        backgroundRect: backgroundRect,
-        isDark: isDark,
-        offset: Offset(-contentRect.left * 2, -top * 2),
-        scale: 2.0,
-        gridEnabled: gridEnabled,
-        gridType: gridType,
-        gridSpacing: gridSpacing * 2,
-        verticalRange: (top: top, bottom: bottom),
-      );
-
-      final byteData = await pageImage.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      pageImage.dispose();
-
-      if (byteData == null) continue;
-      pageImages.add(byteData.buffer.asUint8List());
-      segmentHeights.add(segmentHeight);
+    if (renderedPages.isEmpty) {
+      throw Exception('Failed to render PDF pages');
     }
 
     debugPrint("[ExportService] Offloading PDF generation to background...");
@@ -110,10 +58,15 @@ class ExportService {
     final String filePath = '${dir.path}/$finalFilename.pdf';
 
     await compute(_generateAndSavePdf, {
-      'images': pageImages,
-      'pageWidth': pageWidth,
-      'targetPageHeight': targetPageHeight,
-      'segmentHeights': segmentHeights,
+      'pages': renderedPages
+          .map(
+            (page) => {
+              'image': page.pngBytes,
+              'drawWidth': page.drawWidth,
+              'drawHeight': page.drawHeight,
+            },
+          )
+          .toList(),
       'filePath': filePath,
     });
 
@@ -122,29 +75,28 @@ class ExportService {
   }
 
   static Future<void> _generateAndSavePdf(Map<String, dynamic> data) async {
-    final List<Uint8List> images = data['images'];
-    final double pageWidth = data['pageWidth'];
-    final double targetPageHeight = data['targetPageHeight'];
-    final List<double> segmentHeights = data['segmentHeights'];
+    final List<dynamic> pages = data['pages'];
     final String filePath = data['filePath'];
 
     final doc = pw.Document();
 
-    for (int i = 0; i < images.length; i++) {
-      final pwImage = pw.MemoryImage(images[i]);
-      final segmentHeight = segmentHeights[i];
+    for (final page in pages) {
+      final pageData = page as Map<dynamic, dynamic>;
+      final pwImage = pw.MemoryImage(pageData['image'] as Uint8List);
+      final drawWidth = pageData['drawWidth'] as double;
+      final drawHeight = pageData['drawHeight'] as double;
 
       doc.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat(pageWidth, targetPageHeight),
+          pageFormat: PdfPageFormat.a4,
           margin: pw.EdgeInsets.zero,
           build: (pw.Context ctx) {
             return pw.Container(
-              alignment: pw.Alignment.topCenter,
+              alignment: pw.Alignment.topLeft,
               child: pw.Image(
                 pwImage,
-                width: pageWidth,
-                height: segmentHeight,
+                width: drawWidth,
+                height: drawHeight,
                 fit: pw.BoxFit.fill,
               ),
             );

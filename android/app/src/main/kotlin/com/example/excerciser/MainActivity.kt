@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -21,6 +22,8 @@ class MainActivity : FlutterActivity() {
 
 	private var methodChannel: MethodChannel? = null
 	private var isReceiverRegistered = false
+	private var lastStylusPrimaryPressTime = 0L
+	private var stylusPrimaryPressed = false
 
 	private val pencilReceiver = object : BroadcastReceiver() {
 		override fun onReceive(context: Context?, intent: Intent?) {
@@ -94,7 +97,21 @@ class MainActivity : FlutterActivity() {
 		super.onDestroy()
 	}
 
+	override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+		handleStylusPrimaryButton(event)
+		return super.dispatchTouchEvent(event)
+	}
+
+	override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+		handleStylusPrimaryButton(event)
+		return super.dispatchGenericMotionEvent(event)
+	}
+
 	private fun shouldRegisterReceiver(): Boolean {
+		if (!isOppoFamilyDevice()) {
+			return false
+		}
+
 		val manufacturer = Build.MANUFACTURER?.lowercase(Locale.US) ?: ""
 		val brand = Build.BRAND?.lowercase(Locale.US) ?: ""
 		return manufacturer.contains("oppo") ||
@@ -103,7 +120,54 @@ class MainActivity : FlutterActivity() {
 			brand.contains("oneplus")
 	}
 
+	private fun isOppoFamilyDevice(): Boolean {
+		val manufacturer = Build.MANUFACTURER?.lowercase(Locale.US) ?: ""
+		val brand = Build.BRAND?.lowercase(Locale.US) ?: ""
+		return manufacturer.contains("oppo") ||
+			manufacturer.contains("oneplus") ||
+			brand.contains("oppo") ||
+			brand.contains("oneplus")
+	}
+
+	private fun handleStylusPrimaryButton(event: MotionEvent) {
+		if (isOppoFamilyDevice()) {
+			return
+		}
+
+		if (!eventContainsStylus(event)) {
+			stylusPrimaryPressed = false
+			return
+		}
+
+		val isPressed = (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
+		if (isPressed && !stylusPrimaryPressed) {
+			val currentEventTime = event.eventTime
+			if (currentEventTime - lastStylusPrimaryPressTime <= STYLUS_DOUBLE_TAP_WINDOW_MS) {
+				Log.i(TAG, "Detected stylus double press from motion events")
+				methodChannel?.invokeMethod("stylusDoubleClick", null)
+				lastStylusPrimaryPressTime = 0L
+			} else {
+				lastStylusPrimaryPressTime = currentEventTime
+			}
+		}
+
+		stylusPrimaryPressed = isPressed
+	}
+
+	private fun eventContainsStylus(event: MotionEvent): Boolean {
+		for (i in 0 until event.pointerCount) {
+			val toolType = event.getToolType(i)
+			if (toolType == MotionEvent.TOOL_TYPE_STYLUS ||
+				toolType == MotionEvent.TOOL_TYPE_ERASER
+			) {
+				return true
+			}
+		}
+		return false
+	}
+
 	companion object {
 		private const val TAG = "PencilDemo"
+		private const val STYLUS_DOUBLE_TAP_WINDOW_MS = 250L
 	}
 }

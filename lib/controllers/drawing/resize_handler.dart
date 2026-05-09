@@ -122,8 +122,9 @@ class ResizeHandler {
   void updatePreview(Offset position) {
     if (_activeHandle == null ||
         _resizeStartRect == null ||
-        _resizeOriginalLines == null)
+        _resizeOriginalLines == null) {
       return;
+    }
 
     final newRect = _computeResizedRect(position);
     _resizePreviewRect = newRect;

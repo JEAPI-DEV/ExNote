@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -64,6 +66,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   late NoteManager _noteManager;
 
   bool _isLoading = true;
+  bool _isApplyingSavedStrokeWidth = false;
 
   @override
   void initState() {
@@ -111,10 +114,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
     _settingsController.load().then((_) {
       if (mounted) {
+        _isApplyingSavedStrokeWidth = true;
         widthNotifier.value = _settingsController.settings.strokeWidth;
+        _isApplyingSavedStrokeWidth = false;
       }
     });
     _loadNote();
+
+    widthNotifier.addListener(_saveStrokeWidthSetting);
 
     selectionNotifier.addListener(() {
       if (mounted) setState(() {});
@@ -143,6 +150,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     _autoSaveTimer?.cancel();
     _saveNote();
     StylusShortcutManager.instance.detach(toolNotifier);
+    widthNotifier.removeListener(_saveStrokeWidthSetting);
     sketchNotifier.dispose();
     selectionNotifier.dispose();
     colorNotifier.dispose();
@@ -334,6 +342,19 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
+  void _saveStrokeWidthSetting() {
+    if (_isApplyingSavedStrokeWidth) {
+      return;
+    }
+
+    final width = widthNotifier.value;
+    if (_settingsController.settings.strokeWidth == width) {
+      return;
+    }
+
+    _settingsController.update((s) => s.copyWith(strokeWidth: width));
+  }
+
   Future<void> _exportPng() async {
     try {
       final file = await ExportService.exportToPng(_exportKey, context);
@@ -379,18 +400,25 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
     if (filename == null || filename.isEmpty) return;
 
-    if (!mounted) return;
-    AppDialogs.showProgressDialog(context, message: 'Generating PDF...');
-
+    ({ui.Image image, Rect rect})? background;
     try {
+      background = await _loadExportBackground();
+      if (!mounted) return;
+
+      final settings = _settingsController.settings;
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      AppDialogs.showProgressDialog(context, message: 'Generating PDF...');
+
       final file = await ExportService.exportToPdf(
         sketch: sketchNotifier.value,
         context: context,
         filename: filename,
-        gridEnabled: _settingsController.settings.gridEnabled,
-        gridType: _settingsController.settings.gridType,
-        gridSpacing: _settingsController.settings.gridSpacing,
-        isDark: Theme.of(context).brightness == Brightness.dark,
+        gridEnabled: settings.gridEnabled,
+        gridType: settings.gridType,
+        gridSpacing: settings.gridSpacing,
+        isDark: isDark,
+        backgroundImage: background?.image,
+        backgroundRect: background?.rect,
       );
       if (!mounted) return;
       AppDialogs.hideProgressDialog(context);
@@ -404,6 +432,45 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('PDF export failed: $e')));
+    } finally {
+      background?.image.dispose();
+    }
+  }
+
+  Future<({ui.Image image, Rect rect})?> _loadExportBackground() async {
+    if (widget.exerciseListId == null || widget.selectionId == null) {
+      return null;
+    }
+
+    try {
+      final folder = ref
+          .read(folderProvider)
+          .firstWhere((f) => f.id == widget.folderId);
+      final list = folder.exerciseLists.firstWhere(
+        (l) => l.id == widget.exerciseListId,
+      );
+      final selection = list.selections.firstWhere(
+        (s) => s.id == widget.selectionId,
+      );
+
+      final screenshotPath = selection.screenshotPath;
+      if (screenshotPath == null) return null;
+
+      final file = File(screenshotPath);
+      if (!file.existsSync()) return null;
+
+      final bytes = await file.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final size =
+          _screenshotSize ??
+          Size(image.width.toDouble() / 2, image.height.toDouble() / 2);
+
+      return (image: image, rect: Rect.fromLTWH(0, 0, size.width, size.height));
+    } catch (e) {
+      debugPrint('Error loading export background: $e');
+      return null;
     }
   }
 
