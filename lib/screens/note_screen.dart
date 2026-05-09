@@ -66,6 +66,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   late NoteManager _noteManager;
 
   bool _isLoading = true;
+  bool _isApplyingSavedStrokeWidth = false;
 
   @override
   void initState() {
@@ -113,10 +114,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
     _settingsController.load().then((_) {
       if (mounted) {
+        _isApplyingSavedStrokeWidth = true;
         widthNotifier.value = _settingsController.settings.strokeWidth;
+        _isApplyingSavedStrokeWidth = false;
       }
     });
     _loadNote();
+
+    widthNotifier.addListener(_saveStrokeWidthSetting);
 
     selectionNotifier.addListener(() {
       if (mounted) setState(() {});
@@ -145,6 +150,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     _autoSaveTimer?.cancel();
     _saveNote();
     StylusShortcutManager.instance.detach(toolNotifier);
+    widthNotifier.removeListener(_saveStrokeWidthSetting);
     sketchNotifier.dispose();
     selectionNotifier.dispose();
     colorNotifier.dispose();
@@ -334,6 +340,19 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         ),
       );
     }
+  }
+
+  void _saveStrokeWidthSetting() {
+    if (_isApplyingSavedStrokeWidth) {
+      return;
+    }
+
+    final width = widthNotifier.value;
+    if (_settingsController.settings.strokeWidth == width) {
+      return;
+    }
+
+    _settingsController.update((s) => s.copyWith(strokeWidth: width));
   }
 
   Future<void> _exportPng() async {

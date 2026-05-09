@@ -66,11 +66,14 @@ class EditSelectionControls extends StatelessWidget {
                   overlayShape: const RoundSliderOverlayShape(
                     overlayRadius: 14,
                   ),
+                  showValueIndicator: ShowValueIndicator.onDrag,
                 ),
                 child: Slider(
                   value: editWidth,
                   min: 1,
                   max: 20,
+                  divisions: 19,
+                  label: editWidth.round().toString(),
                   onChanged: onWidthChanged,
                   onChangeEnd: (_) => onWidthChangeEnd(),
                 ),

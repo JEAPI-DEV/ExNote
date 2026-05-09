@@ -51,7 +51,7 @@ class A4NotePageSegment {
 
 class A4NotePdfRenderer {
   static const PdfPageFormat pageFormat = PdfPageFormat.a4;
-  static const double pixelRatio = 2.0;
+  static const double pixelRatio = 4.0;
 
   final SketchRenderer _renderer;
 
@@ -181,14 +181,17 @@ class A4NotePdfRenderer {
       return Rect.fromLTWH(0, 0, pageFormat.width, pageFormat.height);
     }
 
-    final padding = contentRect.longestSide > 0
-        ? contentRect.longestSide * 0.05
-        : 20.0;
+    final horizontalPadding = contentRect.width > 0
+        ? math.min(contentRect.width * 0.02, 12.0)
+        : 8.0;
+    final verticalPadding = contentRect.height > 0
+        ? math.min(contentRect.height * 0.04, 24.0)
+        : 16.0;
     return Rect.fromLTRB(
-      contentRect.left - padding,
-      contentRect.top - padding,
-      contentRect.right + padding,
-      contentRect.bottom + padding,
+      contentRect.left - horizontalPadding,
+      contentRect.top - verticalPadding,
+      contentRect.right + horizontalPadding,
+      contentRect.bottom + verticalPadding,
     );
   }
 }
