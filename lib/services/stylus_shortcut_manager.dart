@@ -27,11 +27,11 @@ class StylusShortcutManager {
 
   Future<void> _onMethodCall(MethodCall call) async {
     if (call.method == 'stylusDoubleClick') {
-      _toggleTool();
+      toggleTool();
     }
   }
 
-  void _toggleTool() {
+  void toggleTool() {
     final notifier = _toolNotifier;
     if (notifier == null) {
       return;

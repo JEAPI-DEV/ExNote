@@ -6,6 +6,7 @@ import 'package:spen_remote/spen_remote.dart';
 import 'screens/folder_screen.dart';
 import 'providers/theme_provider.dart';
 import 'theme/app_theme.dart';
+import 'services/stylus_shortcut_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +21,9 @@ void main() async {
         await SpenRemote.connect();
         SpenRemote.events.listen((event) {
           if (event.type == 'button') {
-            debugPrint('Button action: ${event.action}');
+            if (event.action == 0) {
+              StylusShortcutManager.instance.toggleTool();
+            }
           } else if (event.type == 'motion') {
             debugPrint('Air motion dx=${event.dx}, dy=${event.dy}');
           }
