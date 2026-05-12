@@ -73,6 +73,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   bool _isLoading = true;
   bool _isApplyingSavedStrokeWidth = false;
+  bool _isStrokeActive = false;
+  bool _isAutoSaving = false;
 
   @override
   void initState() {
@@ -160,7 +162,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
-    _saveNote();
+    _saveNote(captureThumbnail: false);
     StylusShortcutManager.instance.detach(toolNotifier);
     widthNotifier.removeListener(_saveStrokeWidthSetting);
     sketchNotifier.dispose();
@@ -325,6 +327,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                     shapeSnappingEnabled: settings.shapeSnappingEnabled,
                     onAction: _undoRedoManager.applyAction,
                     onContentChanged: _scheduleAutoSave,
+                    onStrokeActivityChanged: _handleStrokeActivityChanged,
                   ),
                 Positioned(
                   bottom: 0,
@@ -409,9 +412,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     _scheduleAutoSave();
   }
 
-  Future<void> _saveNote() async {
+  Future<void> _saveNote({bool captureThumbnail = true}) async {
     try {
-      final screenshot = await _captureCanvas();
+      final screenshot = captureThumbnail ? await _captureCanvas() : null;
       await _noteManager.saveNote(screenshotBase64: screenshot);
       if (!mounted) return;
     } catch (e) {
@@ -422,6 +425,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  void _handleStrokeActivityChanged(bool isActive) {
+    _isStrokeActive = isActive;
+    if (isActive) {
+      _autoSaveTimer?.cancel();
     }
   }
 
@@ -564,8 +574,23 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   void _scheduleAutoSave() {
     if (mounted) setState(() {});
     _autoSaveTimer?.cancel();
-    _autoSaveTimer = Timer(const Duration(seconds: 2), () {
-      _saveNote();
+    _autoSaveTimer = Timer(const Duration(seconds: 2), _runAutoSave);
+  }
+
+  void _runAutoSave() {
+    if (_isStrokeActive || _isAutoSaving) {
+      _autoSaveTimer?.cancel();
+      _autoSaveTimer = Timer(const Duration(milliseconds: 750), _runAutoSave);
+      return;
+    }
+
+    _isAutoSaving = true;
+    _saveNote(captureThumbnail: false).whenComplete(() {
+      _isAutoSaving = false;
+      if (_isStrokeActive) {
+        _autoSaveTimer?.cancel();
+        _autoSaveTimer = Timer(const Duration(milliseconds: 750), _runAutoSave);
+      }
     });
   }
 }

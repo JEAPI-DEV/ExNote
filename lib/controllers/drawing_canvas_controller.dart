@@ -17,6 +17,7 @@ class DrawingCanvasController extends ChangeNotifier {
   final ValueNotifier<String?> selectedImageIdNotifier;
   final Function(UndoAction) onAction;
   final VoidCallback onContentChanged;
+  final ValueChanged<bool>? onStrokeActivityChanged;
 
   Color currentColor = Colors.black;
   double currentWidth = 2.0;
@@ -57,6 +58,7 @@ class DrawingCanvasController extends ChangeNotifier {
 
   bool _isDraggingImage = false;
   bool _isResizingImage = false;
+  bool _isStrokeActive = false;
   Offset? _imageDragStart;
   CanvasImage? _imageStart;
 
@@ -67,6 +69,7 @@ class DrawingCanvasController extends ChangeNotifier {
     required this.selectedImageIdNotifier,
     required this.onAction,
     required this.onContentChanged,
+    this.onStrokeActivityChanged,
   }) {
     sketchNotifier.addListener(_onSketchChanged);
     canvasImagesNotifier.addListener(notifyListeners);
@@ -137,6 +140,12 @@ class DrawingCanvasController extends ChangeNotifier {
 
   void updateCache(ui.Picture picture) {
     cachedSketchPicture = picture;
+  }
+
+  void _setStrokeActivity(bool active) {
+    if (_isStrokeActive == active) return;
+    _isStrokeActive = active;
+    onStrokeActivityChanged?.call(active);
   }
 
   List<SketchLine> get selectionForPainting =>
@@ -260,12 +269,14 @@ class DrawingCanvasController extends ChangeNotifier {
     }
 
     if (currentTool == DrawingTool.strokeEraser) {
+      _setStrokeActivity(true);
       _eraserHandler.handlePointerDown(event.localPosition, currentWidth);
       return;
     }
 
     if (currentTool == DrawingTool.selection ||
         currentTool == DrawingTool.editSelection) {
+      _setStrokeActivity(true);
       if (_handleImagePointerDown(
         event.localPosition,
         isEditMode: currentTool == DrawingTool.editSelection,
@@ -279,6 +290,7 @@ class DrawingCanvasController extends ChangeNotifier {
       return;
     }
 
+    _setStrokeActivity(true);
     _penHandler.handlePointerDown(
       event,
       currentColor: currentColor,
@@ -319,6 +331,7 @@ class DrawingCanvasController extends ChangeNotifier {
   void handlePointerUp(PointerUpEvent event) {
     if (currentTool == DrawingTool.strokeEraser) {
       _eraserHandler.handlePointerUp();
+      _setStrokeActivity(false);
       return;
     }
 
@@ -326,9 +339,11 @@ class DrawingCanvasController extends ChangeNotifier {
         currentTool == DrawingTool.editSelection) {
       if (_isDraggingImage || _isResizingImage) {
         _finishImageInteraction();
+        _setStrokeActivity(false);
         return;
       }
       _selectionHandler.handlePointerUp();
+      _setStrokeActivity(false);
       return;
     }
 
@@ -337,6 +352,7 @@ class DrawingCanvasController extends ChangeNotifier {
       currentWidth: currentWidth,
       currentTool: currentTool,
     );
+    _setStrokeActivity(false);
   }
 
   void handlePointerCancel(PointerCancelEvent event) {
@@ -344,6 +360,7 @@ class DrawingCanvasController extends ChangeNotifier {
     _selectionHandler.reset();
     _finishImageInteraction();
     _eraserHandler.reset();
+    _setStrokeActivity(false);
     notifyListeners();
   }
 }

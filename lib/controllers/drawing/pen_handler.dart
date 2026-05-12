@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:scribble/scribble.dart';
 import '../../models/drawing_tool.dart';
 import '../../models/undo_action.dart';
@@ -12,6 +13,8 @@ class PenHandler {
   final void Function(UndoAction) onAction;
   final VoidCallback notifyListeners;
   final ShapeSnapHandler shapeSnapHandler;
+
+  bool _currentLineNotifyScheduled = false;
 
   PenHandler({
     required this.sketchNotifier,
@@ -69,7 +72,7 @@ class PenHandler {
     final distance = math.sqrt(dx * dx + dy * dy);
 
     final screenDistance = distance * scale;
-    const double kThreshold = 3.0;
+    const double kThreshold = 2.0;
 
     if (screenDistance > kThreshold) {
       final int steps = (screenDistance / kThreshold).floor();
@@ -88,11 +91,23 @@ class PenHandler {
     }
 
     points.add(currentPoint);
-    currentLineNotifier.value = List.from(points);
+    _scheduleCurrentLineNotify();
 
     if (shapeSnappingEnabled) {
       shapeSnapHandler.onPointerMove(event.localPosition);
     }
+  }
+
+  void _scheduleCurrentLineNotify() {
+    if (_currentLineNotifyScheduled) return;
+
+    _currentLineNotifyScheduled = true;
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      _currentLineNotifyScheduled = false;
+      final points = currentLineNotifier.value;
+      if (points == null) return;
+      currentLineNotifier.value = List<Point>.of(points);
+    });
   }
 
   void handlePointerUp({

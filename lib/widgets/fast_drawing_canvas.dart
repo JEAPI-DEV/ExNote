@@ -18,6 +18,7 @@ class FastDrawingCanvas extends StatefulWidget {
   final bool shapeSnappingEnabled;
   final Function(UndoAction) onAction;
   final VoidCallback onContentChanged;
+  final ValueChanged<bool>? onStrokeActivityChanged;
 
   const FastDrawingCanvas({
     super.key,
@@ -32,6 +33,7 @@ class FastDrawingCanvas extends StatefulWidget {
     required this.shapeSnappingEnabled,
     required this.onAction,
     required this.onContentChanged,
+    this.onStrokeActivityChanged,
   });
 
   @override
@@ -51,6 +53,7 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       selectedImageIdNotifier: widget.selectedImageIdNotifier,
       onAction: widget.onAction,
       onContentChanged: widget.onContentChanged,
+      onStrokeActivityChanged: widget.onStrokeActivityChanged,
     );
     _updateController();
   }

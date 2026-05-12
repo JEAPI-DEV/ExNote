@@ -124,7 +124,13 @@ class ActiveSketchPainter extends CustomPainter {
     if (currentLinePoints != null && currentLinePoints!.isNotEmpty) {
       final isPixelEraser = currentTool == DrawingTool.pixelEraser;
       if (isPixelEraser) {
-        canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
+        canvas.saveLayer(
+          _lineBounds(
+            currentLinePoints!,
+            currentWidth,
+          ).intersect(Offset.zero & size),
+          Paint(),
+        );
         if (cachedPicture != null) {
           canvas.drawPicture(cachedPicture!);
         }
@@ -160,6 +166,22 @@ class ActiveSketchPainter extends CustomPainter {
     if (selectionRect != null) {
       _drawSelectionBounds(canvas, selectionRect!);
     }
+  }
+
+  Rect _lineBounds(List<Point> points, double width) {
+    double minX = double.infinity;
+    double minY = double.infinity;
+    double maxX = double.negativeInfinity;
+    double maxY = double.negativeInfinity;
+
+    for (final point in points) {
+      if (point.x < minX) minX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y > maxY) maxY = point.y;
+    }
+
+    return Rect.fromLTRB(minX, minY, maxX, maxY).inflate(width * 2);
   }
 
   void _drawSelectionBounds(Canvas canvas, Rect rect) {

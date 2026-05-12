@@ -41,7 +41,7 @@ class SketchRenderer {
         currentWidth / 2,
         paint..style = PaintingStyle.fill,
       );
-} else {
+    } else {
       _drawSmoothLine(canvas, points, paint, width);
     }
   }
@@ -114,34 +114,29 @@ class SketchRenderer {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    bool hasErasers = sketch.lines.any((l) => l.color == 0);
-
-    if (hasErasers) {
-      canvas.saveLayer(null, Paint());
-    }
-
     final selectedSet = selectedLines.toSet();
+    final linesToDraw = <SketchLine>[];
 
     for (final line in sketch.lines) {
       if (selectedSet.contains(line) && skipSelectedLines) {
         continue;
       }
 
-      if (verticalRange != null) {
-        // Simple bounding box check for the line
-        double lineTop = double.infinity;
-        double lineBottom = double.negativeInfinity;
-        for (final p in line.points) {
-          if (p.y < lineTop) lineTop = p.y;
-          if (p.y > lineBottom) lineBottom = p.y;
-        }
-        final halfWidth = line.width / 2;
-        if (lineBottom + halfWidth < verticalRange.top ||
-            lineTop - halfWidth > verticalRange.bottom) {
-          continue;
-        }
+      if (verticalRange != null &&
+          !_lineOverlapsVerticalRange(line, verticalRange)) {
+        continue;
       }
 
+      linesToDraw.add(line);
+    }
+
+    final hasErasers = linesToDraw.any((line) => line.color == 0);
+
+    if (hasErasers) {
+      canvas.saveLayer(_linesBounds(linesToDraw), Paint());
+    }
+
+    for (final line in linesToDraw) {
       drawLine(
         canvas,
         line.points,
@@ -157,6 +152,45 @@ class SketchRenderer {
     }
 
     return recorder.endRecording();
+  }
+
+  bool _lineOverlapsVerticalRange(
+    SketchLine line,
+    ({double top, double bottom}) verticalRange,
+  ) {
+    double lineTop = double.infinity;
+    double lineBottom = double.negativeInfinity;
+
+    for (final point in line.points) {
+      if (point.y < lineTop) lineTop = point.y;
+      if (point.y > lineBottom) lineBottom = point.y;
+    }
+
+    final halfWidth = line.width / 2;
+    return lineBottom + halfWidth >= verticalRange.top &&
+        lineTop - halfWidth <= verticalRange.bottom;
+  }
+
+  Rect? _linesBounds(List<SketchLine> lines) {
+    double minX = double.infinity;
+    double minY = double.infinity;
+    double maxX = double.negativeInfinity;
+    double maxY = double.negativeInfinity;
+    var hasPoint = false;
+
+    for (final line in lines) {
+      final halfWidth = line.width / 2;
+      for (final point in line.points) {
+        hasPoint = true;
+        if (point.x - halfWidth < minX) minX = point.x - halfWidth;
+        if (point.y - halfWidth < minY) minY = point.y - halfWidth;
+        if (point.x + halfWidth > maxX) maxX = point.x + halfWidth;
+        if (point.y + halfWidth > maxY) maxY = point.y + halfWidth;
+      }
+    }
+
+    if (!hasPoint) return null;
+    return Rect.fromLTRB(minX, minY, maxX, maxY).inflate(8);
   }
 
   Future<ui.Image> renderToImage(

@@ -3,7 +3,13 @@ import 'dart:isolate';
 import 'package:scribble/scribble.dart';
 import '../models/canvas_image.dart';
 
-String _serializeSketch(Map<String, dynamic> data) {
+String _serializeSketch(({Sketch sketch, List<CanvasImage> images}) content) {
+  final data = <String, dynamic>{
+    'version': 2,
+    'sketch': content.sketch.toJson(),
+    'images': content.images.map((image) => image.toJson()).toList(),
+  };
+
   return jsonEncode(data);
 }
 
@@ -11,12 +17,7 @@ Future<String> runSerialization(
   Sketch sketch, {
   List<CanvasImage> images = const [],
 }) {
-  final data = <String, dynamic>{
-    'version': 2,
-    'sketch': sketch.toJson(),
-    'images': images.map((image) => image.toJson()).toList(),
-  };
-  return Isolate.run(() => _serializeSketch(data));
+  return Isolate.run(() => _serializeSketch((sketch: sketch, images: images)));
 }
 
 ({Sketch sketch, List<CanvasImage> images}) deserializeNoteContent(
