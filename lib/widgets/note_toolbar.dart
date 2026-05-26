@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
+import '../utils/sketch_bounds.dart';
 import 'color_swatch_button.dart';
 import 'edit_selection_controls.dart';
 
@@ -204,6 +205,8 @@ class _NoteToolbarState extends State<NoteToolbar> {
                   onWidthChangeEnd: () {
                     _applyStyleToSelection(strokeWidth: _editWidth);
                   },
+                  onMirrorX: () => _mirrorSelection(mirrorOverXAxis: true),
+                  onMirrorY: () => _mirrorSelection(mirrorOverXAxis: false),
                 ),
               ],
             ],
@@ -550,6 +553,54 @@ class _NoteToolbarState extends State<NoteToolbar> {
         indices.add(i);
       }
     }
+
+    widget.sketchNotifier.value = Sketch(lines: updatedLines);
+    widget.selectionNotifier.value = newLines;
+    widget.onAction(TransformLinesAction(oldLines, newLines, indices));
+  }
+
+  void _mirrorSelection({required bool mirrorOverXAxis}) {
+    final selected = widget.selectionNotifier.value;
+    if (selected.isEmpty) return;
+
+    final bounds = computeLineBounds(selected);
+    if (bounds == Rect.zero) return;
+
+    final sketch = widget.sketchNotifier.value;
+    final selectedSet = selected.toSet();
+    final updatedLines = [...sketch.lines];
+    final oldLines = <SketchLine>[];
+    final newLines = <SketchLine>[];
+    final indices = <int>[];
+
+    for (int i = 0; i < sketch.lines.length; i++) {
+      final line = sketch.lines[i];
+      if (!selectedSet.contains(line)) continue;
+
+      oldLines.add(line);
+      final updated = line.copyWith(
+        points: line.points.map((p) {
+          if (mirrorOverXAxis) {
+            return Point(
+              p.x,
+              bounds.center.dy - (p.y - bounds.center.dy),
+              pressure: p.pressure,
+            );
+          }
+
+          return Point(
+            bounds.center.dx - (p.x - bounds.center.dx),
+            p.y,
+            pressure: p.pressure,
+          );
+        }).toList(),
+      );
+      newLines.add(updated);
+      updatedLines[i] = updated;
+      indices.add(i);
+    }
+
+    if (newLines.isEmpty) return;
 
     widget.sketchNotifier.value = Sketch(lines: updatedLines);
     widget.selectionNotifier.value = newLines;

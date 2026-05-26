@@ -36,6 +36,8 @@ class PenHandler {
       selectionNotifier.value = [];
     }
 
+    shapeSnapHandler.reset();
+
     currentLineNotifier.value = [
       Point(
         event.localPosition.dx,
@@ -56,6 +58,10 @@ class PenHandler {
     required bool shapeSnappingEnabled,
   }) {
     if (currentLineNotifier.value == null) return;
+
+    if (shapeSnappingEnabled && shapeSnapHandler.hasSnappedShape) {
+      return;
+    }
 
     final points = currentLineNotifier.value!;
     if (points.isEmpty) return;
@@ -129,11 +135,11 @@ class PenHandler {
     onAction(AddLinesAction([newLine]));
 
     currentLineNotifier.value = null;
-    shapeSnapHandler.cancelTimer();
+    shapeSnapHandler.reset();
   }
 
   void handlePointerCancel() {
     currentLineNotifier.value = null;
-    shapeSnapHandler.cancelTimer();
+    shapeSnapHandler.reset();
   }
 }

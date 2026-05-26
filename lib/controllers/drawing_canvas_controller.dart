@@ -150,10 +150,13 @@ class DrawingCanvasController extends ChangeNotifier {
 
   List<SketchLine> get selectionForPainting =>
       _resizeHandler.selectionForPainting;
+  List<SketchLine> get selectionForSketchSkipping =>
+      _resizeHandler.selectionForSketchSkipping;
   Rect? get selectionBounds =>
       selectedImageRect ?? _resizeHandler.selectionBounds;
   bool get isDraggingSelection => _selectionHandler.isDraggingSelection;
   bool get isResizingSelection => _resizeHandler.isResizingSelection;
+  bool get isRotatingSelection => _resizeHandler.isRotatingSelection;
   Rect? get selectedImageRect {
     final id = selectedImageIdNotifier.value;
     if (id == null) return null;

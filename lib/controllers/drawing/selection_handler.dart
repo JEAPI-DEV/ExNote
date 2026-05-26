@@ -36,6 +36,11 @@ class SelectionHandler {
         resizeHandler.startResize(handle, bounds, selectedLines);
         return;
       }
+
+      if (resizeHandler.hitTestRotationHandle(position, bounds)) {
+        resizeHandler.startRotation(bounds, selectedLines, position);
+        return;
+      }
     }
 
     if (selectedLines.isNotEmpty &&
@@ -58,6 +63,8 @@ class SelectionHandler {
     if (isDraggingSelection) {
       currentDragOffset = position - dragStart!;
       notifyListeners();
+    } else if (resizeHandler.isRotatingSelection) {
+      resizeHandler.updateRotationPreview(position);
     } else if (resizeHandler.isResizingSelection) {
       resizeHandler.updatePreview(position);
     } else if (lassoPoints != null) {
@@ -75,6 +82,8 @@ class SelectionHandler {
       notifyListeners();
     } else if (resizeHandler.isResizingSelection) {
       resizeHandler.commitResize();
+    } else if (resizeHandler.isRotatingSelection) {
+      resizeHandler.commitRotation();
     } else if (lassoPoints != null) {
       _findSelectedLines();
       lassoPoints = null;

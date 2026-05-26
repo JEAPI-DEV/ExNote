@@ -110,8 +110,11 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
                           isDark: isDark,
                           scale: widget.scale,
                           selectedLines: _controller.selectionForPainting,
+                          selectedLinesToSkip:
+                              _controller.selectionForSketchSkipping,
                           isDraggingSelection: _controller.isDraggingSelection,
                           isResizingSelection: _controller.isResizingSelection,
+                          isRotatingSelection: _controller.isRotatingSelection,
                           cachedPicture: _controller.cachedSketchPicture,
                           onCacheUpdate: _controller.updateCache,
                         ),
@@ -137,12 +140,18 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
                                   _controller.isDraggingSelection,
                               isResizingSelection:
                                   _controller.isResizingSelection,
+                              isRotatingSelection:
+                                  _controller.isRotatingSelection,
                               isDark: isDark,
                               scale: widget.scale,
                               selectionRect: _controller.selectionBounds,
                               showHandles:
                                   widget.currentTool ==
                                   DrawingTool.editSelection,
+                              showRotationHandle:
+                                  widget.currentTool ==
+                                      DrawingTool.editSelection &&
+                                  selectedLines.isNotEmpty,
                               cachedPicture: _controller.cachedSketchPicture,
                             ),
                             child: Container(),

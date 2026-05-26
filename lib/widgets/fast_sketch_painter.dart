@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
+import '../controllers/drawing/resize_handler.dart';
 import '../models/drawing_tool.dart';
 import '../services/sketch_renderer.dart';
 
@@ -9,8 +10,10 @@ class StaticSketchPainter extends CustomPainter {
   final bool isDark;
   final double scale;
   final List<SketchLine> selectedLines;
+  final List<SketchLine>? selectedLinesToSkip;
   final bool isDraggingSelection;
   final bool isResizingSelection;
+  final bool isRotatingSelection;
 
   // Caching
   final ui.Picture? cachedPicture;
@@ -23,8 +26,10 @@ class StaticSketchPainter extends CustomPainter {
     required this.isDark,
     required this.scale,
     this.selectedLines = const [],
+    this.selectedLinesToSkip,
     this.isDraggingSelection = false,
     this.isResizingSelection = false,
+    this.isRotatingSelection = false,
     this.cachedPicture,
     required this.onCacheUpdate,
   });
@@ -36,8 +41,9 @@ class StaticSketchPainter extends CustomPainter {
         sketch: sketch,
         isDark: isDark,
         scale: scale,
-        selectedLines: selectedLines,
-        skipSelectedLines: isDraggingSelection || isResizingSelection,
+        selectedLines: selectedLinesToSkip ?? selectedLines,
+        skipSelectedLines:
+            isDraggingSelection || isResizingSelection || isRotatingSelection,
       );
       onCacheUpdate(picture);
       canvas.drawPicture(picture);
@@ -52,8 +58,10 @@ class StaticSketchPainter extends CustomPainter {
         oldDelegate.isDark != isDark ||
         oldDelegate.scale != scale ||
         oldDelegate.selectedLines != selectedLines ||
+        oldDelegate.selectedLinesToSkip != selectedLinesToSkip ||
         oldDelegate.isDraggingSelection != isDraggingSelection ||
         oldDelegate.isResizingSelection != isResizingSelection ||
+        oldDelegate.isRotatingSelection != isRotatingSelection ||
         oldDelegate.cachedPicture != cachedPicture;
   }
 }
@@ -69,10 +77,12 @@ class ActiveSketchPainter extends CustomPainter {
   final Offset dragOffset;
   final bool isDraggingSelection;
   final bool isResizingSelection;
+  final bool isRotatingSelection;
   final bool isDark;
   final double scale;
   final Rect? selectionRect;
   final bool showHandles;
+  final bool showRotationHandle;
 
   // Needed for pixel eraser masking
   final ui.Picture? cachedPicture;
@@ -90,10 +100,12 @@ class ActiveSketchPainter extends CustomPainter {
     this.dragOffset = Offset.zero,
     this.isDraggingSelection = false,
     this.isResizingSelection = false,
+    this.isRotatingSelection = false,
     this.isDark = false,
     this.scale = 1.0,
     this.selectionRect,
     this.showHandles = false,
+    this.showRotationHandle = false,
     this.cachedPicture,
   });
 
@@ -104,7 +116,8 @@ class ActiveSketchPainter extends CustomPainter {
     // Draw dragged or resized lines
     if (isDraggingSelection ||
         dragOffset != Offset.zero ||
-        isResizingSelection) {
+        isResizingSelection ||
+        isRotatingSelection) {
       for (final line in linesToDraw) {
         canvas.save();
         canvas.translate(dragOffset.dx, dragOffset.dy);
@@ -197,6 +210,10 @@ class ActiveSketchPainter extends CustomPainter {
     if (showHandles) {
       _drawHandles(canvas, shiftedRect);
     }
+
+    if (showRotationHandle) {
+      _drawRotationHandle(canvas, shiftedRect);
+    }
   }
 
   void _drawDashedRect(Canvas canvas, Rect rect, Paint paint) {
@@ -241,6 +258,32 @@ class ActiveSketchPainter extends CustomPainter {
     }
   }
 
+  void _drawRotationHandle(Canvas canvas, Rect rect) {
+    const double handleRadius = 6.0;
+
+    final connectorPaint = Paint()
+      ..color = Colors.blue
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+    final handlePaint = Paint()
+      ..color = Colors.blue
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    final corners = [
+      rect.topLeft,
+      rect.topRight,
+      rect.bottomLeft,
+      rect.bottomRight,
+    ];
+    final handles = ResizeHandler.rotationHandleCenters(rect);
+
+    for (int i = 0; i < handles.length; i++) {
+      canvas.drawLine(corners[i], handles[i], connectorPaint);
+      canvas.drawCircle(handles[i], handleRadius, handlePaint);
+    }
+  }
+
   @override
   bool shouldRepaint(ActiveSketchPainter oldDelegate) {
     return oldDelegate.currentLinePoints != currentLinePoints ||
@@ -253,8 +296,10 @@ class ActiveSketchPainter extends CustomPainter {
         oldDelegate.dragOffset != dragOffset ||
         oldDelegate.isDraggingSelection != isDraggingSelection ||
         oldDelegate.isResizingSelection != isResizingSelection ||
+        oldDelegate.isRotatingSelection != isRotatingSelection ||
         oldDelegate.selectionRect != selectionRect ||
         oldDelegate.showHandles != showHandles ||
+        oldDelegate.showRotationHandle != showRotationHandle ||
         oldDelegate.isDark != isDark ||
         oldDelegate.scale != scale ||
         oldDelegate.cachedPicture != cachedPicture;

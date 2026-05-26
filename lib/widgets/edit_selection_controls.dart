@@ -7,6 +7,8 @@ class EditSelectionControls extends StatelessWidget {
   final ValueChanged<Color> onColorChanged;
   final ValueChanged<double> onWidthChanged;
   final VoidCallback onWidthChangeEnd;
+  final VoidCallback onMirrorX;
+  final VoidCallback onMirrorY;
 
   const EditSelectionControls({
     super.key,
@@ -15,6 +17,8 @@ class EditSelectionControls extends StatelessWidget {
     required this.onColorChanged,
     required this.onWidthChanged,
     required this.onWidthChangeEnd,
+    required this.onMirrorX,
+    required this.onMirrorY,
   });
 
   static const _colors = [
@@ -40,7 +44,7 @@ class EditSelectionControls extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.12),
+              color: Colors.black.withValues(alpha: 0.12),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -78,6 +82,23 @@ class EditSelectionControls extends StatelessWidget {
                   onChangeEnd: (_) => onWidthChangeEnd(),
                 ),
               ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.swap_vert),
+              tooltip: 'Mirror over X axis',
+              onPressed: onMirrorX,
+              splashRadius: 18,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 40),
+            ),
+            IconButton(
+              icon: const Icon(Icons.swap_horiz),
+              tooltip: 'Mirror over Y axis',
+              onPressed: onMirrorY,
+              splashRadius: 18,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 40),
             ),
           ],
         ),

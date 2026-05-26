@@ -8,6 +8,9 @@ class ShapeSnapHandler {
 
   Timer? _shapeSnapTimer;
   Offset? _lastPointerPosition;
+  bool _hasSnappedShape = false;
+
+  bool get hasSnappedShape => _hasSnappedShape;
 
   ShapeSnapHandler({required this.currentLineNotifier});
 
@@ -23,6 +26,8 @@ class ShapeSnapHandler {
   }
 
   void startTimer() {
+    if (_hasSnappedShape) return;
+
     _shapeSnapTimer?.cancel();
     _shapeSnapTimer = Timer(
       const Duration(milliseconds: 700),
@@ -40,16 +45,25 @@ class ShapeSnapHandler {
   }
 
   void _triggerShapeSnap() {
+    _shapeSnapTimer = null;
+
     final points = currentLineNotifier.value;
     if (points == null || points.length < 5) return;
 
     final recognized = ShapeRecognizer.recognize(points);
     if (recognized != null) {
       currentLineNotifier.value = recognized.points;
+      _hasSnappedShape = true;
     }
   }
 
-  void dispose() {
+  void reset() {
     cancelTimer();
+    _lastPointerPosition = null;
+    _hasSnappedShape = false;
+  }
+
+  void dispose() {
+    reset();
   }
 }
