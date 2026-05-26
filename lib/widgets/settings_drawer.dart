@@ -9,12 +9,14 @@ class SettingsDrawer extends ConsumerWidget {
   final NoteSettingsController settingsController;
   final VoidCallback? onExportBackup;
   final VoidCallback? onImportBackup;
+  final VoidCallback? onAdjustNoteLook;
 
   const SettingsDrawer({
     super.key,
     required this.settingsController,
     this.onExportBackup,
     this.onImportBackup,
+    this.onAdjustNoteLook,
   });
 
   @override
@@ -148,6 +150,30 @@ class SettingsDrawer extends ConsumerWidget {
                 value: settings.shapeSnappingEnabled,
                 onChanged: (v) => settingsController.update(
                   (s) => s.copyWith(shapeSnappingEnabled: v),
+                ),
+              ),
+              const Divider(),
+
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Adjust note look',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.tune),
+                      title: const Text('Edit note look'),
+                      subtitle: Text(
+                        'Move toolbar, ${settings.toolbarOrientation.name} layout',
+                      ),
+                      onTap: onAdjustNoteLook,
+                    ),
+                  ],
                 ),
               ),
               const Divider(),

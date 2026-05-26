@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
+import '../models/note_settings.dart';
 import '../models/undo_action.dart';
-import '../utils/sketch_bounds.dart';
 import 'color_swatch_button.dart';
-import 'edit_selection_controls.dart';
 
 class NoteToolbar extends StatefulWidget {
   final ValueNotifier<Color> colorNotifier;
@@ -16,6 +15,7 @@ class NoteToolbar extends StatefulWidget {
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
   final Function(UndoAction) onAction;
+  final NoteToolbarOrientation orientation;
 
   const NoteToolbar({
     super.key,
@@ -25,6 +25,7 @@ class NoteToolbar extends StatefulWidget {
     required this.sketchNotifier,
     required this.selectionNotifier,
     required this.onAction,
+    this.orientation = NoteToolbarOrientation.horizontal,
   });
 
   @override
@@ -32,8 +33,6 @@ class NoteToolbar extends StatefulWidget {
 }
 
 class _NoteToolbarState extends State<NoteToolbar> {
-  late Color _editColor;
-  late double _editWidth;
   final GlobalKey _mainColorKey = GlobalKey();
   final GlobalKey _widthPresetButtonKey = GlobalKey();
   final List<double> _widthPresets = [..._defaultWidthPresets];
@@ -61,12 +60,6 @@ class _NoteToolbarState extends State<NoteToolbar> {
   @override
   void initState() {
     super.initState();
-    _editColor = widget.selectionNotifier.value.isNotEmpty
-        ? Color(widget.selectionNotifier.value.first.color)
-        : widget.colorNotifier.value;
-    _editWidth = widget.selectionNotifier.value.isNotEmpty
-        ? widget.selectionNotifier.value.first.width
-        : widget.widthNotifier.value;
     _loadWidthPresets();
   }
 
@@ -85,10 +78,17 @@ class _NoteToolbarState extends State<NoteToolbar> {
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.1)
         : Colors.grey.withValues(alpha: 0.2);
+    final axis = widget.orientation == NoteToolbarOrientation.horizontal
+        ? Axis.horizontal
+        : Axis.vertical;
+    final isVertical = axis == Axis.vertical;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: EdgeInsets.all(isVertical ? 8 : 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: isVertical ? 8 : 16,
+        vertical: 8,
+      ),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(32),
@@ -105,8 +105,8 @@ class _NoteToolbarState extends State<NoteToolbar> {
       child: ValueListenableBuilder<DrawingTool>(
         valueListenable: widget.toolNotifier,
         builder: (context, tool, _) {
-          final isEditSelect = tool == DrawingTool.editSelection;
-          return Row(
+          return Flex(
+            direction: axis,
             mainAxisSize: MainAxisSize.min,
             children: [
               ValueListenableBuilder<Color>(
@@ -124,91 +124,48 @@ class _NoteToolbarState extends State<NoteToolbar> {
                 },
               ),
 
-              const SizedBox(width: 12),
-              _buildDivider(isDark),
-              const SizedBox(width: 12),
+              _gap(axis, isVertical ? 8 : 12),
+              _buildDivider(isDark, axis),
+              _gap(axis, isVertical ? 8 : 12),
 
-              _buildToolButton(context, DrawingTool.pen, Icons.edit, 'Pen'),
-              _buildToolButton(
-                context,
-                DrawingTool.pixelEraser,
-                Icons.cleaning_services,
-                'Eraser',
-              ),
-              _buildToolButton(
-                context,
-                DrawingTool.strokeEraser,
-                Icons.delete_sweep,
-                'Stroke Eraser',
-              ),
-              _buildToolButton(
-                context,
-                DrawingTool.selection,
-                Icons.select_all,
-                'Select',
-              ),
-              _buildToolButton(
-                context,
-                DrawingTool.editSelection,
-                Icons.crop_free,
-                'Edit Select (lasso)',
-              ),
-
-              const SizedBox(width: 12),
-              _buildDivider(isDark),
-              _buildWidthPresetButton(context),
-              const SizedBox(width: 4),
-
-              SizedBox(
-                width: 100,
-                child: ValueListenableBuilder<double>(
-                  valueListenable: widget.widthNotifier,
-                  builder: (context, width, _) => SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 2,
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                      ),
-                      overlayShape: const RoundSliderOverlayShape(
-                        overlayRadius: 14,
-                      ),
-                      showValueIndicator: ShowValueIndicator.onDrag,
-                    ),
-                    child: Slider(
-                      value: width,
-                      min: 1,
-                      max: 20,
-                      divisions: 19,
-                      label: width.round().toString(),
-                      onChanged: (value) {
-                        widget.widthNotifier.value = value;
-                      },
-                    ),
+              Flex(
+                direction: axis,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildToolButton(context, DrawingTool.pen, Icons.edit, 'Pen'),
+                  _buildToolButton(
+                    context,
+                    DrawingTool.pixelEraser,
+                    Icons.cleaning_services,
+                    'Eraser',
                   ),
-                ),
+                  _buildToolButton(
+                    context,
+                    DrawingTool.strokeEraser,
+                    Icons.delete_sweep,
+                    'Stroke Eraser',
+                  ),
+                  _buildToolButton(
+                    context,
+                    DrawingTool.selection,
+                    Icons.select_all,
+                    'Select',
+                  ),
+                  _buildToolButton(
+                    context,
+                    DrawingTool.editSelection,
+                    Icons.crop_free,
+                    'Edit Select (lasso)',
+                  ),
+                ],
               ),
 
-              if (isEditSelect) ...[
-                const SizedBox(width: 12),
-                _buildDivider(isDark),
-                const SizedBox(width: 12),
-                EditSelectionControls(
-                  editColor: _editColor,
-                  editWidth: _editWidth,
-                  onColorChanged: (color) {
-                    setState(() => _editColor = color);
-                    _applyStyleToSelection(color: color);
-                  },
-                  onWidthChanged: (value) {
-                    setState(() => _editWidth = value);
-                  },
-                  onWidthChangeEnd: () {
-                    _applyStyleToSelection(strokeWidth: _editWidth);
-                  },
-                  onMirrorX: () => _mirrorSelection(mirrorOverXAxis: true),
-                  onMirrorY: () => _mirrorSelection(mirrorOverXAxis: false),
-                ),
-              ],
+              _gap(axis, isVertical ? 8 : 12),
+              _buildDivider(isDark, axis),
+              _buildWidthPresetButton(context),
+              _gap(axis, isVertical ? 0 : 4),
+
+              _buildStrokeWidthSlider(axis),
             ],
           );
         },
@@ -228,6 +185,43 @@ class _NoteToolbarState extends State<NoteToolbar> {
       splashRadius: 18,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 40),
+    );
+  }
+
+  Widget _buildStrokeWidthSlider(Axis axis) {
+    final slider = ValueListenableBuilder<double>(
+      valueListenable: widget.widthNotifier,
+      builder: (context, width, _) => SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          trackHeight: 2,
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+          showValueIndicator: ShowValueIndicator.onDrag,
+        ),
+        child: Slider(
+          value: width,
+          min: 1,
+          max: 20,
+          divisions: 19,
+          label: width.round().toString(),
+          onChanged: (value) {
+            widget.widthNotifier.value = value;
+          },
+        ),
+      ),
+    );
+
+    if (axis == Axis.horizontal) {
+      return SizedBox(width: 100, child: slider);
+    }
+
+    return SizedBox(
+      width: 40,
+      height: 100,
+      child: RotatedBox(
+        quarterTurns: -1,
+        child: SizedBox(width: 100, child: slider),
+      ),
     );
   }
 
@@ -493,10 +487,13 @@ class _NoteToolbarState extends State<NoteToolbar> {
     );
   }
 
-  Widget _buildDivider(bool isDark) {
+  Widget _gap(Axis axis, double size) =>
+      axis == Axis.horizontal ? SizedBox(width: size) : SizedBox(height: size);
+
+  Widget _buildDivider(bool isDark, Axis axis) {
     return Container(
-      width: 1,
-      height: 24,
+      width: axis == Axis.horizontal ? 1 : 24,
+      height: axis == Axis.horizontal ? 24 : 1,
       color: isDark
           ? Colors.white.withValues(alpha: 0.1)
           : Colors.grey.withValues(alpha: 0.2),
@@ -527,83 +524,5 @@ class _NoteToolbarState extends State<NoteToolbar> {
         );
       },
     );
-  }
-
-  void _applyStyleToSelection({Color? color, double? strokeWidth}) {
-    final selected = widget.selectionNotifier.value;
-    if (selected.isEmpty) return;
-
-    final sketch = widget.sketchNotifier.value;
-    final selectedSet = selected.toSet();
-    final updatedLines = [...sketch.lines];
-    final oldLines = <SketchLine>[];
-    final newLines = <SketchLine>[];
-    final indices = <int>[];
-
-    for (int i = 0; i < sketch.lines.length; i++) {
-      final line = sketch.lines[i];
-      if (selectedSet.contains(line)) {
-        oldLines.add(line);
-        final updated = line.copyWith(
-          color: color?.toARGB32() ?? line.color,
-          width: strokeWidth ?? line.width,
-        );
-        newLines.add(updated);
-        updatedLines[i] = updated;
-        indices.add(i);
-      }
-    }
-
-    widget.sketchNotifier.value = Sketch(lines: updatedLines);
-    widget.selectionNotifier.value = newLines;
-    widget.onAction(TransformLinesAction(oldLines, newLines, indices));
-  }
-
-  void _mirrorSelection({required bool mirrorOverXAxis}) {
-    final selected = widget.selectionNotifier.value;
-    if (selected.isEmpty) return;
-
-    final bounds = computeLineBounds(selected);
-    if (bounds == Rect.zero) return;
-
-    final sketch = widget.sketchNotifier.value;
-    final selectedSet = selected.toSet();
-    final updatedLines = [...sketch.lines];
-    final oldLines = <SketchLine>[];
-    final newLines = <SketchLine>[];
-    final indices = <int>[];
-
-    for (int i = 0; i < sketch.lines.length; i++) {
-      final line = sketch.lines[i];
-      if (!selectedSet.contains(line)) continue;
-
-      oldLines.add(line);
-      final updated = line.copyWith(
-        points: line.points.map((p) {
-          if (mirrorOverXAxis) {
-            return Point(
-              p.x,
-              bounds.center.dy - (p.y - bounds.center.dy),
-              pressure: p.pressure,
-            );
-          }
-
-          return Point(
-            bounds.center.dx - (p.x - bounds.center.dx),
-            p.y,
-            pressure: p.pressure,
-          );
-        }).toList(),
-      );
-      newLines.add(updated);
-      updatedLines[i] = updated;
-      indices.add(i);
-    }
-
-    if (newLines.isEmpty) return;
-
-    widget.sketchNotifier.value = Sketch(lines: updatedLines);
-    widget.selectionNotifier.value = newLines;
-    widget.onAction(TransformLinesAction(oldLines, newLines, indices));
   }
 }

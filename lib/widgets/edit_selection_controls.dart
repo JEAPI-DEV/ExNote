@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/note_settings.dart';
 import 'color_swatch_button.dart';
 
 class EditSelectionControls extends StatelessWidget {
@@ -9,6 +10,7 @@ class EditSelectionControls extends StatelessWidget {
   final VoidCallback onWidthChangeEnd;
   final VoidCallback onMirrorX;
   final VoidCallback onMirrorY;
+  final NoteToolbarOrientation orientation;
 
   const EditSelectionControls({
     super.key,
@@ -19,6 +21,7 @@ class EditSelectionControls extends StatelessWidget {
     required this.onWidthChangeEnd,
     required this.onMirrorX,
     required this.onMirrorY,
+    this.orientation = NoteToolbarOrientation.horizontal,
   });
 
   static const _colors = [
@@ -34,11 +37,18 @@ class EditSelectionControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final axis = orientation == NoteToolbarOrientation.horizontal
+        ? Axis.horizontal
+        : Axis.vertical;
+    final isVertical = axis == Axis.vertical;
+
     return Material(
       color: Colors.transparent,
       child: Container(
-        margin: const EdgeInsets.only(left: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: isVertical ? 8 : 16,
+          vertical: 8,
+        ),
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(24),
@@ -50,7 +60,8 @@ class EditSelectionControls extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
+        child: Flex(
+          direction: axis,
           mainAxisSize: MainAxisSize.min,
           children: [
             ColorSwatchButton(
@@ -58,50 +69,75 @@ class EditSelectionControls extends StatelessWidget {
               palette: _colors,
               onPick: onColorChanged,
             ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 140,
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 6,
+            _gap(axis, 12),
+            _buildWidthSlider(axis, context),
+            _gap(axis, 8),
+            Flex(
+              direction: axis,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.swap_vert),
+                  tooltip: 'Mirror over X axis',
+                  onPressed: onMirrorX,
+                  splashRadius: 18,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 40,
                   ),
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 14,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.swap_horiz),
+                  tooltip: 'Mirror over Y axis',
+                  onPressed: onMirrorY,
+                  splashRadius: 18,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 40,
                   ),
-                  showValueIndicator: ShowValueIndicator.onDrag,
                 ),
-                child: Slider(
-                  value: editWidth,
-                  min: 1,
-                  max: 20,
-                  divisions: 19,
-                  label: editWidth.round().toString(),
-                  onChanged: onWidthChanged,
-                  onChangeEnd: (_) => onWidthChangeEnd(),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.swap_vert),
-              tooltip: 'Mirror over X axis',
-              onPressed: onMirrorX,
-              splashRadius: 18,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 40),
-            ),
-            IconButton(
-              icon: const Icon(Icons.swap_horiz),
-              tooltip: 'Mirror over Y axis',
-              onPressed: onMirrorY,
-              splashRadius: 18,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 40),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _gap(Axis axis, double size) =>
+      axis == Axis.horizontal ? SizedBox(width: size) : SizedBox(height: size);
+
+  Widget _buildWidthSlider(Axis axis, BuildContext context) {
+    final slider = SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        trackHeight: 2,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+        showValueIndicator: ShowValueIndicator.onDrag,
+      ),
+      child: Slider(
+        value: editWidth,
+        min: 1,
+        max: 20,
+        divisions: 19,
+        label: editWidth.round().toString(),
+        onChanged: onWidthChanged,
+        onChangeEnd: (_) => onWidthChangeEnd(),
+      ),
+    );
+
+    if (axis == Axis.horizontal) {
+      return SizedBox(width: 140, child: slider);
+    }
+
+    return SizedBox(
+      width: 40,
+      height: 140,
+      child: RotatedBox(
+        quarterTurns: -1,
+        child: SizedBox(width: 140, child: slider),
       ),
     );
   }
