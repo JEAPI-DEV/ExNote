@@ -14,6 +14,8 @@ void main() {
       editPopupPositionX: 0.6,
       editPopupPositionY: 0.2,
       editPopupOrientation: NoteToolbarOrientation.vertical,
+      widthPresetPopupPositionX: 0.1,
+      widthPresetPopupPositionY: 0.9,
     );
 
     await settings.save();
@@ -27,6 +29,8 @@ void main() {
     expect(loaded.editPopupPositionX, 0.6);
     expect(loaded.editPopupPositionY, 0.2);
     expect(loaded.editPopupOrientation, NoteToolbarOrientation.vertical);
+    expect(loaded.widthPresetPopupPositionX, 0.1);
+    expect(loaded.widthPresetPopupPositionY, 0.9);
   });
 
   test('clamps look coordinates loaded from preferences', () async {
@@ -35,6 +39,8 @@ void main() {
       'toolbarPositionY': -1.0,
       'editPopupPositionX': 3.0,
       'editPopupPositionY': -2.0,
+      'widthPresetPopupPositionX': 4.0,
+      'widthPresetPopupPositionY': -3.0,
     });
 
     final prefs = await SharedPreferences.getInstance();
@@ -44,6 +50,8 @@ void main() {
     expect(loaded.toolbarPositionY, 0.0);
     expect(loaded.editPopupPositionX, 1.0);
     expect(loaded.editPopupPositionY, 0.0);
+    expect(loaded.widthPresetPopupPositionX, 1.0);
+    expect(loaded.widthPresetPopupPositionY, 0.0);
   });
 
   test('defaults edit popup position to automatic placement', () async {
@@ -55,5 +63,7 @@ void main() {
     expect(loaded.editPopupPositionX, isNull);
     expect(loaded.editPopupPositionY, isNull);
     expect(loaded.editPopupOrientation, NoteToolbarOrientation.horizontal);
+    expect(loaded.widthPresetPopupPositionX, isNull);
+    expect(loaded.widthPresetPopupPositionY, isNull);
   });
 }

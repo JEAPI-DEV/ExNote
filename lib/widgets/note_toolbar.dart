@@ -16,6 +16,7 @@ class NoteToolbar extends StatefulWidget {
   final ValueNotifier<List<SketchLine>> selectionNotifier;
   final Function(UndoAction) onAction;
   final NoteToolbarOrientation orientation;
+  final Offset? widthPresetPopupPosition;
 
   const NoteToolbar({
     super.key,
@@ -26,6 +27,7 @@ class NoteToolbar extends StatefulWidget {
     required this.selectionNotifier,
     required this.onAction,
     this.orientation = NoteToolbarOrientation.horizontal,
+    this.widthPresetPopupPosition,
   });
 
   @override
@@ -280,12 +282,23 @@ class _NoteToolbarState extends State<NoteToolbar> {
     const popupWidth = 244.0;
     const popupHeight = 86.0;
     const editorHeight = 104.0;
-    final popupLeft = (buttonTopLeft.dx + buttonSize.width / 2 - popupWidth / 2)
-        .clamp(8.0, overlayBox.size.width - popupWidth - 8.0);
-    final popupTop = (buttonTopLeft.dy - popupHeight - 12).clamp(
-      8.0,
-      overlayBox.size.height - popupHeight - 8.0,
-    );
+    final savedPopupPosition = widget.widthPresetPopupPosition;
+    final popupLeft = savedPopupPosition == null
+        ? (buttonTopLeft.dx + buttonSize.width / 2 - popupWidth / 2).clamp(
+            8.0,
+            overlayBox.size.width - popupWidth - 8.0,
+          )
+        : (savedPopupPosition.dx * (overlayBox.size.width - popupWidth)).clamp(
+            8.0,
+            overlayBox.size.width - popupWidth - 8.0,
+          );
+    final popupTop = savedPopupPosition == null
+        ? (buttonTopLeft.dy - popupHeight - 12).clamp(
+            8.0,
+            overlayBox.size.height - popupHeight - 8.0,
+          )
+        : (savedPopupPosition.dy * (overlayBox.size.height - popupHeight))
+              .clamp(8.0, overlayBox.size.height - popupHeight - 8.0);
     final editorTop = (popupTop - editorHeight - 8).clamp(
       8.0,
       overlayBox.size.height - editorHeight - 8.0,

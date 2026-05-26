@@ -100,15 +100,14 @@ class NoteManager {
 
   Future<void> saveNote({String? screenshotBase64}) async {
     try {
+      final folders = ref.read(folderProvider);
+      final folderNotifier = ref.read(folderProvider.notifier);
+      final folder = folders.firstWhere((f) => f.id == folderId);
       final sketch = sketchNotifier.value;
       final jsonSketch = await runSerialization(
         sketch,
         images: imagesNotifier.value,
       );
-
-      final folder = ref
-          .read(folderProvider)
-          .firstWhere((f) => f.id == folderId);
 
       String? screenshotPath;
       if (exerciseListId != null && selectionId != null) {
@@ -137,9 +136,12 @@ class NoteManager {
         }
       }
 
-      await ref
-          .read(folderProvider.notifier)
-          .updateNote(folderId, noteId, jsonSketch, screenshotPath);
+      await folderNotifier.updateNote(
+        folderId,
+        noteId,
+        jsonSketch,
+        screenshotPath,
+      );
     } catch (e) {
       debugPrint('Error saving note: $e');
       rethrow;

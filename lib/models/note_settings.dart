@@ -23,6 +23,8 @@ class NoteSettings {
   final double? editPopupPositionX;
   final double? editPopupPositionY;
   final NoteToolbarOrientation editPopupOrientation;
+  final double? widthPresetPopupPositionX;
+  final double? widthPresetPopupPositionY;
 
   const NoteSettings({
     required this.strokeWidth,
@@ -41,6 +43,8 @@ class NoteSettings {
     required this.editPopupPositionX,
     required this.editPopupPositionY,
     required this.editPopupOrientation,
+    required this.widthPresetPopupPositionX,
+    required this.widthPresetPopupPositionY,
   });
 
   const NoteSettings.defaults()
@@ -59,7 +63,9 @@ class NoteSettings {
       toolbarOrientation = NoteToolbarOrientation.horizontal,
       editPopupPositionX = null,
       editPopupPositionY = null,
-      editPopupOrientation = NoteToolbarOrientation.horizontal;
+      editPopupOrientation = NoteToolbarOrientation.horizontal,
+      widthPresetPopupPositionX = null,
+      widthPresetPopupPositionY = null;
 
   factory NoteSettings.fromPrefs(SharedPreferences prefs) {
     final orientationIndex = prefs.getInt('toolbarOrientation');
@@ -110,6 +116,14 @@ class NoteSettings {
               editPopupOrientationIndex < NoteToolbarOrientation.values.length
           ? NoteToolbarOrientation.values[editPopupOrientationIndex]
           : NoteToolbarOrientation.horizontal,
+      widthPresetPopupPositionX: prefs
+          .getDouble('widthPresetPopupPositionX')
+          ?.clamp(0.0, 1.0)
+          .toDouble(),
+      widthPresetPopupPositionY: prefs
+          .getDouble('widthPresetPopupPositionY')
+          ?.clamp(0.0, 1.0)
+          .toDouble(),
     );
   }
 
@@ -136,6 +150,18 @@ class NoteSettings {
           ? prefs.remove('editPopupPositionY')
           : prefs.setDouble('editPopupPositionY', editPopupPositionY!),
       prefs.setInt('editPopupOrientation', editPopupOrientation.index),
+      widthPresetPopupPositionX == null
+          ? prefs.remove('widthPresetPopupPositionX')
+          : prefs.setDouble(
+              'widthPresetPopupPositionX',
+              widthPresetPopupPositionX!,
+            ),
+      widthPresetPopupPositionY == null
+          ? prefs.remove('widthPresetPopupPositionY')
+          : prefs.setDouble(
+              'widthPresetPopupPositionY',
+              widthPresetPopupPositionY!,
+            ),
     ];
     await Future.wait(writes);
   }
@@ -157,6 +183,8 @@ class NoteSettings {
     double? editPopupPositionX,
     double? editPopupPositionY,
     NoteToolbarOrientation? editPopupOrientation,
+    double? widthPresetPopupPositionX,
+    double? widthPresetPopupPositionY,
   }) => NoteSettings(
     strokeWidth: strokeWidth ?? this.strokeWidth,
     gridEnabled: gridEnabled ?? this.gridEnabled,
@@ -174,5 +202,9 @@ class NoteSettings {
     editPopupPositionX: editPopupPositionX ?? this.editPopupPositionX,
     editPopupPositionY: editPopupPositionY ?? this.editPopupPositionY,
     editPopupOrientation: editPopupOrientation ?? this.editPopupOrientation,
+    widthPresetPopupPositionX:
+        widthPresetPopupPositionX ?? this.widthPresetPopupPositionX,
+    widthPresetPopupPositionY:
+        widthPresetPopupPositionY ?? this.widthPresetPopupPositionY,
   );
 }
