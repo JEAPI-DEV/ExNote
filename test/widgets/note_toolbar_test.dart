@@ -50,6 +50,34 @@ void main() {
     expect(size.width, lessThan(100));
   });
 
+  testWidgets('toolbox menu selects graph placement', (tester) async {
+    final toolNotifier = ValueNotifier(DrawingTool.pen);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: NoteToolbar(
+              colorNotifier: ValueNotifier(Colors.black),
+              widthNotifier: ValueNotifier(2),
+              toolNotifier: toolNotifier,
+              sketchNotifier: ValueNotifier(Sketch(lines: const [])),
+              selectionNotifier: ValueNotifier(<SketchLine>[]),
+              onAction: (UndoAction _) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Toolbox'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Graph Creator'));
+    await tester.pumpAndSettle();
+
+    expect(toolNotifier.value, DrawingTool.graphPlacement);
+  });
+
   testWidgets('edit selection controls call mirror actions', (tester) async {
     var mirroredX = false;
     var mirroredY = false;

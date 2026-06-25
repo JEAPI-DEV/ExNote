@@ -3,6 +3,7 @@ import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
 import '../models/canvas_image.dart';
+import '../models/canvas_object.dart';
 import '../controllers/drawing_canvas_controller.dart';
 import 'fast_sketch_painter.dart';
 
@@ -10,7 +11,9 @@ class FastDrawingCanvas extends StatefulWidget {
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
   final ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  final ValueNotifier<List<CanvasObject>> canvasObjectsNotifier;
   final ValueNotifier<String?> selectedImageIdNotifier;
+  final ValueNotifier<String?> selectedObjectIdNotifier;
   final Color currentColor;
   final double currentWidth;
   final DrawingTool currentTool;
@@ -19,13 +22,16 @@ class FastDrawingCanvas extends StatefulWidget {
   final Function(UndoAction) onAction;
   final VoidCallback onContentChanged;
   final ValueChanged<bool>? onStrokeActivityChanged;
+  final ValueChanged<Offset> onGraphPlacementRequested;
 
   const FastDrawingCanvas({
     super.key,
     required this.sketchNotifier,
     required this.selectionNotifier,
     required this.canvasImagesNotifier,
+    required this.canvasObjectsNotifier,
     required this.selectedImageIdNotifier,
+    required this.selectedObjectIdNotifier,
     this.currentColor = Colors.black,
     this.currentWidth = 2.0,
     this.currentTool = DrawingTool.pen,
@@ -34,6 +40,7 @@ class FastDrawingCanvas extends StatefulWidget {
     required this.onAction,
     required this.onContentChanged,
     this.onStrokeActivityChanged,
+    required this.onGraphPlacementRequested,
   });
 
   @override
@@ -50,10 +57,13 @@ class FastDrawingCanvasState extends State<FastDrawingCanvas> {
       sketchNotifier: widget.sketchNotifier,
       selectionNotifier: widget.selectionNotifier,
       canvasImagesNotifier: widget.canvasImagesNotifier,
+      canvasObjectsNotifier: widget.canvasObjectsNotifier,
       selectedImageIdNotifier: widget.selectedImageIdNotifier,
+      selectedObjectIdNotifier: widget.selectedObjectIdNotifier,
       onAction: widget.onAction,
       onContentChanged: widget.onContentChanged,
       onStrokeActivityChanged: widget.onStrokeActivityChanged,
+      onGraphPlacementRequested: widget.onGraphPlacementRequested,
     );
     _updateController();
   }

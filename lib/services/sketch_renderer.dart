@@ -1,7 +1,10 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
+import '../models/canvas_object.dart';
+import '../models/graph_canvas_object.dart';
 import '../models/grid_type.dart';
+import '../widgets/graph_canvas_object_view.dart';
 
 class SketchRenderer {
   void drawLine(
@@ -195,6 +198,7 @@ class SketchRenderer {
 
   Future<ui.Image> renderToImage(
     Sketch sketch, {
+    List<CanvasObject> objects = const [],
     required Size size,
     ui.Image? backgroundImage,
     Rect? backgroundRect,
@@ -250,6 +254,22 @@ class SketchRenderer {
     if (sketchScale != 1.0) {
       canvas.save();
       canvas.scale(sketchScale);
+    }
+
+    for (final object in objects) {
+      if (object is! GraphCanvasObject) continue;
+      if (verticalRange != null &&
+          (object.top > verticalRange.bottom ||
+              object.top + object.height < verticalRange.top)) {
+        continue;
+      }
+      canvas.save();
+      canvas.translate(object.left, object.top);
+      GraphCanvasObjectPainter(
+        graph: object,
+        isDark: isDark,
+      ).paint(canvas, Size(object.width, object.height));
+      canvas.restore();
     }
 
     final picture = renderSketch(

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:scribble/scribble.dart';
+import '../models/canvas_object.dart';
 import '../models/undo_action.dart';
 
 class UndoRedoManager {
@@ -8,9 +9,14 @@ class UndoRedoManager {
   final ValueNotifier<int> historyNotifier = ValueNotifier(0);
 
   final ValueNotifier<Sketch> sketchNotifier;
+  final ValueNotifier<List<CanvasObject>>? objectsNotifier;
   final VoidCallback onStateChanged;
 
-  UndoRedoManager({required this.sketchNotifier, required this.onStateChanged});
+  UndoRedoManager({
+    required this.sketchNotifier,
+    this.objectsNotifier,
+    required this.onStateChanged,
+  });
 
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
@@ -26,8 +32,12 @@ class UndoRedoManager {
     if (_undoStack.isNotEmpty) {
       final action = _undoStack.removeLast();
       final currentLines = List<SketchLine>.from(sketchNotifier.value.lines);
-      action.undo(currentLines);
+      final currentObjects = List<CanvasObject>.from(
+        objectsNotifier?.value ?? const <CanvasObject>[],
+      );
+      action.undo(UndoState(lines: currentLines, objects: currentObjects));
       sketchNotifier.value = Sketch(lines: currentLines);
+      if (objectsNotifier != null) objectsNotifier!.value = currentObjects;
       _redoStack.add(action);
       historyNotifier.value++;
       onStateChanged();
@@ -38,8 +48,12 @@ class UndoRedoManager {
     if (_redoStack.isNotEmpty) {
       final action = _redoStack.removeLast();
       final currentLines = List<SketchLine>.from(sketchNotifier.value.lines);
-      action.redo(currentLines);
+      final currentObjects = List<CanvasObject>.from(
+        objectsNotifier?.value ?? const <CanvasObject>[],
+      );
+      action.redo(UndoState(lines: currentLines, objects: currentObjects));
       sketchNotifier.value = Sketch(lines: currentLines);
+      if (objectsNotifier != null) objectsNotifier!.value = currentObjects;
       _undoStack.add(action);
       historyNotifier.value++;
       onStateChanged();

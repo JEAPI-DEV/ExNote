@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:scribble/scribble.dart';
+import '../../models/canvas_object.dart';
 import '../../models/grid_type.dart';
 import '../../utils/export_directory.dart';
 import '../pdf/a4_note_pdf_renderer.dart';
@@ -27,6 +28,7 @@ class ExportService {
 
   static Future<File> exportToPdf({
     required Sketch sketch,
+    List<CanvasObject> objects = const [],
     required BuildContext context,
     String? filename,
     bool gridEnabled = false,
@@ -39,6 +41,7 @@ class ExportService {
     debugPrint("[ExportService] Starting PDF export...");
     final renderedPages = await A4NotePdfRenderer().renderPages(
       sketch: sketch,
+      objects: objects,
       backgroundImage: backgroundImage,
       backgroundRect: backgroundRect,
       gridEnabled: gridEnabled,

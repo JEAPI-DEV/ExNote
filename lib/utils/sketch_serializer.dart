@@ -2,12 +2,17 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'package:scribble/scribble.dart';
 import '../models/canvas_image.dart';
+import '../models/canvas_object.dart';
 
-String _serializeSketch(({Sketch sketch, List<CanvasImage> images}) content) {
+String _serializeSketch(
+  ({Sketch sketch, List<CanvasImage> images, List<CanvasObject> objects})
+  content,
+) {
   final data = <String, dynamic>{
-    'version': 2,
+    'version': 3,
     'sketch': content.sketch.toJson(),
     'images': content.images.map((image) => image.toJson()).toList(),
+    'objects': content.objects.map((object) => object.toJson()).toList(),
   };
 
   return jsonEncode(data);
@@ -16,13 +21,15 @@ String _serializeSketch(({Sketch sketch, List<CanvasImage> images}) content) {
 Future<String> runSerialization(
   Sketch sketch, {
   List<CanvasImage> images = const [],
+  List<CanvasObject> objects = const [],
 }) {
-  return Isolate.run(() => _serializeSketch((sketch: sketch, images: images)));
+  return Isolate.run(
+    () => _serializeSketch((sketch: sketch, images: images, objects: objects)),
+  );
 }
 
-({Sketch sketch, List<CanvasImage> images}) deserializeNoteContent(
-  String data,
-) {
+({Sketch sketch, List<CanvasImage> images, List<CanvasObject> objects})
+deserializeNoteContent(String data) {
   final decoded = jsonDecode(data) as Map<String, dynamic>;
 
   if (decoded.containsKey('sketch') || decoded.containsKey('images')) {
@@ -30,6 +37,7 @@ Future<String> runSerialization(
         (decoded['sketch'] as Map?)?.cast<String, dynamic>() ??
         const <String, dynamic>{'lines': []};
     final imagesJson = decoded['images'] as List<dynamic>? ?? const [];
+    final objectsJson = decoded['objects'] as List<dynamic>? ?? const [];
     return (
       sketch: Sketch.fromJson(sketchJson),
       images: imagesJson
@@ -38,8 +46,18 @@ Future<String> runSerialization(
                 CanvasImage.fromJson((image as Map).cast<String, dynamic>()),
           )
           .toList(),
+      objects: objectsJson
+          .map(
+            (object) =>
+                CanvasObject.fromJson((object as Map).cast<String, dynamic>()),
+          )
+          .toList(),
     );
   }
 
-  return (sketch: Sketch.fromJson(decoded), images: <CanvasImage>[]);
+  return (
+    sketch: Sketch.fromJson(decoded),
+    images: <CanvasImage>[],
+    objects: <CanvasObject>[],
+  );
 }

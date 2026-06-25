@@ -4,6 +4,7 @@ import 'package:scribble/scribble.dart';
 import '../models/drawing_tool.dart';
 import '../models/undo_action.dart';
 import '../models/canvas_image.dart';
+import '../models/canvas_object.dart';
 import 'drawing/pen_handler.dart';
 import 'drawing/selection_handler.dart';
 import 'drawing/resize_handler.dart';
@@ -14,10 +15,13 @@ class DrawingCanvasController extends ChangeNotifier {
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
   final ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  final ValueNotifier<List<CanvasObject>> canvasObjectsNotifier;
   final ValueNotifier<String?> selectedImageIdNotifier;
+  final ValueNotifier<String?> selectedObjectIdNotifier;
   final Function(UndoAction) onAction;
   final VoidCallback onContentChanged;
   final ValueChanged<bool>? onStrokeActivityChanged;
+  final void Function(Offset) onGraphPlacementRequested;
 
   Color currentColor = Colors.black;
   double currentWidth = 2.0;
@@ -58,22 +62,33 @@ class DrawingCanvasController extends ChangeNotifier {
 
   bool _isDraggingImage = false;
   bool _isResizingImage = false;
+  bool _isDraggingObject = false;
+  bool _isResizingObject = false;
   bool _isStrokeActive = false;
   Offset? _imageDragStart;
   CanvasImage? _imageStart;
+  Offset? _objectDragStart;
+  CanvasObject? _objectStart;
+  Rect? _objectStartRect;
+  ResizeHandle? _objectResizeHandle;
 
   DrawingCanvasController({
     required this.sketchNotifier,
     required this.selectionNotifier,
     required this.canvasImagesNotifier,
+    required this.canvasObjectsNotifier,
     required this.selectedImageIdNotifier,
+    required this.selectedObjectIdNotifier,
     required this.onAction,
     required this.onContentChanged,
     this.onStrokeActivityChanged,
+    required this.onGraphPlacementRequested,
   }) {
     sketchNotifier.addListener(_onSketchChanged);
     canvasImagesNotifier.addListener(notifyListeners);
+    canvasObjectsNotifier.addListener(notifyListeners);
     selectedImageIdNotifier.addListener(notifyListeners);
+    selectedObjectIdNotifier.addListener(notifyListeners);
 
     _shapeSnapHandler = ShapeSnapHandler(
       currentLineNotifier: currentLineNotifier,
@@ -114,7 +129,9 @@ class DrawingCanvasController extends ChangeNotifier {
   void dispose() {
     sketchNotifier.removeListener(_onSketchChanged);
     canvasImagesNotifier.removeListener(notifyListeners);
+    canvasObjectsNotifier.removeListener(notifyListeners);
     selectedImageIdNotifier.removeListener(notifyListeners);
+    selectedObjectIdNotifier.removeListener(notifyListeners);
     _shapeSnapHandler.dispose();
     currentLineNotifier.dispose();
     cachedSketchPicture?.dispose();
@@ -153,7 +170,7 @@ class DrawingCanvasController extends ChangeNotifier {
   List<SketchLine> get selectionForSketchSkipping =>
       _resizeHandler.selectionForSketchSkipping;
   Rect? get selectionBounds =>
-      selectedImageRect ?? _resizeHandler.selectionBounds;
+      selectedObjectRect ?? selectedImageRect ?? _resizeHandler.selectionBounds;
   bool get isDraggingSelection => _selectionHandler.isDraggingSelection;
   bool get isResizingSelection => _resizeHandler.isResizingSelection;
   bool get isRotatingSelection => _resizeHandler.isRotatingSelection;
@@ -164,6 +181,15 @@ class DrawingCanvasController extends ChangeNotifier {
       if (image.id == id) {
         return Rect.fromLTWH(image.left, image.top, image.width, image.height);
       }
+    }
+    return null;
+  }
+
+  Rect? get selectedObjectRect {
+    final id = selectedObjectIdNotifier.value;
+    if (id == null) return null;
+    for (final object in canvasObjectsNotifier.value) {
+      if (object.id == id) return object.bounds;
     }
     return null;
   }
@@ -193,6 +219,7 @@ class DrawingCanvasController extends ChangeNotifier {
       );
       if (rect.contains(position)) {
         selectedImageIdNotifier.value = image.id;
+        selectedObjectIdNotifier.value = null;
         selectionNotifier.value = [];
         _isDraggingImage = true;
         _imageDragStart = position;
@@ -206,11 +233,55 @@ class DrawingCanvasController extends ChangeNotifier {
     return false;
   }
 
+  bool _handleObjectPointerDown(Offset position, {required bool isEditMode}) {
+    final selectedRect = selectedObjectRect;
+    if (isEditMode && selectedRect != null) {
+      final handle = _resizeHandler.hitTestHandle(position, selectedRect);
+      if (handle != null) {
+        _isResizingObject = true;
+        _objectResizeHandle = handle;
+        _objectDragStart = position;
+        _objectStart = _selectedObject;
+        _objectStartRect = selectedRect;
+        selectionNotifier.value = [];
+        selectedImageIdNotifier.value = null;
+        notifyListeners();
+        return true;
+      }
+    }
+
+    for (final object in canvasObjectsNotifier.value.reversed) {
+      if (object.bounds.inflate(4).contains(position)) {
+        selectedObjectIdNotifier.value = object.id;
+        selectedImageIdNotifier.value = null;
+        selectionNotifier.value = [];
+        _isDraggingObject = true;
+        _objectDragStart = position;
+        _objectStart = object;
+        _objectStartRect = object.bounds;
+        notifyListeners();
+        return true;
+      }
+    }
+
+    selectedObjectIdNotifier.value = null;
+    return false;
+  }
+
   CanvasImage? get _selectedImage {
     final id = selectedImageIdNotifier.value;
     if (id == null) return null;
     for (final image in canvasImagesNotifier.value) {
       if (image.id == id) return image;
+    }
+    return null;
+  }
+
+  CanvasObject? get _selectedObject {
+    final id = selectedObjectIdNotifier.value;
+    if (id == null) return null;
+    for (final object in canvasObjectsNotifier.value) {
+      if (object.id == id) return object;
     }
     return null;
   }
@@ -229,6 +300,13 @@ class DrawingCanvasController extends ChangeNotifier {
     canvasImagesNotifier.value = [
       for (final image in canvasImagesNotifier.value)
         if (image.id == updated.id) updated else image,
+    ];
+  }
+
+  void _updateSelectedObject(CanvasObject updated) {
+    canvasObjectsNotifier.value = [
+      for (final object in canvasObjectsNotifier.value)
+        if (object.id == updated.id) updated else object,
     ];
   }
 
@@ -265,6 +343,134 @@ class DrawingCanvasController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _handleObjectPointerMove(Offset position) {
+    final start = _objectStart;
+    final dragStart = _objectDragStart;
+    if (start == null || dragStart == null) return;
+
+    if (_isDraggingObject) {
+      _updateSelectedObject(start.moveBy(position - dragStart));
+    } else if (_isResizingObject && _objectStartRect != null) {
+      final rect = _computeResizedObjectRect(position);
+      _updateSelectedObject(
+        start.copyWithBounds(
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+        ),
+      );
+    }
+  }
+
+  void _finishObjectInteraction() {
+    if (_isDraggingObject || _isResizingObject) {
+      final start = _objectStart;
+      final current = _selectedObject;
+      if (start != null && current != null && start.bounds != current.bounds) {
+        onAction(ReplaceObjectAction(start, current));
+      } else {
+        onContentChanged();
+      }
+    }
+    _isDraggingObject = false;
+    _isResizingObject = false;
+    _objectDragStart = null;
+    _objectStart = null;
+    _objectStartRect = null;
+    _objectResizeHandle = null;
+    notifyListeners();
+  }
+
+  Rect _computeResizedObjectRect(Offset pointer) {
+    final start = _objectStartRect!;
+    var left = start.left;
+    var right = start.right;
+    var top = start.top;
+    var bottom = start.bottom;
+    const minSize = 48.0;
+
+    switch (_objectResizeHandle!) {
+      case ResizeHandle.topLeft:
+        left = pointer.dx;
+        top = pointer.dy;
+      case ResizeHandle.topCenter:
+        top = pointer.dy;
+      case ResizeHandle.topRight:
+        right = pointer.dx;
+        top = pointer.dy;
+      case ResizeHandle.centerLeft:
+        left = pointer.dx;
+      case ResizeHandle.centerRight:
+        right = pointer.dx;
+      case ResizeHandle.bottomLeft:
+        left = pointer.dx;
+        bottom = pointer.dy;
+      case ResizeHandle.bottomCenter:
+        bottom = pointer.dy;
+      case ResizeHandle.bottomRight:
+        right = pointer.dx;
+        bottom = pointer.dy;
+    }
+
+    if ((right - left).abs() < minSize) {
+      if (_objectResizeHandle == ResizeHandle.topLeft ||
+          _objectResizeHandle == ResizeHandle.centerLeft ||
+          _objectResizeHandle == ResizeHandle.bottomLeft) {
+        left = right - minSize;
+      } else {
+        right = left + minSize;
+      }
+    }
+
+    if ((bottom - top).abs() < minSize) {
+      if (_objectResizeHandle == ResizeHandle.topLeft ||
+          _objectResizeHandle == ResizeHandle.topCenter ||
+          _objectResizeHandle == ResizeHandle.topRight) {
+        top = bottom - minSize;
+      } else {
+        bottom = top + minSize;
+      }
+    }
+
+    if (left > right) {
+      final temp = left;
+      left = right;
+      right = temp;
+    }
+    if (top > bottom) {
+      final temp = top;
+      top = bottom;
+      bottom = temp;
+    }
+
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  void _selectObjectFromLasso(List<Offset>? lasso) {
+    if (lasso == null ||
+        lasso.length < 3 ||
+        selectionNotifier.value.isNotEmpty) {
+      return;
+    }
+    final path = Path()..addPolygon(lasso, true);
+    for (final object in canvasObjectsNotifier.value.reversed) {
+      final bounds = object.bounds;
+      final points = [
+        bounds.center,
+        bounds.topLeft,
+        bounds.topRight,
+        bounds.bottomLeft,
+        bounds.bottomRight,
+      ];
+      if (points.any(path.contains)) {
+        selectedObjectIdNotifier.value = object.id;
+        selectedImageIdNotifier.value = null;
+        return;
+      }
+    }
+  }
+
   void handlePointerDown(PointerDownEvent event) {
     if (event.kind != ui.PointerDeviceKind.stylus &&
         event.kind != ui.PointerDeviceKind.invertedStylus) {
@@ -277,9 +483,20 @@ class DrawingCanvasController extends ChangeNotifier {
       return;
     }
 
+    if (currentTool == DrawingTool.graphPlacement) {
+      onGraphPlacementRequested(event.localPosition);
+      return;
+    }
+
     if (currentTool == DrawingTool.selection ||
         currentTool == DrawingTool.editSelection) {
       _setStrokeActivity(true);
+      if (_handleObjectPointerDown(
+        event.localPosition,
+        isEditMode: currentTool == DrawingTool.editSelection,
+      )) {
+        return;
+      }
       if (_handleImagePointerDown(
         event.localPosition,
         isEditMode: currentTool == DrawingTool.editSelection,
@@ -314,8 +531,16 @@ class DrawingCanvasController extends ChangeNotifier {
       return;
     }
 
+    if (currentTool == DrawingTool.graphPlacement) {
+      return;
+    }
+
     if (currentTool == DrawingTool.selection ||
         currentTool == DrawingTool.editSelection) {
+      if (_isDraggingObject || _isResizingObject) {
+        _handleObjectPointerMove(event.localPosition);
+        return;
+      }
       if (_isDraggingImage || _isResizingImage) {
         _handleImagePointerMove(event.localPosition);
         return;
@@ -338,14 +563,27 @@ class DrawingCanvasController extends ChangeNotifier {
       return;
     }
 
+    if (currentTool == DrawingTool.graphPlacement) {
+      return;
+    }
+
     if (currentTool == DrawingTool.selection ||
         currentTool == DrawingTool.editSelection) {
+      if (_isDraggingObject || _isResizingObject) {
+        _finishObjectInteraction();
+        _setStrokeActivity(false);
+        return;
+      }
       if (_isDraggingImage || _isResizingImage) {
         _finishImageInteraction();
         _setStrokeActivity(false);
         return;
       }
+      final lasso = _selectionHandler.lassoPoints == null
+          ? null
+          : List<Offset>.from(_selectionHandler.lassoPoints!);
       _selectionHandler.handlePointerUp();
+      _selectObjectFromLasso(lasso);
       _setStrokeActivity(false);
       return;
     }
@@ -362,6 +600,7 @@ class DrawingCanvasController extends ChangeNotifier {
     _penHandler.handlePointerCancel();
     _selectionHandler.reset();
     _finishImageInteraction();
+    _finishObjectInteraction();
     _eraserHandler.reset();
     _setStrokeActivity(false);
     notifyListeners();

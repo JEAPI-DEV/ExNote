@@ -1,8 +1,16 @@
 import 'package:scribble/scribble.dart';
+import 'canvas_object.dart';
+
+class UndoState {
+  final List<SketchLine> lines;
+  final List<CanvasObject> objects;
+
+  UndoState({required this.lines, required this.objects});
+}
 
 abstract class UndoAction {
-  void undo(List<SketchLine> lines);
-  void redo(List<SketchLine> lines);
+  void undo(UndoState state);
+  void redo(UndoState state);
 }
 
 class AddLinesAction extends UndoAction {
@@ -11,15 +19,15 @@ class AddLinesAction extends UndoAction {
   AddLinesAction(this.lines);
 
   @override
-  void undo(List<SketchLine> currentLines) {
+  void undo(UndoState state) {
     for (final line in lines) {
-      currentLines.remove(line);
+      state.lines.remove(line);
     }
   }
 
   @override
-  void redo(List<SketchLine> currentLines) {
-    currentLines.addAll(lines);
+  void redo(UndoState state) {
+    state.lines.addAll(lines);
   }
 }
 
@@ -30,7 +38,7 @@ class RemoveLinesAction extends UndoAction {
   RemoveLinesAction(this.removedLines, this.originalIndices);
 
   @override
-  void undo(List<SketchLine> lines) {
+  void undo(UndoState state) {
     final indexedLines = <_IndexedLine>[];
     for (int i = 0; i < removedLines.length; i++) {
       indexedLines.add(_IndexedLine(originalIndices[i], removedLines[i]));
@@ -39,15 +47,15 @@ class RemoveLinesAction extends UndoAction {
     indexedLines.sort((a, b) => a.index.compareTo(b.index));
 
     for (final item in indexedLines) {
-      final index = item.index.clamp(0, lines.length);
-      lines.insert(index, item.line);
+      final index = item.index.clamp(0, state.lines.length);
+      state.lines.insert(index, item.line);
     }
   }
 
   @override
-  void redo(List<SketchLine> lines) {
+  void redo(UndoState state) {
     for (final line in removedLines) {
-      lines.remove(line);
+      state.lines.remove(line);
     }
   }
 }
@@ -68,17 +76,74 @@ class ReplaceLinesAction extends UndoAction {
   ReplaceLinesAction(this.oldLines, this.newLines, this.indices);
 
   @override
-  void undo(List<SketchLine> lines) {
+  void undo(UndoState state) {
     for (int i = 0; i < indices.length; i++) {
-      lines[indices[i]] = oldLines[i];
+      state.lines[indices[i]] = oldLines[i];
     }
   }
 
   @override
-  void redo(List<SketchLine> lines) {
+  void redo(UndoState state) {
     for (int i = 0; i < indices.length; i++) {
-      lines[indices[i]] = newLines[i];
+      state.lines[indices[i]] = newLines[i];
     }
+  }
+}
+
+class AddObjectAction extends UndoAction {
+  final CanvasObject object;
+
+  AddObjectAction(this.object);
+
+  @override
+  void undo(UndoState state) {
+    state.objects.removeWhere((item) => item.id == object.id);
+  }
+
+  @override
+  void redo(UndoState state) {
+    state.objects.add(object);
+  }
+}
+
+class RemoveObjectAction extends UndoAction {
+  final CanvasObject object;
+  final int originalIndex;
+
+  RemoveObjectAction(this.object, this.originalIndex);
+
+  @override
+  void undo(UndoState state) {
+    final index = originalIndex.clamp(0, state.objects.length);
+    state.objects.insert(index, object);
+  }
+
+  @override
+  void redo(UndoState state) {
+    state.objects.removeWhere((item) => item.id == object.id);
+  }
+}
+
+class ReplaceObjectAction extends UndoAction {
+  final CanvasObject oldObject;
+  final CanvasObject newObject;
+
+  ReplaceObjectAction(this.oldObject, this.newObject);
+
+  @override
+  void undo(UndoState state) {
+    _replace(state.objects, oldObject);
+  }
+
+  @override
+  void redo(UndoState state) {
+    _replace(state.objects, newObject);
+  }
+
+  void _replace(List<CanvasObject> objects, CanvasObject replacement) {
+    final index = objects.indexWhere((item) => item.id == replacement.id);
+    if (index == -1) return;
+    objects[index] = replacement;
   }
 }
 

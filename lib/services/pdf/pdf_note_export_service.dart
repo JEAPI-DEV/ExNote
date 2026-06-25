@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -6,8 +5,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart' as pdfx;
-import 'package:scribble/scribble.dart';
 import '../../models/exercise_list.dart';
+import '../../utils/sketch_serializer.dart';
 import '../storage_service.dart';
 import '../settings_service.dart';
 import 'a4_note_pdf_renderer.dart';
@@ -121,13 +120,15 @@ class PdfNoteExportService {
       final noteData = await _storage.loadNote(s.noteId);
       if (noteData == null) continue;
 
-      Sketch sketch;
-      try {
-        sketch = Sketch.fromJson(jsonDecode(noteData));
-      } catch (e) {
-        debugPrint('Error parsing sketch for note ${s.noteId}: $e');
-        continue;
-      }
+      final content = (() {
+        try {
+          return deserializeNoteContent(noteData);
+        } catch (e) {
+          debugPrint('Error parsing sketch for note ${s.noteId}: $e');
+          return null;
+        }
+      })();
+      if (content == null) continue;
 
       ui.Image? bgImage;
       Rect? bgRect;
@@ -148,7 +149,8 @@ class PdfNoteExportService {
       List<A4RenderedNotePage> renderedPages;
       try {
         renderedPages = await _noteRenderer.renderPages(
-          sketch: sketch,
+          sketch: content.sketch,
+          objects: content.objects,
           backgroundImage: bgImage,
           backgroundRect: bgRect,
           gridEnabled: settings.gridEnabled,

@@ -159,6 +159,7 @@ class _NoteToolbarState extends State<NoteToolbar> {
                     Icons.crop_free,
                     'Edit Select (lasso)',
                   ),
+                  _buildToolboxButton(context),
                 ],
               ),
 
@@ -534,6 +535,42 @@ class _NoteToolbarState extends State<NoteToolbar> {
           tooltip: tooltip,
           splashRadius: 20,
           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        );
+      },
+    );
+  }
+
+  Widget _buildToolboxButton(BuildContext context) {
+    return ValueListenableBuilder<DrawingTool>(
+      valueListenable: widget.toolNotifier,
+      builder: (context, currentTool, _) {
+        final isSelected = currentTool == DrawingTool.graphPlacement;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final activeColor = Theme.of(context).colorScheme.secondary;
+        final inactiveColor = isDark ? Colors.white54 : Colors.black54;
+
+        return PopupMenuButton<String>(
+          icon: const Icon(Icons.widgets_outlined),
+          color: Theme.of(context).cardColor,
+          tooltip: 'Toolbox',
+          iconColor: isSelected ? activeColor : inactiveColor,
+          onSelected: (value) {
+            if (value == 'graph') {
+              widget.toolNotifier.value = DrawingTool.graphPlacement;
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(
+              value: 'graph',
+              child: Row(
+                children: [
+                  Icon(Icons.show_chart, size: 18),
+                  SizedBox(width: 12),
+                  Text('Graph Creator'),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );

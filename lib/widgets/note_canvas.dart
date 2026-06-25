@@ -7,7 +7,10 @@ import '../models/grid_type.dart';
 import '../models/selection.dart';
 import '../models/undo_action.dart';
 import '../models/canvas_image.dart';
+import '../models/canvas_object.dart';
+import '../models/graph_canvas_object.dart';
 import 'fast_drawing_canvas.dart';
+import 'graph_canvas_object_view.dart';
 import 'grid_painter.dart';
 import 'zoomable_canvas_wrapper.dart';
 
@@ -25,11 +28,15 @@ class NoteCanvas extends StatefulWidget {
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<SketchLine>> selectionNotifier;
   final ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  final ValueNotifier<List<CanvasObject>> canvasObjectsNotifier;
   final ValueNotifier<String?> selectedImageIdNotifier;
+  final ValueNotifier<String?> selectedObjectIdNotifier;
   final bool shapeSnappingEnabled;
   final Function(UndoAction) onAction;
   final VoidCallback onContentChanged;
   final ValueChanged<bool>? onStrokeActivityChanged;
+  final ValueChanged<Offset> onGraphPlacementRequested;
+  final ValueChanged<GraphCanvasObject> onConfigureGraph;
 
   const NoteCanvas({
     super.key,
@@ -46,11 +53,15 @@ class NoteCanvas extends StatefulWidget {
     required this.sketchNotifier,
     required this.selectionNotifier,
     required this.canvasImagesNotifier,
+    required this.canvasObjectsNotifier,
     required this.selectedImageIdNotifier,
+    required this.selectedObjectIdNotifier,
     required this.shapeSnappingEnabled,
     required this.onAction,
     required this.onContentChanged,
     this.onStrokeActivityChanged,
+    required this.onGraphPlacementRequested,
+    required this.onConfigureGraph,
   });
 
   @override
@@ -184,6 +195,28 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                 },
                               ),
                             ),
+                            Positioned.fill(
+                              child: ValueListenableBuilder<List<CanvasObject>>(
+                                valueListenable: widget.canvasObjectsNotifier,
+                                builder: (context, objects, _) {
+                                  return Stack(
+                                    children: [
+                                      for (final object in objects)
+                                        if (object is GraphCanvasObject)
+                                          Positioned(
+                                            left: object.left,
+                                            top: object.top,
+                                            width: object.width,
+                                            height: object.height,
+                                            child: GraphCanvasObjectView(
+                                              graph: object,
+                                            ),
+                                          ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
                             SizedBox.expand(
                               child: ValueListenableBuilder<Color>(
                                 valueListenable: widget.colorNotifier,
@@ -203,8 +236,12 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                                 widget.selectionNotifier,
                                             canvasImagesNotifier:
                                                 widget.canvasImagesNotifier,
+                                            canvasObjectsNotifier:
+                                                widget.canvasObjectsNotifier,
                                             selectedImageIdNotifier:
                                                 widget.selectedImageIdNotifier,
+                                            selectedObjectIdNotifier:
+                                                widget.selectedObjectIdNotifier,
                                             currentColor: color,
                                             currentWidth: width,
                                             currentTool: tool,
@@ -217,6 +254,8 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                                 widget.onContentChanged,
                                             onStrokeActivityChanged:
                                                 widget.onStrokeActivityChanged,
+                                            onGraphPlacementRequested: widget
+                                                .onGraphPlacementRequested,
                                             shapeSnappingEnabled:
                                                 widget.shapeSnappingEnabled,
                                           );
@@ -227,6 +266,7 @@ class _NoteCanvasState extends State<NoteCanvas> {
                                 },
                               ),
                             ),
+                            _buildSelectedGraphGear(),
                           ],
                         ),
                       ),
@@ -283,6 +323,52 @@ class _NoteCanvasState extends State<NoteCanvas> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildSelectedGraphGear() {
+    return ValueListenableBuilder<DrawingTool>(
+      valueListenable: widget.toolNotifier,
+      builder: (context, tool, _) {
+        return ValueListenableBuilder<String?>(
+          valueListenable: widget.selectedObjectIdNotifier,
+          builder: (context, selectedId, _) {
+            if (selectedId == null || tool != DrawingTool.editSelection) {
+              return const SizedBox.shrink();
+            }
+
+            return ValueListenableBuilder<List<CanvasObject>>(
+              valueListenable: widget.canvasObjectsNotifier,
+              builder: (context, objects, _) {
+                GraphCanvasObject? graph;
+                for (final object in objects) {
+                  if (object is GraphCanvasObject && object.id == selectedId) {
+                    graph = object;
+                    break;
+                  }
+                }
+                if (graph == null) return const SizedBox.shrink();
+                final selectedGraph = graph;
+
+                return Positioned(
+                  left: selectedGraph.left + selectedGraph.width / 2 - 18,
+                  top: (selectedGraph.top - 42).clamp(0.0, 100000.0),
+                  child: Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    elevation: 6,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      icon: const Icon(Icons.settings, size: 20),
+                      tooltip: 'Graph settings',
+                      onPressed: () => widget.onConfigureGraph(selectedGraph),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

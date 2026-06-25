@@ -1,1 +1,8 @@
-enum DrawingTool { pen, pixelEraser, strokeEraser, selection, editSelection }
+enum DrawingTool {
+  pen,
+  pixelEraser,
+  strokeEraser,
+  selection,
+  editSelection,
+  graphPlacement,
+}

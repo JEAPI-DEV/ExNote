@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:scribble/scribble.dart';
 
+import '../../models/canvas_object.dart';
 import '../../models/grid_type.dart';
 import '../../utils/pdf_split_calculator.dart';
 import '../../utils/sketch_bounds.dart';
@@ -60,10 +61,12 @@ class A4NotePdfRenderer {
 
   static A4NotePageLayout calculateLayout({
     required Sketch sketch,
+    List<CanvasObject> objects = const [],
     Rect? backgroundRect,
   }) {
     final contentRect = _calculateContentRect(
       sketch: sketch,
+      objects: objects,
       backgroundRect: backgroundRect,
     );
     final exportScale = math.min(1.0, pageFormat.width / contentRect.width);
@@ -111,6 +114,7 @@ class A4NotePdfRenderer {
 
   Future<List<A4RenderedNotePage>> renderPages({
     required Sketch sketch,
+    List<CanvasObject> objects = const [],
     required bool gridEnabled,
     required GridType gridType,
     required double gridSpacing,
@@ -120,6 +124,7 @@ class A4NotePdfRenderer {
   }) async {
     final layout = calculateLayout(
       sketch: sketch,
+      objects: objects,
       backgroundRect: backgroundRect,
     );
     final pages = <A4RenderedNotePage>[];
@@ -128,6 +133,7 @@ class A4NotePdfRenderer {
     for (final segment in layout.segments) {
       final image = await _renderer.renderToImage(
         sketch,
+        objects: objects,
         size: Size(
           pageFormat.width * pixelRatio,
           segment.drawHeight * pixelRatio,
@@ -164,6 +170,7 @@ class A4NotePdfRenderer {
 
   static Rect _calculateContentRect({
     required Sketch sketch,
+    List<CanvasObject> objects = const [],
     Rect? backgroundRect,
   }) {
     final hasSketch = sketch.lines.any((line) => line.points.isNotEmpty);
@@ -177,16 +184,22 @@ class A4NotePdfRenderer {
           : contentRect.expandToInclude(backgroundRect);
     }
 
+    for (final object in objects) {
+      contentRect = contentRect == null
+          ? object.bounds
+          : contentRect.expandToInclude(object.bounds);
+    }
+
     if (contentRect == null) {
       return Rect.fromLTWH(0, 0, pageFormat.width, pageFormat.height);
     }
 
     final horizontalPadding = contentRect.width > 0
         ? math.min(contentRect.width * 0.02, 12.0)
-        : 8.0;
+        : 20.0;
     final verticalPadding = contentRect.height > 0
         ? math.min(contentRect.height * 0.04, 24.0)
-        : 16.0;
+        : 20.0;
     return Rect.fromLTRB(
       contentRect.left - horizontalPadding,
       contentRect.top - verticalPadding,

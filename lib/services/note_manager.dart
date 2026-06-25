@@ -8,6 +8,7 @@ import '../providers/folder_provider.dart';
 import '../utils/undo_redo_manager.dart';
 import '../utils/sketch_serializer.dart';
 import '../models/canvas_image.dart';
+import '../models/canvas_object.dart';
 
 class NoteManager {
   final WidgetRef ref;
@@ -18,6 +19,7 @@ class NoteManager {
 
   final ValueNotifier<Sketch> sketchNotifier;
   final ValueNotifier<List<CanvasImage>> imagesNotifier;
+  final ValueNotifier<List<CanvasObject>> objectsNotifier;
   final UndoRedoManager undoRedoManager;
 
   NoteManager({
@@ -28,6 +30,7 @@ class NoteManager {
     required this.noteId,
     required this.sketchNotifier,
     required this.imagesNotifier,
+    required this.objectsNotifier,
     required this.undoRedoManager,
   });
 
@@ -63,6 +66,7 @@ class NoteManager {
 
           sketchNotifier.value = content.sketch;
           imagesNotifier.value = content.images;
+          objectsNotifier.value = content.objects;
           undoRedoManager.clear();
         } catch (e) {
           debugPrint('Error loading note: $e');
@@ -107,6 +111,7 @@ class NoteManager {
       final jsonSketch = await runSerialization(
         sketch,
         images: imagesNotifier.value,
+        objects: objectsNotifier.value,
       );
 
       String? screenshotPath;

@@ -13,6 +13,9 @@ import '../models/drawing_tool.dart';
 import '../models/right_drawer_content.dart';
 import '../models/selection.dart';
 import '../models/canvas_image.dart';
+import '../models/canvas_object.dart';
+import '../models/graph_canvas_object.dart';
+import '../models/undo_action.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_look_overlay.dart';
 import '../widgets/ai_chat_drawer.dart';
@@ -28,6 +31,7 @@ import '../services/export/export_service.dart';
 import '../services/stylus_shortcut_manager.dart';
 import '../services/backup_service.dart';
 import '../widgets/dialogs/app_dialogs.dart';
+import '../widgets/dialogs/graph_config_dialog.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -51,7 +55,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   late ValueNotifier<Sketch> sketchNotifier;
   late ValueNotifier<List<SketchLine>> selectionNotifier;
   late ValueNotifier<List<CanvasImage>> canvasImagesNotifier;
+  late ValueNotifier<List<CanvasObject>> canvasObjectsNotifier;
   late ValueNotifier<String?> selectedImageIdNotifier;
+  late ValueNotifier<String?> selectedObjectIdNotifier;
   late ValueNotifier<Color> colorNotifier;
   late ValueNotifier<double> widthNotifier;
   late ValueNotifier<DrawingTool> toolNotifier;
@@ -84,7 +90,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     sketchNotifier = ValueNotifier(const Sketch(lines: []));
     selectionNotifier = ValueNotifier([]);
     canvasImagesNotifier = ValueNotifier([]);
+    canvasObjectsNotifier = ValueNotifier([]);
     selectedImageIdNotifier = ValueNotifier(null);
+    selectedObjectIdNotifier = ValueNotifier(null);
     colorNotifier = ValueNotifier(Colors.black);
     widthNotifier = ValueNotifier(2.0);
     toolNotifier = ValueNotifier(DrawingTool.pen);
@@ -93,6 +101,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
     _undoRedoManager = UndoRedoManager(
       sketchNotifier: sketchNotifier,
+      objectsNotifier: canvasObjectsNotifier,
       onStateChanged: _scheduleAutoSave,
     );
 
@@ -122,6 +131,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       noteId: widget.noteId,
       sketchNotifier: sketchNotifier,
       imagesNotifier: canvasImagesNotifier,
+      objectsNotifier: canvasObjectsNotifier,
       undoRedoManager: _undoRedoManager,
     );
 
@@ -141,6 +151,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       if (mounted) setState(() {});
     });
     selectedImageIdNotifier.addListener(() {
+      if (mounted) setState(() {});
+    });
+    selectedObjectIdNotifier.addListener(() {
       if (mounted) setState(() {});
     });
   }
@@ -253,6 +266,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 ? _clipboardManager.deleteSelection
                 : selectedImageIdNotifier.value != null
                 ? _deleteSelectedImage
+                : selectedObjectIdNotifier.value != null
+                ? _deleteSelectedObject
                 : null,
             onChat: () {
               setState(() => _rightDrawerContent = RightDrawerContent.aiChat);
@@ -331,11 +346,19 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                         sketchNotifier: sketchNotifier,
                         selectionNotifier: selectionNotifier,
                         canvasImagesNotifier: canvasImagesNotifier,
+                        canvasObjectsNotifier: canvasObjectsNotifier,
                         selectedImageIdNotifier: selectedImageIdNotifier,
+                        selectedObjectIdNotifier: selectedObjectIdNotifier,
                         shapeSnappingEnabled: settings.shapeSnappingEnabled,
                         onAction: _undoRedoManager.applyAction,
                         onContentChanged: _scheduleAutoSave,
                         onStrokeActivityChanged: _handleStrokeActivityChanged,
+                        onGraphPlacementRequested: (position) {
+                          _placeGraphAt(position);
+                        },
+                        onConfigureGraph: (graph) {
+                          _configureGraph(graph);
+                        },
                       ),
                     NoteLookOverlay(
                       settings: settings,
@@ -411,6 +434,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       );
       canvasImagesNotifier.value = [...canvasImagesNotifier.value, canvasImage];
       selectedImageIdNotifier.value = id;
+      selectedObjectIdNotifier.value = null;
       selectionNotifier.value = [];
       toolNotifier.value = DrawingTool.editSelection;
       _scheduleAutoSave();
@@ -430,6 +454,61 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         .toList();
     selectedImageIdNotifier.value = null;
     _scheduleAutoSave();
+  }
+
+  void _deleteSelectedObject() {
+    final selectedId = selectedObjectIdNotifier.value;
+    if (selectedId == null) return;
+
+    final index = canvasObjectsNotifier.value.indexWhere(
+      (object) => object.id == selectedId,
+    );
+    if (index == -1) return;
+
+    final object = canvasObjectsNotifier.value[index];
+    canvasObjectsNotifier.value = [
+      for (final item in canvasObjectsNotifier.value)
+        if (item.id != selectedId) item,
+    ];
+    selectedObjectIdNotifier.value = null;
+    _undoRedoManager.applyAction(RemoveObjectAction(object, index));
+  }
+
+  Future<void> _placeGraphAt(Offset position) async {
+    final graph = await GraphConfigDialog.show(
+      context: context,
+      initialGraph: GraphConfigDialog.defaultGraph(position),
+      title: 'Create graph',
+    );
+    if (!mounted) return;
+
+    if (graph == null) {
+      toolNotifier.value = DrawingTool.pen;
+      return;
+    }
+
+    canvasObjectsNotifier.value = [...canvasObjectsNotifier.value, graph];
+    selectedObjectIdNotifier.value = graph.id;
+    selectedImageIdNotifier.value = null;
+    selectionNotifier.value = [];
+    toolNotifier.value = DrawingTool.editSelection;
+    _undoRedoManager.applyAction(AddObjectAction(graph));
+  }
+
+  Future<void> _configureGraph(GraphCanvasObject graph) async {
+    final updated = await GraphConfigDialog.show(
+      context: context,
+      initialGraph: graph,
+      title: 'Edit graph',
+    );
+    if (updated == null || !mounted) return;
+
+    canvasObjectsNotifier.value = [
+      for (final object in canvasObjectsNotifier.value)
+        if (object.id == updated.id) updated else object,
+    ];
+    selectedObjectIdNotifier.value = updated.id;
+    _undoRedoManager.applyAction(ReplaceObjectAction(graph, updated));
   }
 
   Future<void> _saveNote({bool captureThumbnail = true}) async {
@@ -524,6 +603,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
       final file = await ExportService.exportToPdf(
         sketch: sketchNotifier.value,
+        objects: canvasObjectsNotifier.value,
         context: context,
         filename: filename,
         gridEnabled: settings.gridEnabled,
