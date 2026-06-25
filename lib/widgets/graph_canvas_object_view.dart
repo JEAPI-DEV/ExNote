@@ -38,8 +38,8 @@ class GraphCanvasObjectPainter extends CustomPainter {
     final plotRect = Rect.fromLTWH(34, 20, size.width - 68, size.height - 52);
     if (plotRect.width <= 0 || plotRect.height <= 0) return;
 
-    if (!GraphExpressionParser.isFiniteRange(graph.xMin, graph.xMax) ||
-        !GraphExpressionParser.isFiniteRange(graph.yMin, graph.yMax)) {
+    if (!GraphExpressionParser.isFiniteRange(_xMin, _xMax) ||
+        !GraphExpressionParser.isFiniteRange(_yMin, _yMax)) {
       _drawText(
         canvas,
         'Invalid graph range',
@@ -108,19 +108,19 @@ class GraphCanvasObjectPainter extends CustomPainter {
       axisPaint,
     );
 
-    final xTicks = _ticks(graph.xMin, graph.xMax, graph.xTick).toList();
-    final yTicks = _ticks(graph.yMin, graph.yMax, graph.yTick).toList();
+    final xTicks = _ticks(_xMin, _xMax, graph.xTick).toList();
+    final yTicks = _ticks(_yMin, _yMax, graph.yTick).toList();
     final xLabelStride = _labelStride(
       graph.xTick,
-      graph.xMin,
-      graph.xMax,
+      _xMin,
+      _xMax,
       plotRect.width,
       32,
     );
     final yLabelStride = _labelStride(
       graph.yTick,
-      graph.yMin,
-      graph.yMax,
+      _yMin,
+      _yMax,
       plotRect.height,
       22,
     );
@@ -206,9 +206,9 @@ class GraphCanvasObjectPainter extends CustomPainter {
 
       for (int i = 0; i <= samples; i++) {
         final t = i / samples;
-        final x = graph.xMin + (graph.xMax - graph.xMin) * t;
+        final x = _xMin + (_xMax - _xMin) * t;
         final y = parsed.evaluate(x);
-        if (y == null || y < graph.yMin || y > graph.yMax) {
+        if (y == null || y < _yMin || y > _yMax) {
           hasStarted = false;
           previous = null;
           continue;
@@ -244,14 +244,17 @@ class GraphCanvasObjectPainter extends CustomPainter {
   }
 
   double _mapX(double x, Rect plotRect) {
-    return plotRect.left +
-        ((x - graph.xMin) / (graph.xMax - graph.xMin)) * plotRect.width;
+    return plotRect.left + ((x - _xMin) / (_xMax - _xMin)) * plotRect.width;
   }
 
   double _mapY(double y, Rect plotRect) {
-    return plotRect.bottom -
-        ((y - graph.yMin) / (graph.yMax - graph.yMin)) * plotRect.height;
+    return plotRect.bottom - ((y - _yMin) / (_yMax - _yMin)) * plotRect.height;
   }
+
+  double get _xMin => graph.xMin * graph.xTick;
+  double get _xMax => graph.xMax * graph.xTick;
+  double get _yMin => graph.yMin * graph.yTick;
+  double get _yMax => graph.yMax * graph.yTick;
 
   String _formatTick(double value) {
     if (value.abs() < 1e-9) return '0';
@@ -261,13 +264,13 @@ class GraphCanvasObjectPainter extends CustomPainter {
   }
 
   double _axisX(Rect plotRect) {
-    if (graph.xMin <= 0 && graph.xMax >= 0) return _mapX(0, plotRect);
-    return graph.xMin > 0 ? plotRect.left : plotRect.right;
+    if (_xMin <= 0 && _xMax >= 0) return _mapX(0, plotRect);
+    return _xMin > 0 ? plotRect.left : plotRect.right;
   }
 
   double _axisY(Rect plotRect) {
-    if (graph.yMin <= 0 && graph.yMax >= 0) return _mapY(0, plotRect);
-    return graph.yMin > 0 ? plotRect.bottom : plotRect.top;
+    if (_yMin <= 0 && _yMax >= 0) return _mapY(0, plotRect);
+    return _yMin > 0 ? plotRect.bottom : plotRect.top;
   }
 
   int _labelStride(
