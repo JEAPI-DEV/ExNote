@@ -17,6 +17,19 @@ import 'note_screen.dart';
 
 enum _PdfViewerMode { view, select, annotate }
 
+/// Multiplier applied to a page's native size when rendering it for display.
+/// Higher values produce crisper text at the cost of more memory per page.
+const double _pdfRenderScale = 3.0;
+
+/// Renders a page as lossless PNG at [_pdfRenderScale] resolution so text stays
+/// sharp when the page is scaled down to fit the viewport.
+Future<PdfPageImage?> _renderPdfPage(PdfPage page) => page.render(
+      width: page.width * _pdfRenderScale,
+      height: page.height * _pdfRenderScale,
+      format: PdfPageImageFormat.png,
+      backgroundColor: '#ffffff',
+    );
+
 class PDFViewerScreen extends ConsumerStatefulWidget {
   final String folderId;
   final String exerciseListId;
@@ -164,6 +177,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                       controller: _pdfController,
                       scrollDirection: Axis.vertical,
                       pageSnapping: false,
+                      renderer: _renderPdfPage,
                       onPageChanged: (page) {
                         _currentPageNumber = page;
                       },
@@ -192,6 +206,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                                 initialScale:
                                     PhotoViewComputedScale.contained * 1.0,
                                 disableGestures: true,
+                                filterQuality: FilterQuality.high,
                                 heroAttributes: PhotoViewHeroAttributes(
                                   tag: '${document.id}-$index',
                                 ),
