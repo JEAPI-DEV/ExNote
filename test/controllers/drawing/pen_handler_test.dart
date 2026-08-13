@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scribble/scribble.dart';
@@ -51,11 +50,8 @@ void main() {
     final snappedPoints = List<Point>.of(currentLineNotifier.value!);
 
     penHandler.handlePointerMove(
-      const PointerMoveEvent(
-        kind: PointerDeviceKind.stylus,
-        position: Offset(250, 250),
-        pressure: 1,
-      ),
+      const Offset(250, 250),
+      pressure: 1,
       scale: 1,
       shapeSnappingEnabled: true,
     );

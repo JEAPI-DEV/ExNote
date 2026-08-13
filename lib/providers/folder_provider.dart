@@ -191,6 +191,25 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     await _storage.saveFolders(state);
   }
 
+  Future<void> updateExerciseList(
+    String folderId,
+    ExerciseList updatedList,
+  ) async {
+    state = [
+      for (final folder in state)
+        if (folder.id == folderId)
+          folder.copyWith(
+            exerciseLists: [
+              for (final list in folder.exerciseLists)
+                if (list.id == updatedList.id) updatedList else list,
+            ],
+          )
+        else
+          folder,
+    ];
+    await _storage.saveFolders(state);
+  }
+
   Future<void> updateNote(
     String folderId,
     String noteId,

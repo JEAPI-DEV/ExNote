@@ -512,7 +512,8 @@ class DrawingCanvasController extends ChangeNotifier {
 
     _setStrokeActivity(true);
     _penHandler.handlePointerDown(
-      event,
+      event.localPosition,
+      pressure: event.pressure,
       currentColor: currentColor,
       currentWidth: currentWidth,
       scale: _scale,
@@ -550,7 +551,8 @@ class DrawingCanvasController extends ChangeNotifier {
     }
 
     _penHandler.handlePointerMove(
-      event,
+      event.localPosition,
+      pressure: event.pressure,
       scale: _scale,
       shapeSnappingEnabled: shapeSnappingEnabled,
     );

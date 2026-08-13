@@ -3,6 +3,7 @@
 A note-taking app with a nice way to link exercises with notes, by allowing the user to select a section in a PDF, screenshotting that section automatically and opening a page with the screenshot in the top left corner of the notes page.
 Some other features also followed, like folders. A seperate Notes section, allows users to create their own notes without linking them to a PDF file. An AI review functionality was added as well, to allow users to let an AI review their work inside the app, though it requires your own OpenRouter key. Chats are deleted upon exiting the notes page.
 There are also a lot of other features including shape snapping, though that feature is still a little bit buggy, grid support, light and dark themes.
+The PDF viewer also supports an annotate mode that lets you draw and erase ink directly on the PDF pages (stored per page) without creating a separate note page.
 The app also allows the user to export their notes as PDFs or export the whole library of notes and exercises, or import notes.
 
 ## Getting Started
@@ -21,7 +22,8 @@ lib
 │   │   ├── selection_handler.dart
 │   │   └── shape_snap_handler.dart
 │   ├── drawing_canvas_controller.dart
-│   └── note_settings_controller.dart
+│   ├── note_settings_controller.dart
+│   └── pdf_annotation_controller.dart
 ├── main.dart
 ├── models
 │   ├── canvas_image.dart
@@ -35,6 +37,7 @@ lib
 │   ├── note.dart
 │   ├── note.g.dart
 │   ├── note_settings.dart
+│   ├── pdf_annotation.dart
 │   ├── right_drawer_content.dart
 │   ├── selection.dart
 │   ├── selection.g.dart
@@ -83,6 +86,7 @@ lib
 │   ├── line_hit_test.dart
 │   ├── page_layout.dart
 │   ├── pdf_coordinate_mapper.dart
+│   ├── pdf_page_geometry.dart
 │   ├── pdf_split_calculator.dart
 │   ├── shape_recognizer.dart
 │   ├── sketch_bounds.dart
@@ -114,6 +118,9 @@ lib
     ├── note_canvas.dart
     ├── note_card.dart
     ├── note_toolbar.dart
+    ├── pdf_annotation_overlay.dart
+    ├── pdf_annotation_painter.dart
+    ├── pdf_annotation_toolbar.dart
     ├── selection_overlay.dart
     ├── settings_drawer.dart
     └── zoomable_canvas_wrapper.dart

@@ -1,14 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:uuid/uuid.dart';
 import '../providers/folder_provider.dart';
 import '../models/selection.dart';
+import '../controllers/pdf_annotation_controller.dart';
 import '../utils/pdf_coordinate_mapper.dart';
 import '../services/pdf/pdf_screenshot_service.dart';
 import '../widgets/selection_overlay.dart';
 import '../widgets/link_overlay_painter.dart';
+import '../widgets/pdf_annotation_overlay.dart';
+import '../widgets/pdf_annotation_toolbar.dart';
 import 'note_screen.dart';
+
+enum _PdfViewerMode { view, select, annotate }
 
 class PDFViewerScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -26,7 +33,8 @@ class PDFViewerScreen extends ConsumerStatefulWidget {
 
 class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   late PdfController _pdfController;
-  bool _isEditingMode = false;
+  late PdfAnnotationController _annotationController;
+  _PdfViewerMode _mode = _PdfViewerMode.view;
   Rect? _selectionRect;
   double _scrollOffset = 0;
   final GlobalKey _pdfViewKey = GlobalKey();
@@ -34,6 +42,8 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
   List<double> _pageWidths = [];
   List<double> _pageHeights = [];
   bool _isProcessing = false;
+  int _currentPageNumber = 1;
+  Timer? _annotationSaveTimer;
 
   @override
   void initState() {
@@ -48,6 +58,12 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     _pdfController = PdfController(
       document: PdfDocument.openFile(list.pdfPath),
     );
+
+    _annotationController = PdfAnnotationController(
+      onContentChanged: _scheduleAnnotationSave,
+    );
+    _annotationController.load(list.annotations);
+
     _loadPageSizes();
   }
 
@@ -70,6 +86,9 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
 
   @override
   void dispose() {
+    _annotationSaveTimer?.cancel();
+    _saveAnnotations();
+    _annotationController.dispose();
     _pdfController.dispose();
     super.dispose();
   }
@@ -89,7 +108,11 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(list.name),
-        backgroundColor: _isEditingMode ? Colors.red.withOpacity(0.1) : null,
+        backgroundColor: _mode == _PdfViewerMode.select
+            ? Colors.red.withOpacity(0.1)
+            : _mode == _PdfViewerMode.annotate
+            ? Colors.blue.withOpacity(0.1)
+            : null,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -141,10 +164,12 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                       controller: _pdfController,
                       scrollDirection: Axis.vertical,
                       pageSnapping: false,
-                      onPageChanged: (page) {},
-                      physics: _isEditingMode
-                          ? const NeverScrollableScrollPhysics()
-                          : const BouncingScrollPhysics(),
+                      onPageChanged: (page) {
+                        _currentPageNumber = page;
+                      },
+                      physics: _mode == _PdfViewerMode.view
+                          ? const BouncingScrollPhysics()
+                          : const NeverScrollableScrollPhysics(),
                       builders: PdfViewBuilders<DefaultBuilderOptions>(
                         options: const DefaultBuilderOptions(),
                         pageBuilder:
@@ -177,7 +202,16 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                   ),
                 ),
               ),
-              if (_isEditingMode)
+              PdfAnnotationOverlay(
+                controller: _annotationController,
+                pageWidths: _pageWidths,
+                pageHeights: _pageHeights,
+                scrollOffset: _scrollOffset,
+                viewSize: viewSize,
+                interactive: _mode == _PdfViewerMode.annotate,
+                isDark: isDark,
+              ),
+              if (_mode == _PdfViewerMode.select)
                 Positioned.fill(
                   child: ExerciseSelectionOverlay(
                     rect: _selectionRect,
@@ -189,17 +223,38 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
                     onConfirm: _confirmSelection,
                     onCancel: () {
                       setState(() {
-                        _isEditingMode = false;
+                        _mode = _PdfViewerMode.view;
                         _selectionRect = null;
                       });
                     },
                   ),
                 ),
+              if (_mode == _PdfViewerMode.annotate)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  right: 8,
+                  child: Center(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: PdfAnnotationToolbar(
+                        controller: _annotationController,
+                        pageCount: _pageWidths.isEmpty ? 1 : _pageWidths.length,
+                        onPreviousPage: () => _goToAnnotatePage(
+                          _annotationController.activePageIndex - 1,
+                        ),
+                        onNextPage: () => _goToAnnotatePage(
+                          _annotationController.activePageIndex + 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               IgnorePointer(
-                ignoring: _isEditingMode,
+                ignoring: _mode != _PdfViewerMode.view,
                 child: GestureDetector(
                   onTapUp: (details) {
-                    if (_isEditingMode) return;
+                    if (_mode != _PdfViewerMode.view) return;
                     if (_pageWidths.isEmpty) return;
 
                     final selection = LinkOverlayPainter.findSelectionAt(
@@ -265,17 +320,101 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
         },
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          setState(() {
-            _isEditingMode = !_isEditingMode;
-            _selectionRect = null;
-          });
-        },
-        child: Icon(_isEditingMode ? Icons.edit_off : Icons.edit),
-        tooltip: _isEditingMode ? 'Exit Editing Mode' : 'Enter Editing Mode',
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FloatingActionButton(
+            heroTag: 'annotateFab',
+            onPressed: _toggleAnnotateMode,
+            backgroundColor: _mode == _PdfViewerMode.annotate
+                ? Theme.of(context).colorScheme.secondary
+                : null,
+            tooltip: _mode == _PdfViewerMode.annotate
+                ? 'Exit Annotate Mode'
+                : 'Annotate Mode',
+            child: Icon(
+              _mode == _PdfViewerMode.annotate
+                  ? Icons.draw
+                  : Icons.draw_outlined,
+            ),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'selectFab',
+            onPressed: _toggleSelectMode,
+            tooltip: _mode == _PdfViewerMode.select
+                ? 'Exit Editing Mode'
+                : 'Enter Editing Mode',
+            child: Icon(
+              _mode == _PdfViewerMode.select ? Icons.edit_off : Icons.edit,
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  void _toggleSelectMode() {
+    setState(() {
+      if (_mode == _PdfViewerMode.select) {
+        _mode = _PdfViewerMode.view;
+      } else {
+        _exitAnnotateMode();
+        _mode = _PdfViewerMode.select;
+      }
+      _selectionRect = null;
+    });
+  }
+
+  void _toggleAnnotateMode() {
+    setState(() {
+      if (_mode == _PdfViewerMode.annotate) {
+        _exitAnnotateMode();
+        _mode = _PdfViewerMode.view;
+      } else {
+        _mode = _PdfViewerMode.annotate;
+        _selectionRect = null;
+        _annotationController.setActivePage(_currentPageNumber - 1);
+      }
+    });
+  }
+
+  void _exitAnnotateMode() {
+    _annotationController.cancelStroke();
+    _saveAnnotations();
+  }
+
+  void _goToAnnotatePage(int pageIndex) {
+    if (pageIndex < 0 || pageIndex >= _pageWidths.length) return;
+    _annotationController.setActivePage(pageIndex);
+    _pdfController.jumpToPage(pageIndex + 1);
+    _scheduleAnnotationSave();
+  }
+
+  void _scheduleAnnotationSave() {
+    _annotationSaveTimer?.cancel();
+    _annotationSaveTimer = Timer(const Duration(seconds: 2), _saveAnnotations);
+  }
+
+  Future<void> _saveAnnotations() async {
+    _annotationSaveTimer?.cancel();
+    try {
+      final folder = ref
+          .read(folderProvider)
+          .firstWhere((f) => f.id == widget.folderId);
+      final list = folder.exerciseLists.firstWhere(
+        (l) => l.id == widget.exerciseListId,
+      );
+      final updatedList = list.copyWith(
+        annotations: _annotationController.snapshot(),
+      );
+      await ref
+          .read(folderProvider.notifier)
+          .updateExerciseList(widget.folderId, updatedList);
+    } catch (e) {
+      debugPrint('Error saving PDF annotations: $e');
+    }
   }
 
   Future<void> _confirmSelection() async {
@@ -372,7 +511,7 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
     if (!mounted) return;
 
     setState(() {
-      _isEditingMode = false;
+      _mode = _PdfViewerMode.view;
       _selectionRect = null;
       _isProcessing = false;
     });

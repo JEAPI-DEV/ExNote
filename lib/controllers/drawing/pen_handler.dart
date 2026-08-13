@@ -26,11 +26,12 @@ class PenHandler {
   });
 
   void handlePointerDown(
-    PointerDownEvent event, {
+    Offset localPosition, {
     required Color currentColor,
     required double currentWidth,
     required double scale,
     required bool shapeSnappingEnabled,
+    double pressure = 0.5,
   }) {
     if (selectionNotifier.value.isNotEmpty) {
       selectionNotifier.value = [];
@@ -40,22 +41,23 @@ class PenHandler {
 
     currentLineNotifier.value = [
       Point(
-        event.localPosition.dx,
-        event.localPosition.dy,
-        pressure: event.pressure,
+        localPosition.dx,
+        localPosition.dy,
+        pressure: pressure,
       ),
     ];
 
     if (shapeSnappingEnabled) {
-      shapeSnapHandler.setLastPosition(event.localPosition);
+      shapeSnapHandler.setLastPosition(localPosition);
       shapeSnapHandler.startTimer();
     }
   }
 
   void handlePointerMove(
-    PointerMoveEvent event, {
+    Offset localPosition, {
     required double scale,
     required bool shapeSnappingEnabled,
+    double pressure = 0.5,
   }) {
     if (currentLineNotifier.value == null) return;
 
@@ -68,9 +70,9 @@ class PenHandler {
 
     final lastPoint = points.last;
     final currentPoint = Point(
-      event.localPosition.dx,
-      event.localPosition.dy,
-      pressure: event.pressure,
+      localPosition.dx,
+      localPosition.dy,
+      pressure: pressure,
     );
 
     final dx = currentPoint.x - lastPoint.x;
@@ -100,7 +102,7 @@ class PenHandler {
     _scheduleCurrentLineNotify();
 
     if (shapeSnappingEnabled) {
-      shapeSnapHandler.onPointerMove(event.localPosition);
+      shapeSnapHandler.onPointerMove(localPosition);
     }
   }
 

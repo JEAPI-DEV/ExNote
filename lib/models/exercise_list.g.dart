@@ -15,6 +15,11 @@ ExerciseList _$ExerciseListFromJson(Map<String, dynamic> json) => ExerciseList(
           ?.map((e) => Selection.fromJson(e as Map<String, dynamic>))
           .toList() ??
       const [],
+  annotations:
+      (json['annotations'] as List<dynamic>?)
+          ?.map((e) => PdfAnnotation.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const [],
 );
 
 Map<String, dynamic> _$ExerciseListToJson(ExerciseList instance) =>
@@ -23,4 +28,5 @@ Map<String, dynamic> _$ExerciseListToJson(ExerciseList instance) =>
       'name': instance.name,
       'pdfPath': instance.pdfPath,
       'selections': instance.selections,
+      'annotations': instance.annotations,
     };
