@@ -18,12 +18,12 @@ class SketchRenderer {
   }) {
     if (points.isEmpty) return;
 
-    final isEraser = isEraserLine || color.value == 0;
+    final isEraser = isEraserLine || color.toARGB32() == 0;
     Color drawColor = color;
     if (!isEraser) {
-      if (isDark && color.value == Colors.black.value) {
+      if (isDark && color.toARGB32() == Colors.black.toARGB32()) {
         drawColor = Colors.white;
-      } else if (!isDark && color.value == Colors.white.value) {
+      } else if (!isDark && color.toARGB32() == Colors.white.toARGB32()) {
         drawColor = Colors.black;
       }
     }
@@ -196,6 +196,17 @@ class SketchRenderer {
     return Rect.fromLTRB(minX, minY, maxX, maxY).inflate(8);
   }
 
+  void drawObject(Canvas canvas, CanvasObject object, {required bool isDark}) {
+    if (object is! GraphCanvasObject) return;
+    canvas.save();
+    canvas.translate(object.left, object.top);
+    GraphCanvasObjectPainter(
+      graph: object,
+      isDark: isDark,
+    ).paint(canvas, Size(object.width, object.height));
+    canvas.restore();
+  }
+
   Future<ui.Image> renderToImage(
     Sketch sketch, {
     List<CanvasObject> objects = const [],
@@ -226,7 +237,7 @@ class SketchRenderer {
     // Draw grid
     if (gridEnabled) {
       final gridPaint = Paint()
-        ..color = (isDark ? Colors.white : Colors.black).withOpacity(0.1)
+        ..color = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.1)
         ..strokeWidth = 1.0 / scale; // Keep grid lines thin
 
       for (double x = -10000; x <= 10000; x += gridSpacing) {
@@ -263,13 +274,7 @@ class SketchRenderer {
               object.top + object.height < verticalRange.top)) {
         continue;
       }
-      canvas.save();
-      canvas.translate(object.left, object.top);
-      GraphCanvasObjectPainter(
-        graph: object,
-        isDark: isDark,
-      ).paint(canvas, Size(object.width, object.height));
-      canvas.restore();
+      drawObject(canvas, object, isDark: isDark);
     }
 
     final picture = renderSketch(
@@ -279,6 +284,7 @@ class SketchRenderer {
       verticalRange: verticalRange,
     );
     canvas.drawPicture(picture);
+    picture.dispose();
 
     if (sketchScale != 1.0) {
       canvas.restore();
@@ -286,10 +292,9 @@ class SketchRenderer {
 
     canvas.restore();
 
-    final img = await recorder.endRecording().toImage(
-      size.width.toInt(),
-      size.height.toInt(),
-    );
+    final output = recorder.endRecording();
+    final img = await output.toImage(size.width.toInt(), size.height.toInt());
+    output.dispose();
     return img;
   }
 }

@@ -40,11 +40,11 @@ class ChatMarkdownStyle {
       listBullet: const TextStyle(color: Colors.white70),
       code: TextStyle(
         color: Colors.white,
-        backgroundColor: Colors.white.withOpacity(0.1),
+        backgroundColor: Colors.white.withValues(alpha: 0.1),
         fontFamily: 'monospace',
       ),
       codeblockDecoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(4),
       ),
       blockquote: const TextStyle(

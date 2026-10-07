@@ -24,6 +24,7 @@ class Selection {
     this.screenshotPath,
   });
 
-  factory Selection.fromJson(Map<String, dynamic> json) => _$SelectionFromJson(json);
+  factory Selection.fromJson(Map<String, dynamic> json) =>
+      _$SelectionFromJson(json);
   Map<String, dynamic> toJson() => _$SelectionToJson(this);
 }

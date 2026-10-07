@@ -24,11 +24,11 @@ const double _pdfRenderScale = 3.0;
 /// Renders a page as lossless PNG at [_pdfRenderScale] resolution so text stays
 /// sharp when the page is scaled down to fit the viewport.
 Future<PdfPageImage?> _renderPdfPage(PdfPage page) => page.render(
-      width: page.width * _pdfRenderScale,
-      height: page.height * _pdfRenderScale,
-      format: PdfPageImageFormat.png,
-      backgroundColor: '#ffffff',
-    );
+  width: page.width * _pdfRenderScale,
+  height: page.height * _pdfRenderScale,
+  format: PdfPageImageFormat.png,
+  backgroundColor: '#ffffff',
+);
 
 class PDFViewerScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -122,9 +122,9 @@ class _PDFViewerScreenState extends ConsumerState<PDFViewerScreen> {
       appBar: AppBar(
         title: Text(list.name),
         backgroundColor: _mode == _PdfViewerMode.select
-            ? Colors.red.withOpacity(0.1)
+            ? Colors.red.withValues(alpha: 0.1)
             : _mode == _PdfViewerMode.annotate
-            ? Colors.blue.withOpacity(0.1)
+            ? Colors.blue.withValues(alpha: 0.1)
             : null,
       ),
       body: LayoutBuilder(

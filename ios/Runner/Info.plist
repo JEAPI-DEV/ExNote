@@ -49,5 +49,9 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record voice notes and dictate messages to your study assistant.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Turn spoken study notes and chat messages into text.</string>
 </dict>
 </plist>

@@ -61,3 +61,8 @@ deserializeNoteContent(String data) {
     objects: <CanvasObject>[],
   );
 }
+
+/// Parsing large lecture canvases must not block editor navigation.
+Future<({Sketch sketch, List<CanvasImage> images, List<CanvasObject> objects})>
+runDeserialization(String data) =>
+    Isolate.run(() => deserializeNoteContent(data));

@@ -1,8 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:scribble/scribble.dart';
 
 import 'package:exnote/controllers/pdf_annotation_controller.dart';
 import 'package:exnote/models/drawing_tool.dart';

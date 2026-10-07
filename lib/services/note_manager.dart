@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:scribble/scribble.dart';
 import '../providers/folder_provider.dart';
@@ -9,9 +9,32 @@ import '../utils/undo_redo_manager.dart';
 import '../utils/sketch_serializer.dart';
 import '../models/canvas_image.dart';
 import '../models/canvas_object.dart';
+import '../models/folder.dart';
+import '../models/note_document.dart';
 
 class NoteManager {
-  final WidgetRef ref;
+  final FolderNotifier folders;
+  Future<void> _pendingSave = Future.value();
+  Future<void> _lastRequestedSave = Future.value();
+  NoteDocument? _savedDocument;
+  NoteDocument? _queuedDocument;
+
+  NoteDocument get _currentDocument => NoteDocument(
+    sketch: sketchNotifier.value,
+    images: List.of(imagesNotifier.value),
+    objects: List.of(objectsNotifier.value),
+  );
+  bool get hasChanges {
+    final reference = _queuedDocument ?? _savedDocument;
+    return reference == null || !reference.hasSameContent(_currentDocument);
+  }
+
+  Future<void> flush() => _lastRequestedSave;
+  bool _closed = false;
+  void close() {
+    _closed = true;
+  }
+
   final String folderId;
   final String? exerciseListId;
   final String? selectionId;
@@ -23,7 +46,7 @@ class NoteManager {
   final UndoRedoManager undoRedoManager;
 
   NoteManager({
-    required this.ref,
+    required this.folders,
     required this.folderId,
     this.exerciseListId,
     this.selectionId,
@@ -36,42 +59,30 @@ class NoteManager {
 
   Future<void> loadNote({required Function(Size) onScreenshotLoaded}) async {
     try {
-      final folder = ref
-          .read(folderProvider)
-          .firstWhere((f) => f.id == folderId);
+      final folder = folders.folderById(folderId);
 
-      String? scribbleData = await ref
-          .read(folderProvider.notifier)
-          .loadNoteData(noteId);
+      String? scribbleData = await folders.loadNoteData(noteId);
 
       if (scribbleData == null || scribbleData.isEmpty) {
         final legacyNote = folder.notes[noteId];
         if (legacyNote != null && legacyNote.scribbleData.isNotEmpty) {
-          debugPrint('Migrating legacy note data for $noteId');
+          // Preserve the stored representation until the user actually edits.
           scribbleData = legacyNote.scribbleData;
-          await ref
-              .read(folderProvider.notifier)
-              .updateNote(
-                folderId,
-                noteId,
-                scribbleData,
-                legacyNote.screenshotPath,
-              );
         }
       }
 
+      if (_closed) return;
       if (scribbleData != null && scribbleData.isNotEmpty) {
-        try {
-          final content = deserializeNoteContent(scribbleData);
+        final content = await runDeserialization(scribbleData);
+        if (_closed) return;
 
-          sketchNotifier.value = content.sketch;
-          imagesNotifier.value = content.images;
-          objectsNotifier.value = content.objects;
-          undoRedoManager.clear();
-        } catch (e) {
-          debugPrint('Error loading note: $e');
-        }
+        sketchNotifier.value = content.sketch;
+        imagesNotifier.value = content.images;
+        objectsNotifier.value = content.objects;
+        undoRedoManager.clear();
       }
+
+      _savedDocument = _currentDocument;
 
       if (exerciseListId != null && selectionId != null) {
         final list = folder.exerciseLists.firstWhere(
@@ -82,36 +93,64 @@ class NoteManager {
         );
 
         if (selection.screenshotPath != null) {
-          final image = Image.file(File(selection.screenshotPath!));
-          image.image
-              .resolve(const ImageConfiguration())
-              .addListener(
-                ImageStreamListener((ImageInfo info, bool _) {
-                  onScreenshotLoaded(
-                    Size(
-                      info.image.width.toDouble() / 2,
-                      info.image.height.toDouble() / 2,
-                    ),
-                  );
-                }),
-              );
+          final codec = await ui.instantiateImageCodec(
+            await File(selection.screenshotPath!).readAsBytes(),
+          );
+          final image = (await codec.getNextFrame()).image;
+          codec.dispose();
+          if (!_closed) {
+            onScreenshotLoaded(Size(image.width / 2, image.height / 2));
+          }
+          image.dispose();
         }
       }
     } catch (e) {
       debugPrint('Error loading note: $e');
+      rethrow;
     }
   }
 
-  Future<void> saveNote({String? screenshotBase64}) async {
+  Future<void> saveNote({String? screenshotBase64}) {
+    // Snapshot synchronously, while editor notifiers are alive. Queue before
+    // serialization so a manual save and autosave cannot reorder handwriting.
+    final folder = folders.folderById(folderId);
+    final document = _currentDocument;
+    _queuedDocument = document;
+    final operation = _pendingSave.then((_) async {
+      if (_savedDocument?.hasSameContent(document) == true) return;
+      await _saveSnapshot(
+        folder,
+        document.sketch,
+        document.images,
+        document.objects,
+        screenshotBase64,
+      );
+      _savedDocument = document;
+    });
+    _lastRequestedSave = operation;
+    _pendingSave = operation.then<void>(
+      (_) {
+        if (identical(_queuedDocument, document)) _queuedDocument = null;
+      },
+      onError: (Object _, StackTrace __) {
+        if (identical(_queuedDocument, document)) _queuedDocument = null;
+      },
+    );
+    return operation;
+  }
+
+  Future<void> _saveSnapshot(
+    Folder folder,
+    Sketch sketch,
+    List<CanvasImage> images,
+    List<CanvasObject> objects,
+    String? screenshotBase64,
+  ) async {
     try {
-      final folders = ref.read(folderProvider);
-      final folderNotifier = ref.read(folderProvider.notifier);
-      final folder = folders.firstWhere((f) => f.id == folderId);
-      final sketch = sketchNotifier.value;
       final jsonSketch = await runSerialization(
         sketch,
-        images: imagesNotifier.value,
-        objects: objectsNotifier.value,
+        images: images,
+        objects: objects,
       );
 
       String? screenshotPath;
@@ -141,12 +180,7 @@ class NoteManager {
         }
       }
 
-      await folderNotifier.updateNote(
-        folderId,
-        noteId,
-        jsonSketch,
-        screenshotPath,
-      );
+      await folders.updateNote(folderId, noteId, jsonSketch, screenshotPath);
     } catch (e) {
       debugPrint('Error saving note: $e');
       rethrow;

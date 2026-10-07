@@ -4,6 +4,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:exnote/models/note_settings.dart';
 
 void main() {
+  test('migrates obsolete model settings to economical GPT-6', () async {
+    SharedPreferences.setMockInitialValues({
+      'aiModel': 'google/gemini-2.0-flash-exp:free',
+    });
+    expect(
+      NoteSettings.fromPrefs(await SharedPreferences.getInstance()).aiModel,
+      'openai/gpt-6-luna',
+    );
+    SharedPreferences.setMockInitialValues({'aiModel': 'openai/gpt-6.1-sol'});
+    expect(
+      NoteSettings.fromPrefs(await SharedPreferences.getInstance()).aiModel,
+      'openai/gpt-6.1-sol',
+    );
+  });
+
   test('saves and loads toolbar look settings', () async {
     SharedPreferences.setMockInitialValues({});
 

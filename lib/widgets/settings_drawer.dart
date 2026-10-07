@@ -4,6 +4,7 @@ import '../providers/theme_provider.dart';
 import '../models/grid_type.dart';
 import '../controllers/note_settings_controller.dart';
 import '../utils/app_config.dart';
+import '../screens/note_library_screen.dart';
 
 class SettingsDrawer extends ConsumerWidget {
   final NoteSettingsController settingsController;
@@ -187,6 +188,11 @@ class SettingsDrawer extends ConsumerWidget {
                       'AI Settings',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
+                    if (settingsController.saveError != null)
+                      Text(
+                        settingsController.saveError!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: settingsController.tokenController,
@@ -207,7 +213,8 @@ class SettingsDrawer extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      value: settings.aiModel,
+                      key: ValueKey(settings.aiModel),
+                      initialValue: settings.aiModel,
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         contentPadding: EdgeInsets.symmetric(
@@ -243,11 +250,22 @@ class SettingsDrawer extends ConsumerWidget {
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Submit Last Image Only'),
                       subtitle: const Text(
-                        'AI will only receive the last captured image',
+                        'Keep only the latest extra screenshot; the complete current note is always included',
                       ),
                       value: settings.submitLastImageOnly,
                       onChanged: (v) => settingsController.update(
                         (s) => s.copyWith(submitLastImageOnly: v),
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.manage_search),
+                      title: const Text('Search and index notes'),
+                      subtitle: const Text('Set up local handwriting analysis'),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NoteLibraryScreen(),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),

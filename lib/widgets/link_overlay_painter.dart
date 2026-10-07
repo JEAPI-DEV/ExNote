@@ -41,7 +41,7 @@ class LinkOverlayPainter extends CustomPainter {
     if (pageWidths.isEmpty || pageHeights.isEmpty) return;
 
     final paint = Paint()
-      ..color = Colors.blue.withOpacity(0.8)
+      ..color = Colors.blue.withValues(alpha: 0.8)
       ..style = PaintingStyle.fill;
 
     final shadowPaint = Paint()

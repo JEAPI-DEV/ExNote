@@ -20,7 +20,8 @@ class ExerciseList {
     this.annotations = const [],
   });
 
-  factory ExerciseList.fromJson(Map<String, dynamic> json) => _$ExerciseListFromJson(json);
+  factory ExerciseList.fromJson(Map<String, dynamic> json) =>
+      _$ExerciseListFromJson(json);
   Map<String, dynamic> toJson() => _$ExerciseListToJson(this);
 
   ExerciseList copyWith({

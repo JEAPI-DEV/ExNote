@@ -40,11 +40,7 @@ class PenHandler {
     shapeSnapHandler.reset();
 
     currentLineNotifier.value = [
-      Point(
-        localPosition.dx,
-        localPosition.dy,
-        pressure: pressure,
-      ),
+      Point(localPosition.dx, localPosition.dy, pressure: pressure),
     ];
 
     if (shapeSnappingEnabled) {
@@ -129,7 +125,7 @@ class PenHandler {
     final currentSketch = sketchNotifier.value;
     final newLine = SketchLine(
       points: currentLinePoints,
-      color: currentTool == DrawingTool.pixelEraser ? 0 : currentColor.value,
+      color: currentTool == DrawingTool.pixelEraser ? 0 : currentColor.toARGB32(),
       width: currentWidth,
     );
 

@@ -37,7 +37,10 @@ class FolderColorPicker extends StatelessWidget {
                   onSelect: () => onColorSelected(null),
                 ),
                 ...FolderColors.palette.map((color) {
-                  final hexString = color.value.toRadixString(16).toUpperCase();
+                  final hexString = color
+                      .toARGB32()
+                      .toRadixString(16)
+                      .toUpperCase();
                   return _buildColorOption(
                     context: context,
                     color: color,
@@ -67,14 +70,15 @@ class FolderColorPicker extends StatelessWidget {
         margin: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: color ?? Theme.of(context).disabledColor.withOpacity(0.1),
+          color:
+              color ?? Theme.of(context).disabledColor.withValues(alpha: 0.1),
           border: isSelected
               ? Border.all(color: Theme.of(context).primaryColor, width: 3)
-              : Border.all(color: Colors.grey.withOpacity(0.5)),
+              : Border.all(color: Colors.grey.withValues(alpha: 0.5)),
           boxShadow: color != null
               ? [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),

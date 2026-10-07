@@ -4,9 +4,13 @@ import '../models/exercise_list.dart';
 import '../models/note.dart';
 import '../services/storage_service.dart';
 import 'package:uuid/uuid.dart';
-import 'dart:io';
+import '../services/backup/backup_merge_service.dart';
 
-final storageServiceProvider = Provider((ref) => StorageService());
+final storageServiceProvider = Provider((ref) {
+  final storage = StorageService();
+  ref.onDispose(storage.dispose);
+  return storage;
+});
 
 final folderProvider = StateNotifierProvider<FolderNotifier, List<Folder>>((
   ref,
@@ -18,13 +22,29 @@ final folderProvider = StateNotifierProvider<FolderNotifier, List<Folder>>((
 class FolderNotifier extends StateNotifier<List<Folder>> {
   final StorageService _storage;
   final _uuid = const Uuid();
+  bool isLoading = true;
+  String? loadError;
 
   FolderNotifier(this._storage) : super([]) {
     loadFolders();
   }
 
+  Folder folderById(String id) => state.firstWhere((folder) => folder.id == id);
+
   Future<void> loadFolders() async {
-    state = await _storage.loadFolders();
+    isLoading = true;
+    loadError = null;
+    try {
+      final loaded = await _storage.loadFolders();
+      if (!mounted) return;
+      isLoading = false;
+      state = loaded;
+    } catch (error) {
+      if (!mounted) return;
+      isLoading = false;
+      loadError = '$error';
+      state = [...state];
+    }
   }
 
   Future<String?> loadNoteData(String noteId) async {
@@ -217,6 +237,12 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     String? screenshotPath,
   ) async {
     await _storage.saveNote(noteId, scribbleData);
+    final existing = folderById(folderId).notes[noteId];
+    if (existing != null &&
+        existing.scribbleData.isEmpty &&
+        (screenshotPath == null || screenshotPath == existing.screenshotPath)) {
+      return; // Ink-only autosaves do not rewrite or rebuild the whole library.
+    }
 
     state = [
       for (final folder in state)
@@ -262,75 +288,10 @@ class FolderNotifier extends StateNotifier<List<Folder>> {
     List<Folder> importedFolders,
     String sourceDirPath,
   ) async {
-    final Map<String, Folder> currentFolders = {for (final f in state) f.id: f};
-
-    for (final imported in importedFolders) {
-      if (currentFolders.containsKey(imported.id)) {
-        final existing = currentFolders[imported.id]!;
-        final mergedNotes = {...existing.notes};
-        for (final noteId in imported.notes.keys) {
-          if (!mergedNotes.containsKey(noteId)) {
-            mergedNotes[noteId] = imported.notes[noteId]!;
-            // Copy the note file if it exists in backup
-            final sourceFile = File('$sourceDirPath/note_$noteId.json');
-            if (await sourceFile.exists()) {
-              await _storage.importNoteFile(noteId, sourceFile);
-            }
-
-            // Copy screenshot if it exists
-            final noteObj = imported.notes[noteId]!;
-            if (noteObj.screenshotPath != null) {
-              final screenshotFile = File(
-                '$sourceDirPath/${noteObj.screenshotPath}',
-              );
-              if (await screenshotFile.exists()) {
-                await _storage.importScreenshot(
-                  noteObj.screenshotPath!,
-                  screenshotFile,
-                );
-              }
-            }
-          }
-        }
-
-        final mergedLists = [...existing.exerciseLists];
-        for (final impList in imported.exerciseLists) {
-          if (!mergedLists.any((l) => l.id == impList.id)) {
-            mergedLists.add(impList);
-          }
-        }
-
-        currentFolders[imported.id] = existing.copyWith(
-          notes: mergedNotes,
-          exerciseLists: mergedLists,
-        );
-      } else {
-        currentFolders[imported.id] = imported;
-        // Copy all note files for this new folder
-        for (final noteId in imported.notes.keys) {
-          final sourceFile = File('$sourceDirPath/note_$noteId.json');
-          if (await sourceFile.exists()) {
-            await _storage.importNoteFile(noteId, sourceFile);
-          }
-
-          // Copy screenshot if it exists
-          final noteObj = imported.notes[noteId]!;
-          if (noteObj.screenshotPath != null) {
-            final screenshotFile = File(
-              '$sourceDirPath/${noteObj.screenshotPath}',
-            );
-            if (await screenshotFile.exists()) {
-              await _storage.importScreenshot(
-                noteObj.screenshotPath!,
-                screenshotFile,
-              );
-            }
-          }
-        }
-      }
-    }
-
-    state = currentFolders.values.toList();
-    await _storage.saveFolders(state);
+    final merged = await BackupMergeService(
+      _storage,
+    ).merge(state, importedFolders, sourceDirPath);
+    await _storage.saveFolders(merged);
+    state = merged;
   }
 }

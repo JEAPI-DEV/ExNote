@@ -79,7 +79,7 @@ class NoteSettings {
       gridSpacing:
           prefs.getDouble('gridSpacing') ?? AppConfig.defaultGridSpacing,
       openRouterToken: prefs.getString('openRouterToken') ?? '',
-      aiModel: prefs.getString('aiModel') ?? AppConfig.defaultAiModel,
+      aiModel: AppConfig.migrateAiModel(prefs.getString('aiModel')),
       tutorEnabled:
           prefs.getBool('tutorEnabled') ?? AppConfig.defaultTutorEnabled,
       submitLastImageOnly:

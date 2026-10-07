@@ -31,7 +31,9 @@ class _ExerciseSelectionOverlayState extends State<ExerciseSelectionOverlay> {
     return Stack(
       children: [
         // Dimmed background
-        Positioned.fill(child: Container(color: Colors.black.withOpacity(0.5))),
+        Positioned.fill(
+          child: Container(color: Colors.black.withValues(alpha: 0.5)),
+        ),
         // Stylus gesture detector for drawing the initial rect or clearing it
         Positioned.fill(
           child: GestureDetector(
@@ -79,7 +81,7 @@ class _ExerciseSelectionOverlayState extends State<ExerciseSelectionOverlay> {
             child: Container(
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.blue, width: 2),
-                color: Colors.blue.withOpacity(0.05),
+                color: Colors.blue.withValues(alpha: 0.05),
               ),
             ),
           ),

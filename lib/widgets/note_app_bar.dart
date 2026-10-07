@@ -14,6 +14,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onBack;
   final VoidCallback? onDelete;
   final VoidCallback onChat;
+  final VoidCallback? onVoiceNote;
   final bool canUndo;
   final bool canRedo;
   final bool canCopy;
@@ -33,6 +34,7 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onSettings,
     required this.onBack,
     required this.onChat,
+    this.onVoiceNote,
     this.onDelete,
     this.canUndo = true,
     this.canRedo = true,
@@ -66,6 +68,13 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: true,
       actions: [
         _buildIconButton(Icons.chat_outlined, onChat, 'AI Chat', iconColor),
+        if (onVoiceNote != null)
+          _buildIconButton(
+            Icons.mic_none,
+            onVoiceNote!,
+            'Voice notes',
+            iconColor,
+          ),
         if (onDelete != null)
           _buildIconButton(
             Icons.delete_outline,
@@ -84,32 +93,32 @@ class NoteAppBar extends StatelessWidget implements PreferredSizeWidget {
           Icons.paste,
           onPaste,
           'Paste',
-          canPaste ? iconColor : iconColor.withOpacity(0.3),
+          canPaste ? iconColor : iconColor.withValues(alpha: 0.3),
           enabled: canPaste,
         ),
         Container(
           margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           width: 1,
-          color: iconColor.withOpacity(0.2),
+          color: iconColor.withValues(alpha: 0.2),
         ),
         _buildIconButton(
           Icons.undo,
           onUndo,
           'Undo',
-          canUndo ? iconColor : iconColor.withOpacity(0.3),
+          canUndo ? iconColor : iconColor.withValues(alpha: 0.3),
           enabled: canUndo,
         ),
         _buildIconButton(
           Icons.redo,
           onRedo,
           'Redo',
-          canRedo ? iconColor : iconColor.withOpacity(0.3),
+          canRedo ? iconColor : iconColor.withValues(alpha: 0.3),
           enabled: canRedo,
         ),
         Container(
           margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           width: 1,
-          color: iconColor.withOpacity(0.2),
+          color: iconColor.withValues(alpha: 0.2),
         ),
         PopupMenuButton<String>(
           icon: Icon(Icons.more_horiz, color: iconColor),

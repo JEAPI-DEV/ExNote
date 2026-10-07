@@ -57,6 +57,7 @@ class ChatHeader extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.close, size: 18, color: Colors.white54),
               onPressed: onClose,
+              tooltip: 'Close assistant',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),

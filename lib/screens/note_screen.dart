@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -32,6 +31,16 @@ import '../services/stylus_shortcut_manager.dart';
 import '../services/backup_service.dart';
 import '../widgets/dialogs/app_dialogs.dart';
 import '../widgets/dialogs/graph_config_dialog.dart';
+import '../providers/note_index_provider.dart';
+import '../providers/voice_note_provider.dart';
+import '../controllers/library_index_controller.dart';
+import '../services/ai/note_chat_context.dart';
+import '../services/ai/note_context_service.dart';
+import '../services/indexing/note_library_source.dart';
+import '../services/notes/note_page_renderer.dart';
+import '../models/note_document.dart';
+import '../widgets/voice_note_sheet.dart';
+import '../controllers/note_autosave_controller.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   final String folderId;
@@ -67,7 +76,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   RightDrawerContent _rightDrawerContent = RightDrawerContent.settings;
 
-  Timer? _autoSaveTimer;
+  late NoteAutosaveController _autosave;
   Size? _screenshotSize;
   final GlobalKey _exportKey = GlobalKey();
 
@@ -78,15 +87,26 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   late UndoRedoManager _undoRedoManager;
   late ClipboardManager _clipboardManager;
   late NoteManager _noteManager;
+  late LibraryIndexController _libraryIndex;
+  late NoteContextService _contextService;
 
   bool _isLoading = true;
   bool _isApplyingSavedStrokeWidth = false;
-  bool _isStrokeActive = false;
-  bool _isAutoSaving = false;
+  bool _canSave = false;
+  bool _leaving = false;
+  bool _allowPop = false;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
+    _libraryIndex = ref.read(noteIndexProvider);
+    _libraryIndex.enterEditor();
+    _contextService = NoteContextService(
+      renderer: NotePageRenderer(),
+      source: _libraryIndex.source,
+      voiceNotes: ref.read(voiceNoteProvider),
+    );
     sketchNotifier = ValueNotifier(const Sketch(lines: []));
     selectionNotifier = ValueNotifier([]);
     canvasImagesNotifier = ValueNotifier([]);
@@ -124,7 +144,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     );
 
     _noteManager = NoteManager(
-      ref: ref,
+      folders: ref.read(folderProvider.notifier),
       folderId: widget.folderId,
       exerciseListId: widget.exerciseListId,
       selectionId: widget.selectionId,
@@ -133,6 +153,20 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       imagesNotifier: canvasImagesNotifier,
       objectsNotifier: canvasObjectsNotifier,
       undoRedoManager: _undoRedoManager,
+    );
+
+    _autosave = NoteAutosaveController(
+      save: () async {
+        if (!_canSave) return;
+        await _noteManager.saveNote();
+      },
+      onError: (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Autosave failed: $error')));
+        }
+      },
     );
 
     _settingsController.load().then((_) {
@@ -159,32 +193,54 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   }
 
   Future<void> _loadNote() async {
-    await _noteManager.loadNote(
-      onScreenshotLoaded: (size) {
-        if (mounted) {
-          setState(() {
-            _screenshotSize = size;
-          });
-        }
-      },
-    );
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+    try {
+      await _noteManager.loadNote(
+        onScreenshotLoaded: (size) {
+          if (mounted) setState(() => _screenshotSize = size);
+        },
+      );
+      _canSave = true;
+    } catch (error) {
+      _loadError = 'Could not open this note: $error';
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _leaveNote() async {
+    if (_leaving) return;
+    _leaving = true;
+    final saved = !_canSave || await _saveNote();
+    _leaving = false;
+    if (!mounted || !saved) return;
+    setState(() => _allowPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop();
+    });
   }
 
   @override
   void dispose() {
-    _autoSaveTimer?.cancel();
-    _saveNote(captureThumbnail: false);
+    _autosave.dispose();
+    _noteManager.close();
+    if (_canSave) {
+      _noteManager
+          .saveNote()
+          .catchError((Object error) {
+            debugPrint('Final note save failed: $error');
+          })
+          .whenComplete(_libraryIndex.leaveEditor);
+    } else {
+      _libraryIndex.leaveEditor();
+    }
     StylusShortcutManager.instance.detach(toolNotifier);
     _settingsController.removeListener(_handleSettingsChanged);
     widthNotifier.removeListener(_saveStrokeWidthSetting);
     sketchNotifier.dispose();
     selectionNotifier.dispose();
     canvasImagesNotifier.dispose();
+    canvasObjectsNotifier.dispose();
+    selectedObjectIdNotifier.dispose();
     selectedImageIdNotifier.dispose();
     colorNotifier.dispose();
     widthNotifier.dispose();
@@ -224,10 +280,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
 
     return PopScope(
-      canPop: true,
-      onPopInvoked: (didPop) async {
-        if (didPop) {
-          await _saveNote();
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
+            _scaffoldKey.currentState?.closeEndDrawer();
+          } else {
+            _leaveNote();
+          }
         }
       },
       child: Listener(
@@ -249,19 +309,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             onExportPng: _exportPng,
             onExportPdf: _exportPdf,
             onSave: () {
-              _autoSaveTimer?.cancel();
+              _autosave.cancel();
               _saveNote();
             },
             onSettings: () {
               setState(() => _rightDrawerContent = RightDrawerContent.settings);
               _scaffoldKey.currentState?.openEndDrawer();
             },
-            onBack: () async {
-              await _saveNote();
-              if (mounted) {
-                Navigator.of(context).pop();
-              }
-            },
+            onBack: _leaveNote,
             onDelete: selectionNotifier.value.isNotEmpty
                 ? _clipboardManager.deleteSelection
                 : selectedImageIdNotifier.value != null
@@ -269,6 +324,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 : selectedObjectIdNotifier.value != null
                 ? _deleteSelectedObject
                 : null,
+            onVoiceNote: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              isDismissible: false,
+              enableDrag: false,
+              builder: (_) => VoiceNoteSheet(
+                noteId: widget.noteId,
+                apiKey: settings.openRouterToken,
+              ),
+            ),
             onChat: () {
               setState(() => _rightDrawerContent = RightDrawerContent.aiChat);
               _scaffoldKey.currentState?.openEndDrawer();
@@ -287,7 +352,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                     isTutorMode: settings.tutorEnabled,
                     submitLastImageOnly: settings.submitLastImageOnly,
                     chatController: _aiChatController,
+                    onClose: () => _scaffoldKey.currentState?.closeEndDrawer(),
                     onCaptureContext: _captureCanvas,
+                    onNoteContext: _buildChatContext,
                     onWidthChanged: (delta) {
                       _settingsController.update(
                         (s) => s.copyWith(
@@ -304,19 +371,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                   settingsController: _settingsController,
                   onAdjustNoteLook: _startNoteLookEdit,
                   onExportBackup: () async {
-                    try {
-                      final file = await ExportService.exportToZip();
-                      if (mounted) {
-                        await Share.shareXFiles([
-                          XFile(file.path),
-                        ], text: 'ExNote backup');
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Export failed: $e')),
-                        );
-                      }
+                    _autosave.cancel();
+                    if (await _saveNote(captureThumbnail: false) && mounted) {
+                      await BackupService.exportBackup(this.context, ref);
                     }
                   },
                   onImportBackup: () =>
@@ -331,6 +388,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                   children: [
                     if (_isLoading)
                       const Center(child: CircularProgressIndicator())
+                    else if (_loadError != null)
+                      Center(child: Text(_loadError!))
                     else
                       NoteCanvas(
                         transformationController: _transformationController,
@@ -383,7 +442,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   void _startNoteLookEdit() {
     if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
-      Navigator.of(context).pop();
+      _scaffoldKey.currentState?.closeEndDrawer();
     }
     _noteLookController.startEditing(_settingsController.settings);
   }
@@ -511,28 +570,30 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     _undoRedoManager.applyAction(ReplaceObjectAction(graph, updated));
   }
 
-  Future<void> _saveNote({bool captureThumbnail = true}) async {
+  Future<bool> _saveNote({bool captureThumbnail = true}) async {
+    if (!_canSave) return false;
     try {
+      if (!_noteManager.hasChanges) {
+        await _noteManager.flush();
+        return true;
+      }
       final screenshot = captureThumbnail ? await _captureCanvas() : null;
       await _noteManager.saveNote(screenshotBase64: screenshot);
-      if (!mounted) return;
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error saving note: $e'),
           backgroundColor: Colors.red,
         ),
       );
+      return false;
     }
   }
 
-  void _handleStrokeActivityChanged(bool isActive) {
-    _isStrokeActive = isActive;
-    if (isActive) {
-      _autoSaveTimer?.cancel();
-    }
-  }
+  void _handleStrokeActivityChanged(bool isActive) =>
+      _autosave.setDrawing(isActive);
 
   void _saveStrokeWidthSetting() {
     if (_isApplyingSavedStrokeWidth) {
@@ -551,7 +612,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     try {
       final file = await ExportService.exportToPng(_exportKey, context);
       if (!mounted) return;
-      await Share.shareXFiles([XFile(file.path)], text: 'Exported note as PNG');
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], text: 'Exported note as PNG'),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -616,9 +679,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       if (!mounted) return;
       AppDialogs.hideProgressDialog(context);
 
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'Exported $filename.pdf');
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], text: 'Exported $filename.pdf'),
+      );
     } catch (e) {
       if (!mounted) return;
       AppDialogs.hideProgressDialog(context);
@@ -667,30 +730,30 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
+  Future<NoteChatContext> _buildChatContext(String query) {
+    final library = LibraryNote.fromFolders(ref.read(folderProvider));
+    final current = library.firstWhere((note) => note.id == widget.noteId);
+    final document = NoteDocument(
+      sketch: sketchNotifier.value,
+      images: List.of(canvasImagesNotifier.value),
+      objects: List.of(canvasObjectsNotifier.value),
+    );
+    return _contextService.build(
+      query: query,
+      current: current,
+      document: document,
+      library: library,
+      indexes: Map.of(_libraryIndex.entries),
+      voiceTexts: Map.of(_libraryIndex.voiceTexts),
+    );
+  }
+
   Future<String?> _captureCanvas() async {
     return await ExportService.captureCanvas(_exportKey);
   }
 
   void _scheduleAutoSave() {
     if (mounted) setState(() {});
-    _autoSaveTimer?.cancel();
-    _autoSaveTimer = Timer(const Duration(seconds: 2), _runAutoSave);
-  }
-
-  void _runAutoSave() {
-    if (_isStrokeActive || _isAutoSaving) {
-      _autoSaveTimer?.cancel();
-      _autoSaveTimer = Timer(const Duration(milliseconds: 750), _runAutoSave);
-      return;
-    }
-
-    _isAutoSaving = true;
-    _saveNote(captureThumbnail: false).whenComplete(() {
-      _isAutoSaving = false;
-      if (_isStrokeActive) {
-        _autoSaveTimer?.cancel();
-        _autoSaveTimer = Timer(const Duration(milliseconds: 750), _runAutoSave);
-      }
-    });
+    _autosave.changed();
   }
 }

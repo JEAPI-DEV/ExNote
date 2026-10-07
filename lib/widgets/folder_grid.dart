@@ -47,12 +47,12 @@ class FolderGrid extends ConsumerWidget {
         final folder = folders[index];
         final colorHex = folder.colorHex;
         final baseColor = colorHex != null
-            ? Color(int.parse(colorHex, radix: 16)).withOpacity(1.0)
+            ? Color(int.parse(colorHex, radix: 16)).withValues(alpha: 1.0)
             : null;
 
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final bgColor = baseColor != null
-            ? baseColor.withOpacity(isDark ? 0.2 : 0.1)
+            ? baseColor.withValues(alpha: isDark ? 0.2 : 0.1)
             : Theme.of(context).cardColor;
         final iconColor =
             baseColor ?? (Theme.of(context).iconTheme.color ?? Colors.blueGrey);
@@ -63,7 +63,7 @@ class FolderGrid extends ConsumerWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: baseColor != null && !isDark
-                ? BorderSide(color: baseColor.withOpacity(0.3), width: 1)
+                ? BorderSide(color: baseColor.withValues(alpha: 0.3), width: 1)
                 : BorderSide.none,
           ),
           child: InkWell(

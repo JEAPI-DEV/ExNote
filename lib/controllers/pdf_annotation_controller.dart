@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:scribble/scribble.dart';
 
@@ -26,19 +25,20 @@ class PdfAnnotationController extends ChangeNotifier {
   final Map<int, Sketch> annotations = {};
 
   /// Sketch of the currently active page, edited live by the handlers.
-  final ValueNotifier<Sketch> activeSketch =
-      ValueNotifier(const Sketch(lines: []));
+  final ValueNotifier<Sketch> activeSketch = ValueNotifier(
+    const Sketch(lines: []),
+  );
 
   /// Pen color for new strokes.
-  final ValueNotifier<Color> colorNotifier =
-      ValueNotifier(Colors.redAccent);
+  final ValueNotifier<Color> colorNotifier = ValueNotifier(Colors.redAccent);
 
   /// Pen width, in page-point units.
   final ValueNotifier<double> widthNotifier = ValueNotifier(2.5);
 
   /// Currently selected tool (pen or stroke eraser).
-  final ValueNotifier<DrawingTool> toolNotifier =
-      ValueNotifier(DrawingTool.pen);
+  final ValueNotifier<DrawingTool> toolNotifier = ValueNotifier(
+    DrawingTool.pen,
+  );
 
   /// In-progress stroke points of the active page, in page-point coordinates.
   final ValueNotifier<List<Point>?> currentLineNotifier =
@@ -56,14 +56,16 @@ class PdfAnnotationController extends ChangeNotifier {
   late final PenHandler _penHandler;
   late final EraserHandler _eraserHandler;
 
-  final ValueNotifier<List<SketchLine>> _selectionNotifier =
-      ValueNotifier(const []);
+  final ValueNotifier<List<SketchLine>> _selectionNotifier = ValueNotifier(
+    const [],
+  );
   final ValueNotifier<String?> _selectedImageIdNotifier = ValueNotifier(null);
 
   // The eraser handler is reused only for its stroke-erasing behavior, so it
   // receives inert image notifiers that never contain anything.
-  final ValueNotifier<List<CanvasImage>> _imagesNotifier =
-      ValueNotifier(const []);
+  final ValueNotifier<List<CanvasImage>> _imagesNotifier = ValueNotifier(
+    const [],
+  );
 
   PdfAnnotationController({required this.onContentChanged}) {
     _shapeSnapHandler = ShapeSnapHandler(
@@ -107,7 +109,8 @@ class PdfAnnotationController extends ChangeNotifier {
         annotations[annotation.pageIndex] = sketch;
       }
     }
-    activeSketch.value = annotations[activePageIndex] ?? const Sketch(lines: []);
+    activeSketch.value =
+        annotations[activePageIndex] ?? const Sketch(lines: []);
     _undoRedoManager.clear();
     notifyListeners();
   }

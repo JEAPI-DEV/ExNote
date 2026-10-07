@@ -48,7 +48,9 @@ class PdfAnnotationPainter extends CustomPainter {
     }
 
     final line = activeLine;
-    if (line != null && line.isNotEmpty && activePageIndex < geometry.pageCount) {
+    if (line != null &&
+        line.isNotEmpty &&
+        activePageIndex < geometry.pageCount) {
       final rect = geometry.rectForPage(activePageIndex);
       canvas.save();
       canvas.translate(rect.offsetX, rect.top);

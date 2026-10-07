@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../../models/note.dart';
 
 class NoteCard extends StatelessWidget {
@@ -22,7 +23,11 @@ class NoteCard extends StatelessWidget {
   Future<File?> _getScreenshotFile() async {
     if (note.screenshotPath == null) return null;
     final appDir = await getApplicationDocumentsDirectory();
-    final file = File('${appDir.path}/${note.screenshotPath}');
+    final file = File(
+      p.isAbsolute(note.screenshotPath!)
+          ? note.screenshotPath!
+          : p.join(appDir.path, note.screenshotPath!),
+    );
     if (await file.exists()) return file;
     return null;
   }

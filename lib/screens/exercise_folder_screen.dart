@@ -188,9 +188,12 @@ class ExerciseFolderScreen extends ConsumerWidget {
 
       if (context.mounted) {
         AppDialogs.hideProgressDialog(context);
-        await Share.shareXFiles([
-          XFile(outputFile.path),
-        ], text: 'Exported ${list.name}');
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(outputFile.path)],
+            text: 'Exported ${list.name}',
+          ),
+        );
       }
     } catch (e) {
       if (context.mounted) {

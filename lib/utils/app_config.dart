@@ -1,15 +1,14 @@
 class AppConfig {
   static const List<Map<String, String>> aiModels = [
-    {'id': 'google/gemini-2.0-flash-exp:free', 'name': 'FREE:Gemini 2.0 Flash'},
-    {'id': 'google/gemini-3-flash-preview', 'name': 'Gemini 3 Flash'},
-    {'id': 'qwen/qwen-vl-max', 'name': 'Qwen VL Max'},
-    {'id': 'openai/gpt-5-mini', 'name': 'GPT-5 Mini'},
-    {'id': 'z-ai/glm-4.6v', 'name': 'GLM 4.6V'},
-    {'id': 'nvidia/nemotron-nano-12b-v2-vl:free', 'name': 'FREE:NV Nano V2'},
-    {'id': 'qwen/qwen3-vl-235b-a22b-thinking', 'name': 'Qwen3 VL 235B'},
+    {'id': 'openai/gpt-6-luna', 'name': 'GPT-6 Luna · economical'},
+    {'id': 'openai/gpt-6.1-sol', 'name': 'GPT-6.1 Sol · advanced'},
+    {'id': 'openai/gpt-6-astra', 'name': 'GPT-6 Astra · highest cost'},
   ];
 
-  static const String defaultAiModel = 'google/gemini-2.0-flash-exp:free';
+  static const String defaultAiModel = 'openai/gpt-6-luna';
+
+  static String migrateAiModel(String? model) =>
+      aiModels.any((entry) => entry['id'] == model) ? model! : defaultAiModel;
   static const double defaultStrokeWidth = 2.0;
   static const double defaultAiDrawerWidth = 320.0;
   static const bool defaultGridEnabled = false;

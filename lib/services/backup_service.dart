@@ -1,19 +1,89 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:archive/archive_io.dart';
+import 'dart:isolate';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/folder.dart';
 import '../providers/folder_provider.dart';
+import 'backup/backup_archive.dart';
+import 'export/zip_backup_service.dart';
+import 'package:share_plus/share_plus.dart';
 
 class BackupService {
+  static bool _exporting = false;
+  static bool _importing = false;
+
+  static Future<void> exportBackup(BuildContext context, WidgetRef ref) async {
+    if (_exporting) return;
+    _exporting = true;
+    final storage = ref.read(storageServiceProvider);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final route = DialogRoute<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: Text('Creating backup'),
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Expanded(child: Text('Saving your library to ZIP…')),
+            ],
+          ),
+        ),
+      ),
+    );
+    unawaited(navigator.push(route));
+    File? file;
+    Object? error;
+    try {
+      await storage.flush();
+      file = await ZipBackupService.createBackup();
+    } catch (exception) {
+      error = exception;
+    } finally {
+      _exporting = false;
+      if (route.isActive) navigator.removeRoute(route);
+    }
+    if (!context.mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Backup failed: $error')));
+      return;
+    }
+    try {
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file!.path)], text: 'ExNote backup'),
+      );
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Backup saved to ${file!.path}; sharing failed: $exception',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   static Future<void> importFromBackup(
     BuildContext context,
     WidgetRef ref,
   ) async {
+    if (_importing) return;
+    _importing = true;
+    final folders = ref.read(folderProvider.notifier);
     Directory? tempDir;
+    DialogRoute<void>? progress;
+    NavigatorState? navigator;
     try {
       // 1. Pick the .zip backup file
       final result = await FilePicker.platform.pickFiles(
@@ -25,6 +95,26 @@ class BackupService {
         return; // User canceled
       }
 
+      if (!context.mounted) return;
+      navigator = Navigator.of(context, rootNavigator: true);
+      progress = DialogRoute<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: Text('Restoring backup'),
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Expanded(child: Text('Restoring notes and recordings…')),
+              ],
+            ),
+          ),
+        ),
+      );
+      unawaited(navigator.push(progress));
       final zipFile = File(result.files.single.path!);
 
       if (context.mounted) {
@@ -40,28 +130,17 @@ class BackupService {
       ).create(recursive: true);
 
       // 3. Extract the ZIP file
-      final bytes = await zipFile.readAsBytes();
-      final archive = ZipDecoder().decodeBytes(bytes);
-
-      for (final file in archive) {
-        final filename = file.name;
-        if (file.isFile) {
-          final data = file.content as List<int>;
-          File('${tempDir.path}/$filename')
-            ..createSync(recursive: true)
-            ..writeAsBytesSync(data);
-        } else {
-          Directory('${tempDir.path}/$filename').createSync(recursive: true);
-        }
-      }
+      await BackupArchive.extract(zipFile.path, tempDir.path);
 
       // 4. Find folders.json (it might be in a subdirectory)
       File? foldersJsonFile;
       String? actualSourcePath;
 
-      final extractedFiles = tempDir.listSync(recursive: true);
-      for (final entity in extractedFiles) {
-        if (entity is File && entity.path.endsWith('folders.json')) {
+      await for (final entity in tempDir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is File && entity.uri.pathSegments.last == 'folders.json') {
           foldersJsonFile = entity;
           actualSourcePath = entity.parent.path;
           break;
@@ -84,15 +163,15 @@ class BackupService {
 
       // 5. Read and parse folders.json
       final contents = await foldersJsonFile.readAsString();
-      final List<dynamic> jsonList = jsonDecode(contents);
-      final importedFolders = jsonList
-          .map((json) => Folder.fromJson(json))
-          .toList();
+      final importedFolders = await Isolate.run(() {
+        final jsonList = jsonDecode(contents) as List;
+        return jsonList
+            .map((json) => Folder.fromJson(Map<String, dynamic>.from(json)))
+            .toList();
+      });
 
       // 6. Call provider to merge
-      await ref
-          .read(folderProvider.notifier)
-          .mergeFromBackup(importedFolders, actualSourcePath!);
+      await folders.mergeFromBackup(importedFolders, actualSourcePath!);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -114,6 +193,10 @@ class BackupService {
         );
       }
     } finally {
+      _importing = false;
+      if (progress?.isActive == true && navigator!.mounted) {
+        navigator.removeRoute(progress!);
+      }
       // 7. Cleanup temp directory
       if (tempDir != null && await tempDir.exists()) {
         try {

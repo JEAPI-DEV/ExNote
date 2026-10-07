@@ -38,7 +38,7 @@ class GridPainter extends CustomPainter {
     // const double spacing = 40.0;
 
     final paint = Paint()
-      ..color = Colors.grey.withOpacity(0.3)
+      ..color = Colors.grey.withValues(alpha: 0.3)
       ..strokeWidth = 1.0;
 
     if (gridType == GridType.grid) {

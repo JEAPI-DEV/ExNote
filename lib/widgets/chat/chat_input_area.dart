@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dictation_button.dart';
 
 class ChatInputArea extends StatelessWidget {
   final TextEditingController textController;
@@ -6,6 +7,7 @@ class ChatInputArea extends StatelessWidget {
   final VoidCallback onSend;
   final VoidCallback onCaptureContext;
   final VoidCallback onRemoveImage;
+  final bool isLoading;
 
   const ChatInputArea({
     super.key,
@@ -14,6 +16,7 @@ class ChatInputArea extends StatelessWidget {
     required this.onSend,
     required this.onCaptureContext,
     required this.onRemoveImage,
+    this.isLoading = false,
   });
 
   static const _borderColor = Color(0xFF333333);
@@ -43,12 +46,17 @@ class ChatInputArea extends StatelessWidget {
                     size: 20,
                     color: Colors.white54,
                   ),
-                  onPressed: onCaptureContext,
+                  tooltip: 'Attach visible area',
+                  onPressed: isLoading ? null : onCaptureContext,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-                const SizedBox(width: 12),
-                const SizedBox(width: 12),
+                DictationButton(
+                  controller: textController,
+                  enabled: !isLoading,
+                  iconColor: Colors.white54,
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: textController,
@@ -71,7 +79,8 @@ class ChatInputArea extends StatelessWidget {
                     size: 20,
                     color: _accentColor,
                   ),
-                  onPressed: onSend,
+                  onPressed: isLoading ? null : onSend,
+                  tooltip: 'Send message',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -88,9 +97,9 @@ class ChatInputArea extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: accentColor.withOpacity(0.1),
+        color: accentColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: accentColor.withOpacity(0.3)),
+        border: Border.all(color: accentColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

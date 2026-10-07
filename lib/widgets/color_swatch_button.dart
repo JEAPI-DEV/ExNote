@@ -46,7 +46,7 @@ class ColorSwatchButton extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: palette.map((color) {
-                    final isSelected = color.value == selectedColor.value;
+                    final isSelected = color.toARGB32() == selectedColor.toARGB32();
                     return GestureDetector(
                       onTap: () {
                         onPick(color);
@@ -61,7 +61,7 @@ class ColorSwatchButton extends StatelessWidget {
                           border: Border.all(
                             color: isSelected
                                 ? Theme.of(context).colorScheme.secondary
-                                : Colors.grey.withOpacity(0.3),
+                                : Colors.grey.withValues(alpha: 0.3),
                             width: isSelected ? 2 : 1,
                           ),
                         ),
@@ -80,10 +80,13 @@ class ColorSwatchButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: selectedColor,
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1.5),
+          border: Border.all(
+            color: Colors.grey.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),

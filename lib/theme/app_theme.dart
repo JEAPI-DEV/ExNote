@@ -17,13 +17,12 @@ class AppTheme {
       activeTrackColor: Colors.black,
       inactiveTrackColor: Colors.grey.shade300,
       thumbColor: Colors.black,
-      overlayColor: Colors.black.withOpacity(0.1),
+      overlayColor: Colors.black.withValues(alpha: 0.1),
     ),
     colorScheme: const ColorScheme.light(
       primary: Colors.black,
       secondary: Colors.blueAccent,
       surface: Colors.white,
-      background: Color(0xFFF5F5F5),
     ),
   );
 
@@ -43,13 +42,12 @@ class AppTheme {
       activeTrackColor: Colors.white,
       inactiveTrackColor: Colors.grey.shade700,
       thumbColor: Colors.white,
-      overlayColor: Colors.white.withOpacity(0.1),
+      overlayColor: Colors.white.withValues(alpha: 0.1),
     ),
     colorScheme: const ColorScheme.dark(
       primary: Colors.white,
       secondary: Colors.blueAccent,
       surface: Color(0xFF2D2D2D),
-      background: Color(0xFF1E1E1E),
     ),
   );
 }

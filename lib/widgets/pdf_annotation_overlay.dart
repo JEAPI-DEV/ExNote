@@ -91,7 +91,10 @@ class PdfAnnotationOverlay extends StatelessWidget {
       if (!_isStylus(event)) return;
       final pageIndex = geometry.pageIndexAt(event.localPosition);
       if (pageIndex == null) return;
-      final pagePoint = geometry.screenToPagePoint(pageIndex, event.localPosition);
+      final pagePoint = geometry.screenToPagePoint(
+        pageIndex,
+        event.localPosition,
+      );
       controller.beginStroke(pageIndex, pagePoint, pressure: event.pressure);
     };
   }
@@ -101,7 +104,10 @@ class PdfAnnotationOverlay extends StatelessWidget {
       if (!_isStylus(event)) return;
       final pageIndex = controller.activePageIndex;
       if (pageIndex < 0 || pageIndex >= pageWidths.length) return;
-      final pagePoint = geometry.screenToPagePoint(pageIndex, event.localPosition);
+      final pagePoint = geometry.screenToPagePoint(
+        pageIndex,
+        event.localPosition,
+      );
       controller.extendStroke(pagePoint);
     };
   }
