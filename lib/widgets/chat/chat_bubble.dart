@@ -11,8 +11,14 @@ import 'chat_markdown_style.dart' show ChatMarkdownStyle;
 class ChatBubble extends StatelessWidget {
   final ChatMessage message;
   final VoidCallback? onSpeak;
+  final bool isSpeaking;
 
-  const ChatBubble({super.key, required this.message, this.onSpeak});
+  const ChatBubble({
+    super.key,
+    required this.message,
+    this.onSpeak,
+    this.isSpeaking = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -36,9 +42,9 @@ class ChatBubble extends StatelessWidget {
               if (isAi && message.text.isNotEmpty && onSpeak != null)
                 IconButton(
                   onPressed: onSpeak,
-                  tooltip: 'Read aloud',
-                  icon: const Icon(
-                    Icons.volume_up_outlined,
+                  tooltip: isSpeaking ? 'Stop reading' : 'Read aloud',
+                  icon: Icon(
+                    isSpeaking ? Icons.stop_rounded : Icons.volume_up_outlined,
                     size: 16,
                     color: Colors.white54,
                   ),

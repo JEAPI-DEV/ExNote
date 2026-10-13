@@ -27,7 +27,10 @@ class IndexingSettingsPanel extends StatelessWidget {
           ),
         ],
         selected: {controller.settings.backend},
-        onSelectionChanged: controller.isRunning || controller.isInstalling
+        onSelectionChanged:
+            !controller.isReady ||
+                controller.isRunning ||
+                controller.isInstalling
             ? null
             : (values) => controller.configure(
                 controller.settings.copyWith(backend: values.first),
@@ -50,7 +53,10 @@ class IndexingSettingsPanel extends StatelessWidget {
                 ),
               )
               .toList(),
-          onChanged: controller.isRunning
+          onChanged:
+              !controller.isReady ||
+                  controller.isRunning ||
+                  controller.isInstalling
               ? null
               : (value) {
                   if (value != null) {
@@ -65,6 +71,14 @@ class IndexingSettingsPanel extends StatelessWidget {
           'Scanned note images are sent to OpenRouter using your token from AI Settings. Chat settings are separate.',
         ),
       ],
+      if (controller.hasModel)
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Index new and changed notes automatically'),
+          subtitle: const Text('Runs while browsing; pauses while you write'),
+          value: controller.automatic,
+          onChanged: controller.isReady ? controller.setAutomatic : null,
+        ),
       const SizedBox(height: 12),
     ],
   );

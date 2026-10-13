@@ -1,7 +1,7 @@
 # ExNote
 
 ExNote is a Flutter study app for handwritten lecture notes, linked PDF exercises,
-PDF annotations, graphs, and voice notes. It supports Android tablets and styluses.
+PDF annotations, graphs, and an AI study assistant. It supports Android tablets and styluses.
 
 ## Setup
 
@@ -24,8 +24,8 @@ when updating it.
 
 ## Study assistant
 
-Set your OpenRouter token in a note's Settings drawer. Chat uses GPT-6 Luna by
-default, with GPT-6.1 Sol and GPT-6 Astra available for more demanding questions.
+Open Settings from the start screen, a note, or Search your notes to set your
+OpenRouter token. Chat uses GPT-6 Luna by default, with GPT-6.1 Sol and GPT-6 Astra available for more demanding questions.
 Obsolete saved model choices migrate to Luna. Requests cap output at 4096 tokens,
 use low reasoning effort, and stream replies. See [official OpenAI model guidance](https://developers.openai.com/api/docs/models)
 and [current pricing](https://developers.openai.com/api/docs/pricing).
@@ -34,39 +34,24 @@ The assistant automatically receives images of the **complete current canvas**,
 including off-screen handwriting, imported images, graphs, and the linked exercise.
 Unchanged canvas images are cached during the editor session. Extra screenshots
 remain available for highlighting an area; “Submit Last Image Only” applies to
-those extra screenshots. Current-note dictated text and recording transcripts are
-also included. Up to four relevant library references are selected using titles,
+those extra screenshots. Previously saved current-note voice transcripts are also
+included. Up to four relevant library references are selected using titles,
 recognized text, and topic keywords; stale handwriting transcripts are excluded.
 Chat requests send these materials to OpenRouter. Chat history lasts for the
 current editor session and survives closing/reopening the drawer.
 
 Use the microphone in chat to dictate a draft, then send it. Enable **Read replies
-aloud**, or use a reply's speaker button. This is turn-based voice input with a
-retained text conversation. Dictation uses the device's speech recognition service,
+aloud** in Settings, or use a reply's speaker icon. While that reply is playing, its
+speaker icon becomes a stop icon. This is turn-based voice input with a retained
+text conversation. Dictation uses the device's speech recognition service,
 which may require a network connection and may stop after silence. Speech output
 uses the device's text-to-speech engine.
 
-## Voice notes
-
-The editor's microphone opens Voice notes. Dictate and save searchable text, or
-record and play longer audio clips. Audio is saved locally as mono AAC/M4A and
-included in ZIP backups. Dictation and recording are separate modes because the
-microphone cannot be shared by both capture services.
-
-For searchable transcripts of recordings, use their transcription button or enable
-**Transcribe new recordings with AI**. This opt-in uploads audio using the same
-OpenRouter key and incurs API charges. It uses `openai/gpt-transcribe`; the dedicated
-[speech-to-text endpoint](https://openrouter.ai/docs/guides/overview/multimodal/stt)
-streams the audio upload without holding a base64 copy in memory. Generated text
-is stored separately from your description, becomes searchable, and is available
-to the assistant. Failed transcription preserves the original audio for retry.
-Very long recordings can exceed the provider's processing timeout.
-
 ## Handwriting index
 
-Open **Search your notes** from the home screen's search icon. **Scan notes with**
-selects Local model or OpenRouter. OpenRouter uses your existing AI Settings token;
-its separate scan-model picker defaults to GPT-6 Luna. Provider and scan-model
+Open **Search your notes** from the home screen's search icon. In Settings,
+**Scan notes with** selects Local model or OpenRouter. OpenRouter uses your existing AI Settings token;
+the **Scan model** picker in Settings defaults to GPT-6 Luna. Provider and scan-model
 choices do not change the chat model. Cloud scans upload original page images and
 return full transcripts, titles, summaries, and keywords. The app adds no scan
 spending limit. **Rescan this note** in a result's menu tests one note; **Scan / resume
@@ -87,8 +72,9 @@ transcription and title/topic generation run separately. Completed sections are
 checkpointed, and the UI shows section progress. Coverage checks flag very short
 or illegible outputs for review. Each processed page gets a title, transcript,
 summary, and search keywords. These annotations are stored in `note_index/`, preserving note
-names and handwritten sources. Search also works with voice text before a vision
-model is installed. Local handwriting analysis makes no cloud inference requests.
+names and handwritten sources. Previously saved voice transcripts remain
+searchable and are preserved in backups. Local handwriting analysis makes no
+cloud inference requests.
 
 Scans checkpoint each page, skip unchanged notes, pause when the app is backgrounded
 or an editor opens for local scanning, interrupt active local generation, and release inference memory afterward. Cloud scans continue while notes are viewed. **Scan / resume library**
@@ -154,7 +140,8 @@ frame-time results. Use a release build when evaluating tablet responsiveness.
 
 Tests cover backup round trips and unsafe ZIP paths, preservation during restores,
 save ordering, complete multi-page layouts, resumed indexing, stale annotations,
-voice persistence and transcription uploads, model migration, and chat streaming.
+legacy voice persistence and transcription uploads, model migration, chat streaming,
+shared settings, dictation lifecycle, and reply playback controls.
 Microphone permissions, actual speech services, model inference, and GPU behavior
 must additionally be checked on Android hardware.
 

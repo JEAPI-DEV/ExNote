@@ -9,7 +9,6 @@ import 'package:uuid/uuid.dart';
 import 'package:scribble/scribble.dart';
 import '../providers/folder_provider.dart';
 import '../models/drawing_tool.dart';
-import '../models/right_drawer_content.dart';
 import '../models/selection.dart';
 import '../models/canvas_image.dart';
 import '../models/canvas_object.dart';
@@ -18,7 +17,8 @@ import '../models/undo_action.dart';
 import '../widgets/note_app_bar.dart';
 import '../widgets/note_look_overlay.dart';
 import '../widgets/ai_chat_drawer.dart';
-import '../widgets/settings_drawer.dart';
+import 'settings_screen.dart';
+import '../providers/note_settings_provider.dart';
 import '../widgets/note_canvas.dart';
 import '../controllers/note_settings_controller.dart';
 import '../controllers/note_look_controller.dart';
@@ -39,7 +39,6 @@ import '../services/ai/note_context_service.dart';
 import '../services/indexing/note_library_source.dart';
 import '../services/notes/note_page_renderer.dart';
 import '../models/note_document.dart';
-import '../widgets/voice_note_sheet.dart';
 import '../controllers/note_autosave_controller.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
@@ -74,13 +73,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       TransformationController();
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  RightDrawerContent _rightDrawerContent = RightDrawerContent.settings;
 
   late NoteAutosaveController _autosave;
   Size? _screenshotSize;
   final GlobalKey _exportKey = GlobalKey();
 
-  final NoteSettingsController _settingsController = NoteSettingsController();
+  late NoteSettingsController _settingsController;
+  bool _settingsInitialized = false;
   final NoteLookController _noteLookController = NoteLookController();
   final AiChatController _aiChatController = AiChatController();
 
@@ -100,6 +99,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   @override
   void initState() {
     super.initState();
+    _settingsController = ref.read(noteSettingsProvider);
     _libraryIndex = ref.read(noteIndexProvider);
     _libraryIndex.enterEditor();
     _contextService = NoteContextService(
@@ -169,16 +169,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       },
     );
 
-    _settingsController.load().then((_) {
-      if (mounted) {
-        _isApplyingSavedStrokeWidth = true;
-        widthNotifier.value = _settingsController.settings.strokeWidth;
-        _isApplyingSavedStrokeWidth = false;
-      }
-    });
     _loadNote();
-
     _settingsController.addListener(_handleSettingsChanged);
+    _applyInitialSettings();
     widthNotifier.addListener(_saveStrokeWidthSetting);
 
     selectionNotifier.addListener(() {
@@ -246,7 +239,6 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     widthNotifier.dispose();
     toolNotifier.dispose();
     _transformationController.dispose();
-    _settingsController.dispose();
     _noteLookController.dispose();
     _aiChatController.dispose();
     super.dispose();
@@ -312,10 +304,20 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
               _autosave.cancel();
               _saveNote();
             },
-            onSettings: () {
-              setState(() => _rightDrawerContent = RightDrawerContent.settings);
-              _scaffoldKey.currentState?.openEndDrawer();
-            },
+            onSettings: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SettingsScreen(
+                  onAdjustNoteLook: _startNoteLookEdit,
+                  onExportBackup: () async {
+                    _autosave.cancel();
+                    if (await _saveNote(captureThumbnail: false) && mounted) {
+                      await BackupService.exportBackup(this.context, ref);
+                    }
+                  },
+                ),
+              ),
+            ),
             onBack: _leaveNote,
             onDelete: selectionNotifier.value.isNotEmpty
                 ? _clipboardManager.deleteSelection
@@ -324,61 +326,31 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 : selectedObjectIdNotifier.value != null
                 ? _deleteSelectedObject
                 : null,
-            onVoiceNote: () => showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              isDismissible: false,
-              enableDrag: false,
-              builder: (_) => VoiceNoteSheet(
-                noteId: widget.noteId,
-                apiKey: settings.openRouterToken,
-              ),
-            ),
-            onChat: () {
-              setState(() => _rightDrawerContent = RightDrawerContent.aiChat);
-              _scaffoldKey.currentState?.openEndDrawer();
-            },
+            onChat: () => _scaffoldKey.currentState?.openEndDrawer(),
             canUndo: _undoRedoManager.canUndo,
             canRedo: _undoRedoManager.canRedo,
             canCopy: selectionNotifier.value.isNotEmpty,
             canPaste: _clipboardManager.canPaste,
           ),
-          endDrawer: _rightDrawerContent == RightDrawerContent.aiChat
-              ? SizedBox(
-                  width: settings.aiDrawerWidth,
-                  child: AiChatDrawer(
-                    apiKey: settings.openRouterToken,
-                    model: settings.aiModel,
-                    isTutorMode: settings.tutorEnabled,
-                    submitLastImageOnly: settings.submitLastImageOnly,
-                    chatController: _aiChatController,
-                    onClose: () => _scaffoldKey.currentState?.closeEndDrawer(),
-                    onCaptureContext: _captureCanvas,
-                    onNoteContext: _buildChatContext,
-                    onWidthChanged: (delta) {
-                      _settingsController.update(
-                        (s) => s.copyWith(
-                          aiDrawerWidth: (s.aiDrawerWidth + delta).clamp(
-                            320.0,
-                            800.0,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                )
-              : SettingsDrawer(
-                  settingsController: _settingsController,
-                  onAdjustNoteLook: _startNoteLookEdit,
-                  onExportBackup: () async {
-                    _autosave.cancel();
-                    if (await _saveNote(captureThumbnail: false) && mounted) {
-                      await BackupService.exportBackup(this.context, ref);
-                    }
-                  },
-                  onImportBackup: () =>
-                      BackupService.importFromBackup(context, ref),
+          endDrawer: SizedBox(
+            width: settings.aiDrawerWidth,
+            child: AiChatDrawer(
+              apiKey: settings.openRouterToken,
+              model: settings.aiModel,
+              isTutorMode: settings.tutorEnabled,
+              submitLastImageOnly: settings.submitLastImageOnly,
+              readRepliesAloud: settings.readRepliesAloud,
+              chatController: _aiChatController,
+              onClose: () => _scaffoldKey.currentState?.closeEndDrawer(),
+              onCaptureContext: _captureCanvas,
+              onNoteContext: _buildChatContext,
+              onWidthChanged: (delta) => _settingsController.update(
+                (s) => s.copyWith(
+                  aiDrawerWidth: (s.aiDrawerWidth + delta).clamp(320.0, 800.0),
                 ),
+              ),
+            ),
+          ),
           body: GestureDetector(
             onTap: () => FocusScope.of(context).unfocus(),
             behavior: HitTestBehavior.translucent,
@@ -447,7 +419,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     _noteLookController.startEditing(_settingsController.settings);
   }
 
+  void _applyInitialSettings() {
+    if (_settingsInitialized || !_settingsController.isLoaded) return;
+    _settingsInitialized = true;
+    _isApplyingSavedStrokeWidth = true;
+    widthNotifier.value = _settingsController.settings.strokeWidth;
+    _isApplyingSavedStrokeWidth = false;
+  }
+
   void _handleSettingsChanged() {
+    _applyInitialSettings();
     if (mounted) setState(() {});
   }
 

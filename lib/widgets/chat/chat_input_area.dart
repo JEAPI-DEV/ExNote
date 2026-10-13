@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dictation_button.dart';
+import '../../controllers/chat_dictation_controller.dart';
 
 class ChatInputArea extends StatelessWidget {
   final TextEditingController textController;
+  final ChatDictationController dictationController;
   final String? pendingBase64Image;
   final VoidCallback onSend;
   final VoidCallback onCaptureContext;
@@ -12,6 +14,7 @@ class ChatInputArea extends StatelessWidget {
   const ChatInputArea({
     super.key,
     required this.textController,
+    required this.dictationController,
     this.pendingBase64Image,
     required this.onSend,
     required this.onCaptureContext,
@@ -52,7 +55,7 @@ class ChatInputArea extends StatelessWidget {
                   constraints: const BoxConstraints(),
                 ),
                 DictationButton(
-                  controller: textController,
+                  controller: dictationController,
                   enabled: !isLoading,
                   iconColor: Colors.white54,
                 ),

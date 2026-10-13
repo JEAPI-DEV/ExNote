@@ -9,13 +9,7 @@ class AiChatController extends ChangeNotifier {
   final List<ChatMessage> history = [];
   final TextEditingController textController = TextEditingController();
   bool isLoading = false;
-  bool readReplies = false;
   Timer? _replyUpdateTimer;
-
-  void setReadReplies(bool value) {
-    readReplies = value;
-    _notify();
-  }
 
   String? pendingBase64Image;
   String? error;

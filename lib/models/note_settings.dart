@@ -14,6 +14,7 @@ class NoteSettings {
   final String openRouterToken;
   final String aiModel;
   final bool tutorEnabled;
+  final bool readRepliesAloud;
   final bool submitLastImageOnly;
   final double aiDrawerWidth;
   final bool shapeSnappingEnabled;
@@ -34,6 +35,7 @@ class NoteSettings {
     required this.openRouterToken,
     required this.aiModel,
     required this.tutorEnabled,
+    this.readRepliesAloud = false,
     required this.submitLastImageOnly,
     required this.aiDrawerWidth,
     required this.shapeSnappingEnabled,
@@ -55,6 +57,7 @@ class NoteSettings {
       openRouterToken = '',
       aiModel = AppConfig.defaultAiModel,
       tutorEnabled = AppConfig.defaultTutorEnabled,
+      readRepliesAloud = false,
       submitLastImageOnly = AppConfig.defaultSubmitLastImageOnly,
       aiDrawerWidth = AppConfig.defaultAiDrawerWidth,
       shapeSnappingEnabled = AppConfig.defaultShapeSnappingEnabled,
@@ -82,6 +85,7 @@ class NoteSettings {
       aiModel: AppConfig.migrateAiModel(prefs.getString('aiModel')),
       tutorEnabled:
           prefs.getBool('tutorEnabled') ?? AppConfig.defaultTutorEnabled,
+      readRepliesAloud: prefs.getBool('readRepliesAloud') ?? false,
       submitLastImageOnly:
           prefs.getBool('submitLastImageOnly') ??
           AppConfig.defaultSubmitLastImageOnly,
@@ -137,6 +141,7 @@ class NoteSettings {
       prefs.setString('openRouterToken', openRouterToken),
       prefs.setString('aiModel', aiModel),
       prefs.setBool('tutorEnabled', tutorEnabled),
+      prefs.setBool('readRepliesAloud', readRepliesAloud),
       prefs.setBool('submitLastImageOnly', submitLastImageOnly),
       prefs.setDouble('aiDrawerWidth', aiDrawerWidth),
       prefs.setBool('shapeSnappingEnabled', shapeSnappingEnabled),
@@ -174,6 +179,7 @@ class NoteSettings {
     String? openRouterToken,
     String? aiModel,
     bool? tutorEnabled,
+    bool? readRepliesAloud,
     bool? submitLastImageOnly,
     double? aiDrawerWidth,
     bool? shapeSnappingEnabled,
@@ -193,6 +199,7 @@ class NoteSettings {
     openRouterToken: openRouterToken ?? this.openRouterToken,
     aiModel: aiModel ?? this.aiModel,
     tutorEnabled: tutorEnabled ?? this.tutorEnabled,
+    readRepliesAloud: readRepliesAloud ?? this.readRepliesAloud,
     submitLastImageOnly: submitLastImageOnly ?? this.submitLastImageOnly,
     aiDrawerWidth: aiDrawerWidth ?? this.aiDrawerWidth,
     shapeSnappingEnabled: shapeSnappingEnabled ?? this.shapeSnappingEnabled,
