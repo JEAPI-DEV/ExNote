@@ -5,6 +5,7 @@ import '../services/indexing/local_note_analyzer.dart';
 import '../services/indexing/openrouter_note_analyzer.dart';
 import '../services/settings_service.dart';
 import '../services/indexing/note_index_repository.dart';
+import '../services/indexing/scan_state_repository.dart';
 import '../services/indexing/note_library_source.dart';
 import '../services/notes/note_page_renderer.dart';
 import 'folder_provider.dart';
@@ -13,6 +14,9 @@ import 'voice_note_provider.dart';
 final noteIndexProvider = ChangeNotifierProvider<LibraryIndexController>((ref) {
   final controller = LibraryIndexController(
     repository: NoteIndexRepository(),
+    scanState: ScanStateRepository(
+      directory: ref.read(storageServiceProvider).directory,
+    ),
     source: NoteLibrarySource(ref.read(storageServiceProvider)),
     analyzer: LocalNoteAnalyzer(),
     cloudAnalyzer: OpenRouterNoteAnalyzer(

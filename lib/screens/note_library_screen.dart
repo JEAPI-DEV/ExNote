@@ -10,6 +10,7 @@ import '../services/indexing/note_library_source.dart';
 import '../services/indexing/note_search.dart';
 import 'note_screen.dart';
 import '../widgets/indexing_settings_panel.dart';
+import '../models/indexing/scan_run_state.dart';
 
 class NoteLibraryScreen extends ConsumerStatefulWidget {
   const NoteLibraryScreen({super.key});
@@ -19,6 +20,7 @@ class NoteLibraryScreen extends ConsumerStatefulWidget {
 
 class _NoteLibraryScreenState extends ConsumerState<NoteLibraryScreen> {
   final _query = TextEditingController();
+  bool _showFailuresOnly = false;
   @override
   void dispose() {
     _query.dispose();
@@ -100,12 +102,17 @@ class _NoteLibraryScreenState extends ConsumerState<NoteLibraryScreen> {
   Widget build(BuildContext context) {
     final controller = ref.watch(noteIndexProvider);
     final library = LibraryNote.fromFolders(ref.watch(folderProvider));
-    final hits = NoteSearch.search(
+    final matches = NoteSearch.search(
       _query.text,
       library,
       controller.entries,
       voiceTexts: controller.voiceTexts,
     );
+    final hits = _showFailuresOnly
+        ? matches
+              .where((hit) => controller.failures.containsKey(hit.note.id))
+              .toList()
+        : matches;
     return Scaffold(
       appBar: AppBar(title: const Text('Search your notes')),
       body: Column(
@@ -157,7 +164,7 @@ class _NoteLibraryScreenState extends ConsumerState<NoteLibraryScreen> {
                       FilledButton.icon(
                         onPressed: controller.isRunning || !controller.canScan
                             ? null
-                            : () => controller.scan(library),
+                            : () => controller.resumeOrScan(library),
                         icon: const Icon(Icons.document_scanner_outlined),
                         label: Text(
                           controller.canScan
@@ -213,16 +220,46 @@ class _NoteLibraryScreenState extends ConsumerState<NoteLibraryScreen> {
                     '${controller.analysisProgress!.phase}${controller.analysisProgress!.sections == 0 ? '' : ' ${controller.analysisProgress!.section}/${controller.analysisProgress!.sections}'}'
                     '${controller.analysisProgress!.characters == 0 ? '' : ' · ${controller.analysisProgress!.characters} characters read'}',
                   ),
+                if (!controller.isRunning &&
+                    controller.runStatus != ScanRunStatus.idle)
+                  Text(
+                    '${controller.statusReason ?? controller.runStatus.name} · ${controller.completed}/${controller.total} notes processed',
+                  ),
                 if (controller.error != null)
                   Text(
                     controller.error!,
                     style: const TextStyle(color: Colors.red),
                   ),
-                if (controller.failures.isNotEmpty)
+                if (controller.failures.isNotEmpty) ...[
                   Text(
-                    '${controller.failures.length} notes need another scan. Their original files are preserved.',
+                    '${controller.failures.length} notes need attention. Completed pages are saved.',
                     style: const TextStyle(color: Colors.orange),
                   ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: () => setState(
+                          () => _showFailuresOnly = !_showFailuresOnly,
+                        ),
+                        child: Text(
+                          _showFailuresOnly
+                              ? 'Show all notes'
+                              : 'Show failed notes',
+                        ),
+                      ),
+                      TextButton(
+                        onPressed:
+                            controller.isRunning ||
+                                !controller.canScan ||
+                                controller.runStatus == ScanRunStatus.waiting
+                            ? null
+                            : () => controller.retryFailed(library),
+                        child: const Text('Retry failed notes'),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

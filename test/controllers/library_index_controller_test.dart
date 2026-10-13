@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:exnote/models/indexing/indexing_settings.dart';
 import 'package:exnote/services/indexing/openrouter_note_analyzer.dart';
+import 'package:exnote/services/indexing/scan_request_retry.dart';
+import 'package:exnote/services/indexing/scan_state_repository.dart';
+import 'package:exnote/models/indexing/scan_run_state.dart';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
@@ -217,6 +220,81 @@ void main() {
     expect(controller.entries[note.id]!.complete, true);
     controller.leaveEditor();
   });
+  test('bad note data is reported and healthy notes still finish', () async {
+    await storage.saveNote('bad', 'invalid JSON');
+    const bad = LibraryNote(
+      id: 'bad',
+      folderId: 'folder',
+      name: 'Bad data',
+      folderName: 'Math',
+    );
+    await controller.scan([bad, note]);
+    expect(controller.runStatus, ScanRunStatus.completed);
+    expect(controller.completed, 2);
+    expect(controller.failures['bad'], contains('FormatException'));
+    expect(controller.entries[note.id]!.complete, true);
+  });
+  test(
+    'network outage waits at the current note and resumes without losing progress',
+    () async {
+      controller.dispose();
+      bool offline = true;
+      int calls = 0;
+      final cloud = OpenRouterNoteAnalyzer(
+        getApiKey: () async => 'test',
+        retry: ScanRequestRetry(wait: (_) async {}),
+        client: MockClient((_) async {
+          calls++;
+          if (offline) throw http.ClientException('Failed host lookup');
+          return http.Response(
+            jsonEncode({
+              'usage': {'cost': 0.001},
+              'choices': [
+                {
+                  'finish_reason': 'stop',
+                  'message': {
+                    'content': jsonEncode({
+                      'title': 'Lecture',
+                      'text': 'Text',
+                      'summary': '',
+                      'keywords': [],
+                    }),
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+      controller = LibraryIndexController(
+        repository: NoteIndexRepository(directory: directory),
+        scanState: ScanStateRepository(directory: directory),
+        source: NoteLibrarySource(storage),
+        analyzer: analyzer,
+        cloudAnalyzer: cloud,
+        renderer: FakeRenderer(),
+      );
+      await controller.initialize();
+      controller.setLibrary([note]);
+      await controller.configure(
+        const IndexingSettings(backend: IndexingBackend.openRouter),
+      );
+      await controller.scan([note]);
+      expect(controller.runStatus, ScanRunStatus.waiting);
+      expect(controller.completed, 0);
+      expect(controller.failures, isEmpty);
+      expect(calls, 4);
+      final saved = (await ScanStateRepository(directory: directory).load())!;
+      expect(saved.pendingIds, [note.id]);
+      expect(saved.resumeAutomatically, true);
+      offline = false;
+      await controller.resumeOrScan([note]);
+      expect(controller.entries[note.id]!.complete, true);
+      expect(controller.completed, 1);
+      expect(controller.runStatus, ScanRunStatus.completed);
+    },
+  );
   test('editing pauses analysis before any handwriting inference', () async {
     controller.enterEditor();
     await controller.scan([note]);

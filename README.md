@@ -157,3 +157,11 @@ save ordering, complete multi-page layouts, resumed indexing, stale annotations,
 voice persistence and transcription uploads, model migration, and chat streaming.
 Microphone permissions, actual speech services, model inference, and GPU behavior
 must additionally be checked on Android hardware.
+
+Scan recovery: temporary DNS/connection failures, rate limits and provider outages
+retry the current page with backoff. If the connection stays unavailable, the job
+waits and resumes automatically when the app is active. Backgrounded or interrupted
+jobs persist their remaining note IDs, checkpoints and failure details. The UI
+reports finished, paused and waiting states separately; **Show failed notes** and
+**Retry failed notes** help resolve note-specific errors without redoing completed
+pages. Invalid credentials or exhausted provider credits still require correction.

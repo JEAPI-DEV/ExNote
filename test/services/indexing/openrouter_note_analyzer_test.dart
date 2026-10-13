@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
@@ -54,6 +55,26 @@ void main() {
       final result = await analyzer.analyze(page);
       expect(result.text, r'n^3 + 5n \equiv_6 0');
       expect(analyzer.spent, 0.001);
+    },
+  );
+  test(
+    'pausing while credentials load prevents a late network request',
+    () async {
+      final key = Completer<String>();
+      int requests = 0;
+      final client = MockClient((_) async {
+        requests++;
+        return http.Response(jsonEncode(response()), 200);
+      });
+      final analyzer = OpenRouterNoteAnalyzer(
+        getApiKey: () => key.future,
+        client: client,
+      );
+      final pending = analyzer.analyze(page);
+      await analyzer.cancel();
+      key.complete('test');
+      await expectLater(pending, throwsA(isA<ScanStoppedException>()));
+      expect(requests, 0);
     },
   );
   test('no application spending limit blocks subsequent scans', () async {
