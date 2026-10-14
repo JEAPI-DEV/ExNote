@@ -11,18 +11,28 @@ class NoteSettingsController extends ChangeNotifier {
   bool _disposed = false;
   bool _hasChanges = false;
   String? saveError;
+  bool isLoaded = false;
+  String? loadError;
 
   NoteSettings get settings => _settings;
 
   Future<void> load() async {
-    final settings = await SettingsService.loadSettings();
-    if (_disposed) return;
-    _settings = settings;
-    tokenController.text = settings.openRouterToken;
+    try {
+      final settings = await SettingsService.loadSettings();
+      if (_disposed) return;
+      _settings = settings;
+      tokenController.text = settings.openRouterToken;
+      isLoaded = true;
+      loadError = null;
+    } catch (error) {
+      if (_disposed) return;
+      loadError = 'Could not load settings: $error';
+    }
     notifyListeners();
   }
 
   void update(NoteSettings Function(NoteSettings) updater) {
+    if (!isLoaded || _disposed) return;
     _settings = updater(_settings);
     _hasChanges = true;
     _saveTimer?.cancel();

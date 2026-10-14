@@ -48,6 +48,15 @@ void main() {
     expect(loaded.widthPresetPopupPositionY, 0.9);
   });
 
+  test('read-aloud preference survives reload and defaults off', () async {
+    SharedPreferences.setMockInitialValues({});
+    var prefs = await SharedPreferences.getInstance();
+    expect(NoteSettings.fromPrefs(prefs).readRepliesAloud, false);
+    await const NoteSettings.defaults().copyWith(readRepliesAloud: true).save();
+    prefs = await SharedPreferences.getInstance();
+    expect(NoteSettings.fromPrefs(prefs).readRepliesAloud, true);
+  });
+
   test('clamps look coordinates loaded from preferences', () async {
     SharedPreferences.setMockInitialValues({
       'toolbarPositionX': 2.0,

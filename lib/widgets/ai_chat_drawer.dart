@@ -4,6 +4,7 @@ import '../models/chat_message.dart';
 import '../services/ai/note_chat_context.dart';
 import '../services/voice/reply_speech_service.dart';
 import '../controllers/ai_chat_controller.dart';
+import '../controllers/chat_dictation_controller.dart';
 import 'chat/chat_header.dart';
 import 'chat/chat_input_area.dart';
 import 'chat/chat_bubble.dart';
@@ -13,6 +14,8 @@ class AiChatDrawer extends StatefulWidget {
   final String model;
   final bool isTutorMode;
   final bool submitLastImageOnly;
+  final bool readRepliesAloud;
+  final ReplySpeechService? speechService;
   final AiChatController chatController;
   final VoidCallback onClose;
   final Future<String?> Function() onCaptureContext;
@@ -25,6 +28,8 @@ class AiChatDrawer extends StatefulWidget {
     required this.model,
     required this.isTutorMode,
     required this.submitLastImageOnly,
+    this.readRepliesAloud = false,
+    this.speechService,
     required this.chatController,
     required this.onClose,
     required this.onCaptureContext,
@@ -38,11 +43,21 @@ class AiChatDrawer extends StatefulWidget {
 
 class _AiChatDrawerState extends State<AiChatDrawer> {
   final ScrollController _scrollController = ScrollController();
-  final ReplySpeechService _speech = ReplySpeechService();
+  late final ReplySpeechService _speech;
+  late final ChatDictationController _dictation;
+  int? _speakingReplyIndex;
+  int _speechGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    _speech = widget.speechService ?? ReplySpeechService();
+    _speech.addListener(_onSpeechChanged);
+    _dictation = ChatDictationController(
+      widget.chatController.textController,
+      beforeListen: _stopReply,
+    );
+    _dictation.addListener(_onDictationChanged);
     if (widget.chatController.history.isEmpty) {
       widget.chatController.history.add(
         ChatMessage(
@@ -57,13 +72,15 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
 
   Future<void> _handleSend({bool retry = false}) async {
     if (widget.chatController.isLoading) return;
+    await _dictation.stop(discardLateResults: true);
+    if (!mounted) return;
     if (!retry &&
         widget.chatController.textController.text.trim().isEmpty &&
         widget.chatController.pendingBase64Image == null) {
       return;
     }
     try {
-      await _speech.stop();
+      await _stopReply();
     } catch (error) {
       debugPrint('Could not stop speech playback: $error');
     }
@@ -80,27 +97,46 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
     );
     if (!mounted) return;
     _scrollToBottom();
-    if (widget.chatController.readReplies &&
+    if (widget.readRepliesAloud &&
         widget.chatController.error == null &&
         widget.chatController.history.isNotEmpty &&
         widget.chatController.history.last.isAi) {
-      try {
-        await _speech.speak(widget.chatController.history.last.text);
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Speech playback failed: $error')),
-          );
-        }
-      }
+      await _speakReply(widget.chatController.history.length - 1);
     }
   }
 
-  Future<void> _speakReply(String text) async {
+  void _onSpeechChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onDictationChanged() {
+    final error = _dictation.error;
+    if (mounted && error != null) {
+      _dictation.error = null;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
+  Future<void> _stopReply() async {
+    ++_speechGeneration;
+    await _speech.stop();
+    if (mounted) setState(() => _speakingReplyIndex = null);
+  }
+
+  Future<void> _speakReply(int index) async {
+    final text = widget.chatController.history[index].text;
+    final generation = ++_speechGeneration;
     try {
+      await _dictation.stop(discardLateResults: true);
+      await _speech.stop();
+      if (!mounted || generation != _speechGeneration) return;
+      setState(() => _speakingReplyIndex = index);
       await _speech.speak(text);
     } catch (error) {
-      if (mounted) {
+      if (mounted && generation == _speechGeneration) {
+        setState(() => _speakingReplyIndex = null);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Speech playback failed: $error')),
         );
@@ -109,9 +145,27 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
   }
 
   @override
+  void didUpdateWidget(covariant AiChatDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _dictation.setEnabled(!widget.chatController.isLoading);
+    if (oldWidget.readRepliesAloud && !widget.readRepliesAloud) {
+      _stopReply().catchError(
+        (Object error) => debugPrint('Could not stop speech: $error'),
+      );
+    }
+  }
+
+  @override
   void dispose() {
+    ++_speechGeneration;
     _scrollController.dispose();
-    _speech.stop();
+    _dictation.removeListener(_onDictationChanged);
+    _dictation.dispose();
+    _speech.removeListener(_onSpeechChanged);
+    _speech.stop().catchError(
+      (Object error) => debugPrint('Could not stop speech: $error'),
+    );
+    if (widget.speechService == null) _speech.dispose();
     super.dispose();
   }
 
@@ -164,6 +218,10 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
                         final greeting = widget.isTutorMode
                             ? "Hello! I'm your tutor. How can I help you with your notes today?"
                             : "Hello! How can I help you today?";
+                        _stopReply().catchError(
+                          (Object error) =>
+                              debugPrint('Could not stop speech: $error'),
+                        );
                         widget.chatController.clearHistory(greeting);
                       },
                       onClose: widget.onClose,
@@ -185,16 +243,22 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
                                     widget.chatController.history.length -
                                     1 -
                                     index;
+                                final message = widget
+                                    .chatController
+                                    .history[reversedIndex];
+                                final speaking =
+                                    reversedIndex == _speakingReplyIndex &&
+                                    _speech.isSpeaking;
                                 return ChatBubble(
-                                  onSpeak: () => _speakReply(
-                                    widget
-                                        .chatController
-                                        .history[reversedIndex]
-                                        .text,
-                                  ),
-                                  message: widget
-                                      .chatController
-                                      .history[reversedIndex],
+                                  message: message,
+                                  isSpeaking: speaking,
+                                  onSpeak: speaking
+                                      ? () => _stopReply().catchError(
+                                          (Object error) => debugPrint(
+                                            'Could not stop speech: $error',
+                                          ),
+                                        )
+                                      : () => _speakReply(reversedIndex),
                                 );
                               },
                             );
@@ -228,26 +292,6 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
                           ],
                         ),
                       ),
-                    SwitchListTile(
-                      dense: true,
-                      title: const Text(
-                        'Read replies aloud',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                      value: widget.chatController.readReplies,
-                      onChanged: (value) {
-                        widget.chatController.setReadReplies(value);
-                        if (!value) _speech.stop();
-                      },
-                    ),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                      ),
-                      onPressed: _speech.stop,
-                      icon: const Icon(Icons.volume_off_outlined, size: 16),
-                      label: const Text('Stop reading'),
-                    ),
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
@@ -257,6 +301,7 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
                     ),
                     ChatInputArea(
                       textController: widget.chatController.textController,
+                      dictationController: _dictation,
                       pendingBase64Image:
                           widget.chatController.pendingBase64Image,
                       isLoading: widget.chatController.isLoading,

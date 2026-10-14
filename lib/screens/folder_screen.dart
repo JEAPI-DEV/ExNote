@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/note_index_provider.dart';
 import 'note_library_screen.dart';
 import '../providers/folder_provider.dart';
-import '../services/backup_service.dart';
+import 'settings_screen.dart';
 import '../widgets/dialogs/create_folder_dialog.dart';
 import '../widgets/folder_grid.dart';
 
@@ -62,7 +62,11 @@ class FolderScreen extends ConsumerWidget {
             ),
             IconButton(
               icon: const Icon(Icons.settings),
-              onPressed: () => _showSettingsSheet(context, ref),
+              tooltip: 'Settings',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              ),
             ),
           ],
           bottom: const TabBar(
@@ -105,44 +109,6 @@ class FolderScreen extends ConsumerWidget {
             label: const Text('New Folder'),
             icon: const Icon(Icons.add),
           ),
-        ),
-      ),
-    );
-  }
-
-  void _showSettingsSheet(BuildContext context, WidgetRef ref) {
-    final pageContext = context;
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Wrap(
-          children: [
-            const ListTile(
-              title: Text(
-                'Data Management',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.unarchive),
-              title: const Text('Import Backup'),
-              subtitle: const Text('Import notes from .zip file'),
-              onTap: () {
-                Navigator.pop(context);
-                BackupService.importFromBackup(pageContext, ref);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.archive),
-              title: const Text('Export All Data'),
-              subtitle: const Text('Export all data to ZIP'),
-              onTap: () {
-                Navigator.pop(context);
-                BackupService.exportBackup(pageContext, ref);
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
         ),
       ),
     );

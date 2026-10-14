@@ -9,7 +9,7 @@ import '../providers/note_index_provider.dart';
 import '../services/indexing/note_library_source.dart';
 import '../services/indexing/note_search.dart';
 import 'note_screen.dart';
-import '../widgets/indexing_settings_panel.dart';
+import 'settings_screen.dart';
 import '../models/indexing/scan_run_state.dart';
 
 class NoteLibraryScreen extends ConsumerStatefulWidget {
@@ -114,7 +114,19 @@ class _NoteLibraryScreenState extends ConsumerState<NoteLibraryScreen> {
               .toList()
         : matches;
     return Scaffold(
-      appBar: AppBar(title: const Text('Search your notes')),
+      appBar: AppBar(
+        title: const Text('Search your notes'),
+        actions: [
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -132,7 +144,6 @@ class _NoteLibraryScreenState extends ConsumerState<NoteLibraryScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                IndexingSettingsPanel(controller: controller),
                 if (!controller.isCloud && !controller.hasLocalModel) ...[
                   const Text(
                     'Import a vision-enabled Gemma3n E2B .task model to scan handwriting locally. Model weights are kept on your device; the scan makes no cloud requests.',
@@ -192,18 +203,6 @@ class _NoteLibraryScreenState extends ConsumerState<NoteLibraryScreen> {
                         child: const Text('Rebuild annotations'),
                       ),
                     ],
-                  ),
-                if (controller.hasModel)
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text(
-                      'Index new and changed notes automatically',
-                    ),
-                    subtitle: const Text(
-                      'Runs while browsing; pauses while you write',
-                    ),
-                    value: controller.automatic,
-                    onChanged: controller.setAutomatic,
                   ),
                 if (controller.isRunning) ...[
                   LinearProgressIndicator(
